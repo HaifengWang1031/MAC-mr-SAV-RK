@@ -3,8 +3,8 @@ import sys
 from pathlib import Path
 if __package__ in (None,''): sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import json
-import numpy as np
-from experiments.workflow import PROJECT,run_experiment,analyze_runs,write_json,provenance
+from experiments.analysis import analyze_runs
+from experiments.workflow import PROJECT,run_experiment,write_json,provenance
 from experiments.convergence import analyze_temporal
 
 def main() -> None:

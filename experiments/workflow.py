@@ -103,10 +103,22 @@ def save_result(path: Path, result: Result, metrics: dict) -> None:
             data.create_dataset('stages/'+key,data=np.array([[s[key] for s in stages] for stages in result.stages]).reshape(-1,2))
     temporary.replace(path)
 
+def load_record(directory: Path, *, require_complete: bool = False) -> tuple[dict,dict]:
+    """Shared integrity gate for reuse and every analysis reader."""
+    manifest=json.loads((directory/'manifest.json').read_text())
+    if digest(directory/'results.h5')!=manifest.get('results_sha256') or digest(directory/'config.json')!=manifest.get('config_sha256'):
+        raise ValueError(f'Record checksum mismatch: {directory}')
+    if manifest.get('status') not in ('complete','failed'):
+        raise ValueError('Record is not finalized')
+    if require_complete and manifest['status']!='complete': raise ValueError('Complete run required')
+    return json.loads((directory/'config.json').read_text()),manifest
+
 def verified(manifest: dict, directory: Path) -> bool:
     try:
-        return manifest['status']=='complete' and digest(directory/'results.h5')==manifest['results_sha256'] and digest(directory/'config.json')==manifest['config_sha256']
-    except (OSError,KeyError): return False
+        load_record(directory,require_complete=True)
+        return True
+    except (OSError,KeyError,ValueError): return False
+
 
 def run_experiment(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
     cfg=effective_config(config)
@@ -169,48 +181,3 @@ def run_experiment(config: dict, *, root: Path = PROJECT, rerun: bool = False) -
         write_json(directory/'manifest.json',manifest)
         log.write(json.dumps({'status':result.status,'error':result.error,'metrics':metrics})+'\n')
     return directory
-
-def analyze_runs(inputs: list[Path], *, root: Path = PROJECT) -> Path:
-    """Load explicit complete/failed run records. Never invokes integration."""
-    if not inputs: raise ValueError('Supply explicit run directories')
-    import csv
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
-    report=Path(root)/'reports'/'diagnostics'/(datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')+'-'+uuid4().hex[:8])
-    (report/'figures').mkdir(parents=True); (report/'tables').mkdir()
-    record: dict={'status':'running','inputs':[],'source':provenance(),'parameters':{'plots':['kinetic','modified_energy','divergence_inf','r']}}
-    write_json(report/'analysis.json',record)
-    fig,axes_grid=plt.subplots(2,2,figsize=(11,8))
-    axes=axes_grid.ravel()
-    rows=[]
-    try:
-        for directory in map(Path,inputs):
-            manifest=json.loads((directory/'manifest.json').read_text())
-            checksum=digest(directory/'results.h5')
-            if checksum!=manifest.get('results_sha256'): raise ValueError(f'Result checksum mismatch: {directory}')
-            cfg=json.loads((directory/'config.json').read_text())
-            record['inputs'].append({'run_id':manifest['run_id'],'path':os.path.relpath(directory,root),'results_sha256':checksum})
-            with h5py.File(directory/'results.h5','r') as data:
-                label=f"{cfg['scheme']} {cfg['nx']}x{cfg['ny']} {manifest['run_id'][-8:]}"
-                for ax,key in zip(axes,('kinetic','modified_energy','divergence_inf','r')):
-                    ax.plot(data['times'][:],data['diagnostics/'+key][:],label=label)
-                    ax.set(xlabel='t',ylabel=key); ax.grid(alpha=.25)
-                row={'run_id':manifest['run_id'],'status':manifest['status'],'nx':cfg['nx'],'ny':cfg['ny'],
-                     'scheme':cfg['scheme'],'dt_max':max(cfg['actual_steps']),
-                     'final_time':float(data['final/t'][()]),'max_divergence':float(np.max(data['diagnostics/divergence_inf'][:])),
-                     'max_abs_r':float(np.max(np.abs(data['diagnostics/r'][:]))),**manifest['metrics']}
-                rows.append(row)
-        for ax in axes: ax.legend(fontsize=6)
-        fig.tight_layout(); fig.savefig(report/'figures/diagnostics.png',dpi=180)
-        columns=sorted(set().union(*(row.keys() for row in rows)))
-        with (report/'tables/summary.csv').open('w',newline='') as stream:
-            writer=csv.DictWriter(stream,fieldnames=columns); writer.writeheader(); writer.writerows(rows)
-        record['status']='complete'
-    except Exception as error:
-        record.update(status='failed',error=f'{type(error).__name__}: {error}')
-        raise
-    finally:
-        plt.close(fig); write_json(report/'analysis.json',record)
-        (report/'analysis.log').write_text(json.dumps(record,indent=2)+'\n')
-    return report

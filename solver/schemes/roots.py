@@ -18,8 +18,12 @@ def real_roots(coefficients: Array, tolerance: float = 1e-10) -> RootChoice:
     if c.size<2: raise RuntimeError('Polynomial has no isolated root')
     c=c/np.max(np.abs(c))
     accepted=[]
+    # Multiple real roots split into tiny complex clusters under coefficient
+    # roundoff. Degree-dependent O(eps**(1/degree)) neighborhoods must reach
+    # the real-axis residual check; the stricter residual still decides validity.
+    imaginary_tolerance=max(tolerance,8*np.finfo(float).eps**(1/(c.size-1)))
     for root in np.roots(c):
-        if abs(root.imag)>tolerance*(1+abs(root.real)): continue
+        if abs(root.imag)>imaginary_tolerance*(1+abs(root.real)): continue
         r=float(root.real)
         # Two Newton refinements, accepted only when their scaled residual improves.
         for _ in range(2):

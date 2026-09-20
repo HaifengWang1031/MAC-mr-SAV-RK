@@ -48,7 +48,11 @@ def integrate(model: MACNavierStokes, scheme: Scheme, initial: State, steps: lis
     requests=[] if snapshots is None else list(snapshots)
     if any(not np.isfinite(t) or t<initial.t or t>nodes[-1]+1e-12 for t in requests):
         raise ValueError('Snapshot time outside integration interval')
-    indices=[int(np.argmin(np.abs(nodes-t))) for t in requests]
+    indices=[]
+    for t in requests:
+        distance=np.abs(nodes-t)
+        tie_tolerance=8*np.finfo(float).eps*max(abs(t),float(np.max(np.abs(nodes))),np.finfo(float).tiny)
+        indices.append(int(np.flatnonzero(distance<=distance.min()+tie_tolerance)[0]))
     kept: dict[int,State]={}
     if 0 in indices: kept[0]=initial
     history=History(initial)

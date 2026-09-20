@@ -1,4 +1,6 @@
-# Implementation ticket
-Confirmed scope: docs/spec.md. Review base: 367ec0d.
-Test seams were confirmed by the user in the design: operators, Stokes/stage solve, integration/convergence and persistent workflow.
-Sequence: Stokes tracer test -> MAC operators/backend; convection test -> Numba kernels; stage/integration test -> two schemes; workflow test -> run/analyze; convergence validation; two-axis review; final full suite; local commit and desktop delivery.
+# Implementation record
+- Confirmed scope: docs/spec.md, including direct solver/ layout and uv environment.
+- Empty review baseline: 367ec0d; implementation and review fixes committed on main.
+- TDD seams: Stokes, kernels, stages/roots, progression, persisted workflows; regression fixes validated.
+- Final uv environment: mypy passed, 20 tests passed, bounded 32²–128² and nonsquare acceptance completed.
+- Results and reports indexed in docs/validation_results.json; dual-axis review closed in docs/review.md.

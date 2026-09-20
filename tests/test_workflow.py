@@ -1,6 +1,7 @@
+from experiments.analysis import analyze_runs
 import json
 import h5py
-from experiments.workflow import run_experiment, analyze_runs
+from experiments.workflow import run_experiment
 
 def test_save_reuse_rerun_and_analysis(tmp_path):
     config={'experiment':'decay','nx':8,'ny':6,'T':.02,'dt':.01,'scheme':'sdirk2_mrsav'}
@@ -45,3 +46,28 @@ def test_prescribed_batch_records_members(tmp_path):
     assert len(record['members'])==2
     for member in record['members']:
         assert (tmp_path/member['path']/'results.h5').exists()
+
+def test_analysis_rejects_modified_config(tmp_path):
+    import pytest
+    path=run_experiment({'experiment':'decay','nx':5,'ny':4,'T':.01,'dt':.01},root=tmp_path)
+    cfg=json.loads((path/'config.json').read_text()); cfg['nu']=1.
+    (path/'config.json').write_text(json.dumps(cfg))
+    with pytest.raises(ValueError,match='checksum'):
+        analyze_runs([path],root=tmp_path)
+
+def test_temporal_plot_failure_marks_report_failed(tmp_path,monkeypatch):
+    import pytest
+    from matplotlib.figure import Figure
+    from experiments.convergence import analyze_temporal
+    paths=[run_experiment({'experiment':'ns_mms','nx':6,'ny':4,'T':.04,'dt':dt},root=tmp_path)
+           for dt in (.02,.01,.005,.0025)]
+    save=Figure.savefig
+    def broken(self,path,*args,**kwargs):
+        if str(path).endswith('time_convergence.png'): raise OSError('intentional plot failure')
+        return save(self,path,*args,**kwargs)
+    monkeypatch.setattr(Figure,'savefig',broken)
+    with pytest.raises(OSError,match='intentional'):
+        analyze_temporal(paths[:2],paths[2],paths[3],root=tmp_path)
+    records=list((tmp_path/'reports').glob('*/*/analysis.json'))
+    assert len(records)==1
+    assert json.loads(records[0].read_text())['status']=='failed'
