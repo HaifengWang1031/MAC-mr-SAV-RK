@@ -1,0 +1,40 @@
+{
+  "source": {
+    "code_sha256": "f62d63e4c734ee32763d398fa8bb65c06313a66bbb26d90fe4a08faa06b48126",
+    "python": "3.12.2 | packaged by conda-forge | (main, Feb 16 2024, 20:54:21) [Clang 16.0.6 ]",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "packages": {
+      "numpy": "2.2.5",
+      "scipy": "1.16.2",
+      "numba": "0.61.2",
+      "h5py": "3.14.0",
+      "sympy": "1.14.0",
+      "matplotlib": "3.10.6"
+    },
+    "threads": {
+      "OMP_NUM_THREADS": null,
+      "OPENBLAS_NUM_THREADS": null,
+      "NUMBA_NUM_THREADS": null
+    }
+  },
+  "spatial_report": "reports/diagnostics/20260920T033853-ef223c25",
+  "temporal_reports": [
+    "reports/diagnostics/20260920T033854-acf2a51f",
+    "reports/diagnostics/20260920T033855-98ab037d"
+  ],
+  "decay_report": "reports/diagnostics/20260920T033855-f2ed8e7c",
+  "spatial_runs": [
+    "runs/stokes_mms/20260920T033846-06a2d0dc-61fe1a54",
+    "runs/stokes_mms/20260920T033846-87b54ed3-6d209300",
+    "runs/stokes_mms/20260920T033846-e60ce7a6-3aafe192",
+    "runs/stokes_mms/20260920T033847-7fa247f9-b1756508",
+    "runs/ns_mms/20260920T033847-414e33b7-e0c61e0a",
+    "runs/ns_mms/20260920T033847-34fefaad-aba46c69",
+    "runs/ns_mms/20260920T033847-d2c255aa-d117cbe9",
+    "runs/ns_mms/20260920T033849-7696a8fd-5dfe6ec3",
+    "runs/ns_mms/20260920T033849-556b6553-800be582",
+    "runs/ns_mms/20260920T033849-a1c5c7f9-aa605809",
+    "runs/ns_mms/20260920T033850-6b3252ae-2c05d600",
+    "runs/ns_mms/20260920T033852-d0723d7f-2436018b"
+  ]
+}

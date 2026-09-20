@@ -1,0 +1,15 @@
+{
+  "nx": 32,
+  "ny": 32,
+  "nu": 0.1,
+  "amplitude": 0.1,
+  "T": 0.1,
+  "dt": 0.001,
+  "scheme": "sdirk2_mrsav",
+  "gamma": 1.0,
+  "snapshots": [
+    0.0,
+    0.05,
+    0.1
+  ]
+}

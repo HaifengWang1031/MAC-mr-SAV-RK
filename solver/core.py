@@ -1,0 +1,38 @@
+"""Accepted state and stage diagnostics; schemes do not mutate their input."""
+from dataclasses import dataclass, field
+from typing import Protocol, TYPE_CHECKING
+from .mac.grid import Array
+if TYPE_CHECKING:
+    from .mac_ns import MACNavierStokes
+
+@dataclass(frozen=True)
+class State:
+    t: float
+    u: Array
+    v: Array
+    r: float = 0.0
+
+@dataclass
+class Stage:
+    pressure: Array
+    residual: float
+    divergence_inf: float
+    r: float = 0.0
+    candidates: list[float] = field(default_factory=list)
+    root_residuals: list[float] = field(default_factory=list)
+    scalar_residual: float = 0.0
+
+@dataclass
+class Trial:
+    state: State
+    stages: list[Stage]
+
+@dataclass
+class History:
+    """Only the most recent accepted state is needed by these one-step schemes."""
+    state: State
+    accepted_steps: int = 0
+
+class Scheme(Protocol):
+    name: str
+    def step(self, model: 'MACNavierStokes', state: State, dt: float) -> Trial: ...

@@ -1,0 +1,35 @@
+{
+  "base": {
+    "nx": 32,
+    "ny": 32,
+    "T": 1.0,
+    "nu": 0.01,
+    "amplitude": 0.5
+  },
+  "cases": [
+    {
+      "dt": 0.01,
+      "scheme": "sdirk2"
+    },
+    {
+      "dt": 0.05,
+      "scheme": "sdirk2"
+    },
+    {
+      "dt": 0.2,
+      "scheme": "sdirk2"
+    },
+    {
+      "dt": 0.01,
+      "scheme": "sdirk2_mrsav"
+    },
+    {
+      "dt": 0.05,
+      "scheme": "sdirk2_mrsav"
+    },
+    {
+      "dt": 0.2,
+      "scheme": "sdirk2_mrsav"
+    }
+  ]
+}

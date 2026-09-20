@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.nb[ci]
+.pytest_cache/
+.mypy_cache/
+.runs-cache/
+runs/
+reports/
+.scratch/*
+!.scratch/implementation.md
+.venv/
