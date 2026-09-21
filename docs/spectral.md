@@ -211,22 +211,26 @@ in the same way rather than assumed:
 | sharp | 0.009001 | 0.006722 | 0.003775 |
 | regularised | 0.006192 | 0.000838 | 0.000838 |
 
-Kinetic energy at the same steady states: sharp 0.034008366 (MAC 64^2) against 0.034469608
+Kinetic energy in that historical run: sharp 0.034008366 (MAC 64^2) against 0.034469608
 (20 modes) and 0.034456119 (28 modes); regularised 0.018663548 against 0.018824777 at both
-sizes. The table is a T=40 steady state from an ad-hoc script (unit cavity, Re=100, SDIRK2-mr-ccSAV
-from rest, dt=0.02, MAC 32^2/64^2 and spectral 20/28 modes); the test suite reproduces the
-same comparison at T=10, where the numbers are already those of the steady state (0.006805
-against 0.006722 for the sharp lid). The spectral solution is closer to the fine MAC
-solution than the coarse MAC grid is,
-and for the regularised lid it stops changing between 20 and 28 modes, so the residual
-disagreement is the MAC's own discretisation error rather than the spectral one. The sharp
-lid keeps improving with resolution (`0.0067 -> 0.0038`) but does not collapse, which is the
-corner singularity: its constant profile is not representable, so it arrives as a projection
-with Gibbs oscillations, and the pointwise divergence diagnostic sits at 52 (20 modes) and
-70 (28 modes) in the corner layer against 5e-13 for the MAC. That diagnostic is a corner
-layer, not a failed constraint: the constraint residual the schemes gate on is the weak one,
-which is machine zero, and the constant pressure row that would hold the cavity's net flux
-is the removed gauge.
+sizes. It was a T=40 steady state at dt=0.02 from rest, with MAC 32^2/64^2 and spectral 20/28
+modes, and all of it predates both corrections named above.
+
+What the corrected comparison says -- cell-centred velocity, with a finer reference
+restricted onto the coarser grid by `f x f` block averaging, and the derivation and
+measurements in `docs/validation.md`, section "尖锐顶盖判据的度量缺陷" -- is this. The
+regularised lid satisfies "spectral error <= MAC grid sensitivity": 1.005e-3 against
+1.491e-3, ratio 0.674, unchanged to three digits between dt=0.08 and dt=0.04, and the
+spectral error stops changing after 12 modes, so what is left is the MAC's own discretisation
+error. The sharp lid does *not* satisfy it and cannot: ratio 3.9 / 3.7 / 3.3 at 16 / 20 / 24
+modes. Its constant profile is not representable, so it arrives as a projection with Gibbs
+oscillations, adding modes reduces its error by only 14% from 16 to 24, and the pointwise
+divergence diagnostic sits at 52 (20 modes) and 70 (28 modes) in the corner layer against
+5e-13 for the MAC. That diagnostic is a corner layer, not a failed constraint: the constraint
+residual the schemes gate on is the weak one, which is machine zero, and the constant pressure
+row that would hold the cavity's net flux is the removed gauge. The sharp lid is therefore
+graded on convergence plus the primary vortex -- position equal at grid resolution, strength
+within 0.45% under one shared extraction -- rather than on an error race it cannot win.
 
 ### Three places the seam had to be made consistent with a lifting
 

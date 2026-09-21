@@ -495,6 +495,24 @@ def _spectral_cavity(size, nu, profile, final_time, dt):
     return space, lifting, state
 
 
+def test_the_cavity_restriction_is_second_order_and_not_a_half_cell_stride():
+    """`_block_average` gives the value at the coarse cell centres, not a shifted sample.
+
+    On a linear field the restriction is exact, while sampling the fine array by stride lands
+    half a cell away: the offset is exactly half the cell size times the gradient. That is the
+    arithmetic that inflated the old sharp-lid yardstick, so it is pinned numerically rather
+    than described.
+    """
+    n = 8
+    # A field linear along the axis the stride is taken on, constant along the other, so the
+    # restriction is exact and the only error a stride can introduce is the half-cell offset.
+    profile = 2 * (np.arange(2 * n) + .5) / (2 * n)
+    fine = np.tile(profile[:, None], (1, 2 * n))
+    centres = np.tile((2 * (np.arange(n) + .5) / n)[:, None], (1, n))
+    np.testing.assert_allclose(_block_average(fine, 2), centres, atol=1e-15)
+    np.testing.assert_allclose(fine[1::2, ::2] - centres, 1 / (2 * n), atol=1e-15)
+
+
 def test_spectral_cavity_is_within_the_mac_grid_sensitivity_for_the_regularised_lid():
     """The regularised lid: the spectral error has to sit inside the MAC's own resolution gap.
 
@@ -540,7 +558,12 @@ def test_spectral_sharp_lid_cavity_converges_and_locates_the_vortex():
     strength, x, y = _primary_vortex(u, v)
     spectral_strength, spectral_x, spectral_y = _primary_vortex(*sampled)
     assert abs(spectral_strength - strength) < .01 * abs(strength), (spectral_strength, strength)
-    assert abs(spectral_x - x) < .02 and abs(spectral_y - y) < .02, (spectral_x, spectral_y, x, y)
+    # A cell at 64^2 is 1/64 = 0.0156, so this tolerance is about two thirds of a cell: the
+    # matched case agrees to the grid exactly (difference 0), while one cell of drift fails.
+    # It started at 0.02, which the negative control showed cannot discriminate -- the two lid
+    # profiles place the vortex only 0.015-0.016 apart, so that tolerance passed even with the
+    # wrong profile on the spectral side (`docs/validation.md`, acceptance of this fix).
+    assert abs(spectral_x - x) < .010 and abs(spectral_y - y) < .010, (spectral_x, spectral_y, x, y)
 
 
 @pytest.mark.parametrize('size', [8, 20, 28])
