@@ -97,3 +97,33 @@ def test_parallel_run_reuse_and_failed_prefix(tmp_path):
         bad=json.loads((failure/'manifest.json').read_text())
         message=(good['status'],bad['status'],bad['accepted_steps'])
     assert MPI.COMM_WORLD.bcast(message,root=0)==('complete','failed',0)
+
+
+def test_single_rank_petsc_adapter_matches_direct_backend():
+    """The PETSc adapter and SuperLU are independent stacks solving the same operator.
+
+    PETScStokes drives the unchanged serial scheme code through the injected backend,
+    so agreement here cross-checks the distributed assembly, the block preconditioner
+    and the divergence handling against SuperLU on the same small problem.
+    """
+    from solver.mac.operators import MACOperators
+    from solver.mac.stokes import DirectStokes
+    from solver.mac_ns import MACNavierStokes
+    from solver.schemes.sdirk2 import SDIRK2
+    from solver.parallel.serial_adapter import PETScStokes
+    from experiments.problems import initial_velocity
+    rng=np.random.default_rng(11)
+    g=MACGrid(9,7,1.3,.8)
+    rhs=rng.standard_normal(g.size)
+    reference=DirectStokes(MACOperators(g)).solve(rhs,mass=1.,viscosity=.07)
+    adapted=PETScStokes(MACOperators(g),tolerance=1e-12).solve(rhs,mass=1.,viscosity=.07)
+    assert np.max(np.abs(adapted.velocity-reference.velocity))<1e-7
+    assert np.max(np.abs(adapted.pressure-reference.pressure))<1e-7
+    assert adapted.divergence_inf<1e-8 and adapted.residual<1e-8
+    vectors=[]
+    for backend in (DirectStokes(MACOperators(g)),PETScStokes(MACOperators(g),tolerance=1e-12)):
+        model=MACNavierStokes(g,.1,backend=backend)
+        state=model.state(0.,initial_velocity(g,.1))
+        trial=SDIRK2().step(model,state,1e-3)
+        vectors.append(model.vector(trial.state))
+    assert np.max(np.abs(vectors[0]-vectors[1]))<1e-7
