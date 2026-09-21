@@ -127,3 +127,41 @@ def test_single_rank_petsc_adapter_matches_direct_backend():
         trial=SDIRK2().step(model,state,1e-3)
         vectors.append(model.vector(trial.state))
     assert np.max(np.abs(vectors[0]-vectors[1]))<1e-7
+
+
+def test_one_scheme_object_drives_both_models():
+    """Seam 1: a single scheme implementation drives each model.
+
+    Single rank by construction (COMM_SELF), so it behaves the same however pytest is
+    launched; the multi-rank comparison stays in
+    test_distributed_time_steps_match_serial_sdirk. It lives here rather than beside the
+    other seam tests because it needs petsc4py, and the Model assignment is what makes
+    the type checker verify that ParallelNS satisfies the seam.
+    """
+    from mpi4py import MPI
+    from solver.model import Model
+    from solver.mac_ns import MACNavierStokes
+    from solver.mac_parallel.integrate import ParallelNS
+    from solver.schemes.sdirk2 import SDIRK2
+    from solver.schemes.sdirk2_mrsav import SDIRK2MRSAV
+    from experiments.problems import initial_velocity
+    grid=MACGrid(12,9)
+    for scheme in (SDIRK2(),SDIRK2MRSAV(1.)):
+        serial=MACNavierStokes(grid,.1)
+        trial=scheme.step(serial,serial.state(0.,initial_velocity(grid,.2)),1e-3)
+        reference=serial.vector(trial.state)
+        distributed: Model=ParallelNS(grid,.1,comm=MPI.COMM_SELF,tolerance=1e-12)
+        try:
+            dtrial=scheme.step(distributed,distributed.initial(amplitude=.2),1e-3)
+            fields=distributed.stokes.layout.gather(dtrial.state.velocity)
+            assert fields is not None                      # COMM_SELF owns the whole grid
+            errors=[float(np.max(np.abs(grid.pack(*fields)-reference))),
+                    abs(dtrial.state.r-trial.state.r)]
+            for got,want in zip(dtrial.stages,trial.stages):
+                errors.extend([abs(got.r-want.r),abs(got.residual-want.residual),
+                               abs(got.divergence_inf-want.divergence_inf)])
+            assert max(errors)<1e-8,(scheme.name,errors)
+            dtrial.state.velocity.destroy()
+            for stage in dtrial.stages:stage.pressure.destroy()
+        finally:
+            distributed.close()

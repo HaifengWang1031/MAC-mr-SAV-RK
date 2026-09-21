@@ -17,7 +17,7 @@ Two deliberate typing choices:
   replace it at run time).
 """
 from collections.abc import Callable, Sequence
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 class SolveResult(Protocol):
     """What a shifted Stokes solve returns: a velocity, a pressure and its own checks."""
@@ -81,3 +81,14 @@ class Model(Protocol):
 
     def diagnostics(self, state: Any) -> dict[str, float]:
         """Kinetic energy, modified energy, divergence, H1 seminorm and r."""
+
+
+if TYPE_CHECKING:
+    # Both realisations are checked against the seam here rather than in a test: the type
+    # checker only inspects the packages in mypy's `files`, which exclude tests/, so a
+    # conformance assignment inside a test file would never be read. A missing or wrongly
+    # typed member fails these two assignments.
+    from .mac_ns import MACNavierStokes
+    from .mac_parallel.integrate import ParallelNS
+    _serial_realisation: type[Model] = MACNavierStokes
+    _distributed_realisation: type[Model] = ParallelNS

@@ -1,10 +1,12 @@
 """Distributed model and unchanged SDIRK stage equations with global SAV products."""
 from dataclasses import dataclass,field
 from typing import Any,Callable
+from collections.abc import Sequence
 import numpy as np
 from mpi4py import MPI
 from petsc4py import PETSc
 from ..mac.grid import MACGrid
+from ..model import SolveResult
 from ..schemes.sdirk2 import ETA,DELTA
 from ..schemes.roots import real_roots
 from .stokes import ParallelStokes
@@ -43,6 +45,7 @@ class ParallelNS:
         self.grid,self.nu,self.comm=grid,nu,comm
         self.stokes=ParallelStokes(grid,comm=comm,tolerance=tolerance,max_iterations=max_iterations,cache_size=cache_size)
         self.force: Callable[[float],Any]=lambda t:self.zero()
+        self.buffers: dict[str,Any]={}
 
     def zero(self) -> Any:
         result=self.stokes.layout.template.duplicate();result.set(0.);return result
@@ -74,7 +77,65 @@ class ParallelNS:
         return {'kinetic':kinetic,'modified_energy':kinetic+.5*(state.r-1)**2,
                 'h1_seminorm_squared':h1,'divergence_inf':divergence,'r':state.r}
 
-    def close(self) -> None:self.stokes.close()
+    # --- the model seam (solver/model.py): the distributed realisation supplies the
+    # same members as the serial one, so a single scheme implementation drives both.
+
+    def vector(self,state: DistributedState) -> Any:
+        return state.velocity
+
+    def state(self,t: float,velocity: Any,r: float=0.) -> DistributedState:
+        return DistributedState(t,velocity,r)
+
+    def combine(self,*terms: tuple[float,Any]) -> Any:
+        return combine(*terms)
+
+    def _buffer(self,name: str,create: Callable[[],Any]) -> Any:
+        """A vector the model owns and reuses, because the schemes cannot destroy one."""
+        result=self.buffers.get(name)
+        if result is None:
+            result=create()
+            self.buffers[name]=result
+        return result
+
+    def apply_K(self,velocity: Any) -> Any:
+        """K v in a reused buffer, valid until the next apply_K call."""
+        result=self._buffer('K',self.stokes.layout.template.duplicate)
+        self.stokes.K.mult(velocity,result)
+        return result
+
+    def apply_G(self,pressure: Any) -> Any:
+        """G p in a reused buffer, valid until the next apply_G call."""
+        result=self._buffer('G',self.stokes.layout.template.duplicate)
+        self.stokes.G.mult(pressure,result)
+        return result
+
+    def apply_D(self,velocity: Any) -> Any:
+        """D v on all rows, matching the serial operator: the solver's system drops one row,
+        this one does not, so the buffer takes the full pressure layout from the matrix."""
+        result=self._buffer('D',self.stokes.full_D.createVecLeft)
+        self.stokes.full_D.mult(velocity,result)
+        return result
+
+    def max_abs(self,field: Any) -> float:
+        return float(field.norm(PETSc.NormType.NORM_INFINITY))
+
+    def solve(self,rhs: Any,*,mass: float,viscosity: float) -> Any:
+        return self.stokes.solve(rhs,mass=mass,viscosity=viscosity)
+
+    def solve_columns(self,columns: Sequence[Any],*,mass: float,viscosity: float) -> list[SolveResult]:
+        """One solve per right-hand side: this backend cannot batch them."""
+        return [self.stokes.solve(column,mass=mass,viscosity=viscosity) for column in columns]
+
+    def stage(self,pressure: Any,residual: float,divergence_inf: float,r: float=0.,
+              candidates: Sequence[float]=(),root_residuals: Sequence[float]=(),
+              scalar_residual: float=0.) -> DistributedStage:
+        return DistributedStage(pressure,residual,divergence_inf,r,list(candidates),
+                                list(root_residuals),scalar_residual)
+
+    def close(self) -> None:
+        for buffer in self.buffers.values():buffer.destroy()
+        self.buffers.clear()
+        self.stokes.close()
 
 class ParallelSDIRK2:
     def __init__(self,*,sav: bool=True,gamma: float=1.) -> None:

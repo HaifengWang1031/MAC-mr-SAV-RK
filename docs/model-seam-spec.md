@@ -99,6 +99,37 @@ pressure. SDIRK2-mr-ccSAV stays at the ulp level because its velocity and `r` up
 happen to keep the same accumulation order. No convergence rate, gate or tolerance
 changed.
 
+## Slice 3 record (2026-09-21)
+
+`ParallelNS` satisfies the seam. The conformance is verified by the type checker rather
+than asserted: `solver/model.py` assigns both realisations to `type[Model]` under
+`TYPE_CHECKING`, and renaming one member makes mypy fail at that line, so the check is
+live. (The original version put that assignment in a test, which never worked — mypy
+only inspects the packages in its `files` setting, and `tests/` is not one of them.)
+
+Seam 1 is `tests/test_parallel.py::test_one_scheme_object_drives_both_models`: one
+scheme object per case drives the serial model and the single-rank distributed model
+(`COMM_SELF`, so it behaves identically however pytest is launched) and requires
+agreement below 1e-8 on the packed velocity, the scalar `r` and the stage scalars, for
+both schemes. It lives in the parallel test file rather than beside the member seams
+because it needs petsc4py, and that is the file that skips cleanly without it.
+
+Two decisions the member table did not anticipate:
+
+- `apply_K`, `apply_G` and `apply_D` allocate PETSc vectors that the schemes cannot
+destroy, so the model owns one reused buffer per operator and releases them in
+`close()`. The `apply_D` buffer must take the *full* pressure layout: the solver's
+system drops one continuity row but the seam's `apply_D` returns all rows, matching the
+serial operator. The first version used the reduced layout and seam 1 caught it
+(`MatMult ... Nonconforming object sizes: global dim 108 107`).
+- `apply_K` is deliberately not an alias of the existing `viscous`, because
+  `ParallelSDIRK2` destroys the vector it receives; keeping them separate avoids
+  handing a destroyed buffer back until slice 5 removes that stepper.
+
+Gate: 7 parallel tests pass on 1, 2 and 4 ranks in a dedicated environment
+(`docs/parallel.md` records the verified build recipe and the corrected diagnosis of the
+MPI mismatch), the serial suite is unchanged, and mypy is clean.
+
 ## Risks
 
 - The schemes are validated numerical code and the seam touches their arithmetic.

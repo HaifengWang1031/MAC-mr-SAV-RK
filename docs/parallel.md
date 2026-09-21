@@ -129,9 +129,9 @@ PETSC_DIR="$(brew --prefix petsc)" uv sync --locked --extra mpi
 
 未验证：2048² 及以上、二维域分解、并行 HDF5、多节点；1024² 的直接法 20 步基线（见上）。以上并行运行都在本机单节点 4 进程以内。
 
-### 主仓库环境的已知坑（2026-09-21 实测）
+### MPI/PETSc 环境的已知坑与可用配方（2026-09-21 实测）
 
-在主仓库的 venv 里直接 `PETSC_DIR="$(brew --prefix petsc)" uv sync --locked --extra mpi` 会装上**预编译的 mpi4py wheel**，它与 brew 的 PETSc 编译时所用的 Open MPI 不是同一次构建（实测 mpi4py 对应 libmpi 81.7.0，brew PETSc 对应 81.3.0）。导入 petsc4py 即触发 PETSc 的运行时 MPI-ABI 检查：
+症状：`from petsc4py import PETSc` 直接崩，PETSc 报
 
 ```
 PETSC ERROR: MPI library at runtime is not compatible with MPI used at compile time
@@ -139,11 +139,16 @@ PETSC ERROR: Application was linked against both Open MPI and MPICH based MPI li
 → Segmentation fault
 ```
 
-两者其实都是 Open MPI，wheel 也未自带 MPI（`@rpath/libmpi.40.dylib` 与 brew 的绝对路径指向同一套安装），所以这是**构建代次不一致**，而不是 MPI 种类混用。副作用比报错本身麻烦：`tests/test_parallel.py` 顶部的 `importorskip` 会真的去导入 petsc4py，于是整个 pytest 进程 abort（而不是跳过）。
+**这句是字面准确的，不是泛用措辞。** 实测：`petsc4py` 的扩展链接 `@rpath/libmpi.12.dylib`（MPICH ABI），而 brew 的 `libpetsc.3.25.5.dylib` 链接 `/opt/homebrew/opt/open-mpi/lib/libmpi*.40.dylib`（Open MPI）；而 **`libmpi.12.dylib` 在本机任何位置都不存在**（`/usr/local`、`/opt/local`、conda、`/opt/homebrew` 都没有，也未安装 mpich keg）。所以根因是 **uv 复用了很久以前在另一套 MPI 下构建的 petsc4py 缓存 wheel**：安装日志显示 29 个包 148 ms 装完，且从未出现 `Building petsc4py`。相关线索：brew 的 `petscvariables` 里 `MPI_LIB` 与 `MPI_INCLUDE` **是空的**，因此构建时不给 `MPICC` 的话，链接到哪套 MPI 取决于环境。副作用比报错本身麻烦：`tests/test_parallel.py` 顶部的 `importorskip` 会真的导入 petsc4py，于是整个 pytest 进程 abort，而不是跳过。
 
-两条可行修法：
+**已验证可用的配方**（在独立环境里做，不要装进主仓库的 venv）：
 
-1. 让 mpi4py 也对着同一套 MPI **源码构建**：在 pyproject 加 `[tool.uv] no-binary-package = ["mpi4py"]`，或用 `UV_NO_BINARY=mpi4py`；
-2. 用同一工具链构建 PETSc / petsc4py。
+```sh
+uv venv /tmp/mpi_env --python 3.12
+export PETSC_DIR="$(brew --prefix petsc)"
+export MPICC="$(brew --prefix open-mpi)/bin/mpicc"
+uv pip install --python /tmp/mpi_env/bin/python numpy scipy numba h5py sympy matplotlib pytest mypy mpi4py petsc4py
+uv pip install --python /tmp/mpi_env/bin/python --reinstall --no-cache-dir mpi4py petsc4py
+```
 
-无论哪条，都建议在**独立环境**里做。主仓库的 venv 保持不含 `mpi` extra：不装时并行测试自动跳过（22 通过 + 1 跳过），`tools/validate.py` 的并行档也会显式跳过并在 `validation_results.json` 里记录原因。
+第二步是关键：`--reinstall --no-cache-dir` 才会绕开陈旧缓存（`UV_NO_BINARY=mpi4py` 在本机没有生效——日志里没有出现 mpi4py 的源码构建），而 `MPICC` 保证链接的是 libpetsc 所用的那套 Open MPI。之后 `PYTHONPATH=<repo> /tmp/mpi_env/bin/python -m pytest tests/test_parallel.py` 在 1/2/4 进程下全部通过。主仓库的 venv 保持不含 `mpi` extra：不装时并行测试自动跳过，`tools/validate.py` 的并行档也会显式跳过并记录原因。

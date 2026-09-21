@@ -11,7 +11,6 @@ from fractions import Fraction
 import numpy as np
 from solver.mac.grid import MACGrid
 from solver.mac_ns import MACNavierStokes
-from solver.model import Model
 
 
 def seam_model() -> MACNavierStokes:
@@ -32,12 +31,6 @@ def sine_mode(grid: MACGrid) -> tuple[np.ndarray, np.ndarray]:
     u[:, [0, -1]] = 0.
     v[[0, -1], :] = 0.
     return u, v
-
-
-def test_serial_model_satisfies_the_protocol():
-    """Structural conformance, checked by the type checker rather than asserted at runtime."""
-    model: Model = seam_model()
-    assert model.nu == .1
 
 
 def test_combine_is_exact_and_leaves_its_inputs_alone():
