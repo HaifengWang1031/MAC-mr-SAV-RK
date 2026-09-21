@@ -1,9 +1,9 @@
 # Spectral discretisation (single-element Dirichlet-combined Legendre)
 
-Slice S1 of the plan agreed on 2026-09-21: build the basis and the assembly for a third
-discretisation that will implement `solver/model.py`, so the existing schemes, drivers and
-records are reused. The lid-driven cavity comparison, in both the sharp and the
-regularised form, is S3. No new dependency is involved; only numpy, scipy and sympy.
+Slice S1 and S2 of the plan agreed on 2026-09-21: the basis and the assembly for a third
+discretisation, and its `solver/model.py` implementation, so the existing schemes,
+drivers and records are reused. The lid-driven cavity comparison, in both the sharp and
+the regularised form, is S3. No new dependency is involved; only numpy, scipy and sympy.
 
 ## What is implemented
 
@@ -31,6 +31,26 @@ regularised form, is S3. No new dependency is involved; only numpy, scipy and sy
   constant mode removed, which is exactly the nullspace of that block, factorizations
   cached on `(mass, viscosity)`, and both an algebraic residual and a pointwise divergence
   check after every solve.
+
+`solver/spectral/model.py`
+
+- The discretisation presented through the seam in `solver/model.py`, so `SDIRK2` and
+  `SDIRK2-mr-ccSAV` drive it unmodified. A modal basis forces two decisions that the MAC
+  model never has to make:
+  - **One vector space.** The schemes add `vector(state)`, `force(t)` and `nonlinear(state)`
+    together and hand the sum to `solve`, so all three have to live in the same space. The
+    MAC model satisfies this silently, because its basis functions are nodal indicators and
+    its mass matrix is diagonal, so load and coefficient spaces coincide. Here the packed
+    vector holds *coefficients* and the weak operators are folded into field operators:
+    `apply_K = M^-1 S`, `apply_G = M^-1 G`, and `solve` turns its right-hand side into a
+    load. `Space.load` is only the weak right-hand side, so anything built from an analytic
+    expression goes through `model.project`, which solves the mass matrix.
+  - `max_abs` returns the largest coefficient, not a sup-norm of the field. It only has to
+    be a consistent scale for the relative stage checks; the physical divergence is
+    reported separately by `diagnostics`, evaluated in physical space.
+- `nonlinear` assembles the convective term on a wider quadrature than the projection uses,
+  which makes the projection of the polynomial product exact and lets the term be verified
+  against an analytic value instead of only against itself.
 
 ## What is verified
 
@@ -92,9 +112,50 @@ Both fields converge spectrally on the square and on the rectangle. Beyond 20 mo
 error sits at roundoff and drifts slowly upward: that is the accuracy limit of a single
 Legendre element in double precision, and it is the reason a multi-element basis exists.
 
+## What the seam verified
+
+- **The nonlinear term** against sympy: for a polynomial velocity that is in the space
+  (both components vanish on all four walls), `N(v) = (u.grad)u` matches the analytic value
+  pointwise to 1.9e-18, a relative 4.2e-15. The quadrature is wide enough that the
+  projection of the product is exact, so this compares against an outside reference and is
+  not a self-check.
+- **The operators**: `D` and `G` are adjoints under the mass inner product
+  (`<Gp, v> = -<p, Dv>`, residual 1e-11 on random vectors) and the stiffness form is
+  symmetric there. Both statements go through `inner` rather than a plain dot product,
+  because the operators exposed by the seam are `M^-1 S` and `M^-1 G`.
+- **Time convergence** on the transient manufactured solution (`experiments/problems.py`,
+  amplitude 0.1, nu 0.1, T 0.2, 16 modes, reference the same scheme at dt = T/256):
+
+  | scheme | dt=T/4 | dt=T/8 | dt=T/16 | dt=T/32 | observed order |
+  |---|---|---|---|---|---|
+  | SDIRK2 | 2.386e-03 | 5.921e-04 | 1.457e-04 | 3.568e-05 | 2.01, 2.02, 2.03 |
+  | SDIRK2-mr-ccSAV | 1.953e-03 | 4.989e-04 | 1.400e-04 | 4.626e-05 | 1.97, 1.83, 1.60 |
+
+  Against a dt = T/1024 reference the SAV errors are unchanged (5.005e-04, 1.426e-04,
+  4.963e-05, 2.084e-05; orders 1.81, 1.52, 1.25) and are identical at 16 and at 24 modes,
+  so the degradation is temporal rather than spatial, and not an artefact of the reference.
+
+### The SAV order at small steps is not a defect of this discretisation
+
+The same measurement on the validated MAC model, same manufactured solution, T/256
+reference, and resolution-independent in the same way:
+
+| model | dt=T/8 | dt=T/16 | dt=T/32 | observed order |
+|---|---|---|---|---|
+| MAC 32x32, SDIRK2 | 2.651e-05 | 6.606e-06 | 1.633e-06 | 2.00, 2.02 |
+| MAC 32x32, SAV | 2.769e-05 | 7.495e-06 | 2.266e-06 | 1.89, 1.73 |
+| MAC 48x48, SAV | 2.776e-05 | 7.473e-06 | 2.237e-06 | 1.89, 1.74 |
+
+Both discretisations show the same signature, so the two implementations agree with each
+other rather than one being wrong. The second order recorded for both schemes in
+`docs/validation.md` is the leading order, and the SAV scheme falls below it at small
+steps. Whether that is intended by the scheme or a defect in it is a question about the
+scheme, not about this discretisation, and it is not addressed here.
+
 ## Next step
 
-- S2: implement `solver/model.py` for this discretisation, so `SDIRK2` and `SDIRK2-mr-ccSAV`
-  drive it and the unsteady manufactured test shows the expected second order in time.
 - S3: add the moving-lid lifting for the inhomogeneous boundary, run the sharp and the
   regularised lid-driven cavity, and compare against the validated MAC solutions.
+- Open, and separate from S3: whether the SAV scheme's sub-second order at small steps is
+  intended. The decisive experiment is a dt -> 0 study of the scalar `r` and of the stage
+  residual on one fixed discretisation, which this seam now makes cheap to run.

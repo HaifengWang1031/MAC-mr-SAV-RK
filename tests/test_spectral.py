@@ -11,7 +11,10 @@ import pytest
 import sympy as sy
 from solver.spectral import basis
 from solver.spectral.assembly import Space, divergence_blocks, velocity_mass, velocity_stiffness
+from solver.spectral.model import SpectralModel
 from solver.spectral.stokes import SpectralStokes
+from solver.schemes.sdirk2 import SDIRK2
+from solver.schemes.sdirk2_mrsav import SDIRK2MRSAV
 
 
 def test_one_dimensional_matrices_match_symbolic_integration():
@@ -188,3 +191,138 @@ def test_manufactured_steady_stokes_converges_spectrally(lx, ly):
     assert errors_u[2] < 1e-2 * errors_u[1], errors_u
     assert errors_u[3] < 1e-12, errors_u
     assert errors_p[3] < 1e-12, errors_p
+
+
+def _coefficients(space, mass, expression):
+    """Coefficients of a polynomial expression that lies in the velocity space.
+
+    `Space.load` is the weak right-hand side, i.e. the mass matrix applied to the
+    coefficients, so it has to be solved before it can be used as a field. Confusing the
+    two is worth 30% on a smooth field, not roundoff, so this path is spelled out.
+    """
+    from scipy.sparse.linalg import splu
+    grid_load = space.load(sy.lambdify(('x', 'y'), expression, 'numpy')).reshape(-1)
+    return splu(mass.tocsc()).solve(grid_load)
+
+
+def test_nonlinear_term_matches_analytic_convection():
+    """N(v) = (u.grad)u against sympy, on a polynomial velocity that is in the space.
+
+    The stream function is chosen so that both velocity components vanish on all four
+    walls: the model imposes no-slip on both components, so a field built from a generic
+    stream function is not in the space and would only be tested through its projection.
+    The quadrature is wide enough that the projection of this product is exact, which is
+    what makes a pointwise comparison against the analytic value meaningful.
+    """
+    x, y = sy.symbols('x y')
+    stream = x ** 2 * (1 - x) ** 2 * y ** 2 * (1 - y) ** 2
+    u, v = sy.diff(stream, y), -sy.diff(stream, x)
+    convection_u = sy.diff(u, x) * u + sy.diff(u, y) * v
+    convection_v = sy.diff(v, x) * u + sy.diff(v, y) * v
+    space = Space(8, 1., 1.)
+    model = SpectralModel(space, .1)
+    velocity = np.concatenate([_coefficients(space, model.mass, u), _coefficients(space, model.mass, v)])
+    assembled = model.nonlinear(velocity)
+    nodes_x, _, nodes_y, _ = space.nodes(extra=10)
+    grid_x, grid_y = np.meshgrid(nodes_x, nodes_y)
+    for component, expression in ((assembled[:model.modes], convection_u),
+                                  (assembled[model.modes:], convection_v)):
+        values = space.evaluate(component.reshape(space.size, space.size), nodes_x, nodes_y)
+        reference = sy.lambdify((x, y), expression, 'numpy')(grid_x, grid_y)
+        assert np.max(np.abs(values - reference)) < 1e-13
+        assert np.max(np.abs(reference)) > 1e-4      # the check has something to measure
+
+
+def test_operators_are_a_compatible_pair_and_the_stiffness_form_is_symmetric():
+    """The two identities the staggered MAC operators also satisfy, in weak form.
+
+    D and G must be adjoints (`<G p, v> == -<p, D v>` with the mass inner product) or the
+    saddle-point system is inconsistent, and the stiffness must be symmetric as a bilinear
+    form, which in this representation means symmetric under the mass inner product. Both
+    statements go through `inner` rather than a plain dot product, because the operators
+    here are M^-1 S and M^-1 G: an unweighted dot product would test a different operator.
+    """
+    model = SpectralModel(Space(6, 1., 1.), .1)
+    generator = np.random.default_rng(0)
+    velocity = generator.standard_normal(2 * model.modes)
+    other = generator.standard_normal(2 * model.modes)
+    pressure = generator.standard_normal(model.modes)
+    assert abs(model.inner(model.apply_G(pressure), velocity) + pressure @ model.apply_D(velocity)) < 1e-11
+    assert abs(model.inner(model.apply_K(velocity), other) - model.inner(velocity, model.apply_K(other))) < 1e-11
+
+
+def test_projection_returns_coefficients_not_the_right_hand_side():
+    """`project` must solve the mass matrix: a field in the space is reproduced exactly.
+
+    `Space.load` is only the weak right-hand side. Treating it as a field is worth an O(1)
+    error on smooth data, and it is the same mistake that made `nonlinear` look wrong.
+    """
+    x, y = sy.symbols('x y')
+    stream = x ** 2 * (1 - x) ** 2 * y ** 2 * (1 - y) ** 2
+    space = Space(8, 1., 1.)
+    model = SpectralModel(space, .1)
+    coefficients = model.project(sy.lambdify((x, y), sy.diff(stream, y), 'numpy'))
+    nodes_x, _, nodes_y, _ = space.nodes(extra=10)
+    grid_x, grid_y = np.meshgrid(nodes_x, nodes_y)
+    values = space.evaluate(coefficients.reshape(space.size, space.size), nodes_x, nodes_y)
+    assert np.max(np.abs(values - sy.lambdify((x, y), sy.diff(stream, y), 'numpy')(grid_x, grid_y))) < 1e-13
+
+
+def _manufactured(lx, ly, nu, amplitude):
+    """The transient manufactured solution the MAC temporal study uses, unit amplitude."""
+    x, y, t = sy.symbols('x y t')
+    stream = sy.sin(sy.pi * x / lx) ** 2 * sy.sin(sy.pi * y / ly) ** 2 * sy.exp(-t)
+    u, v = sy.diff(stream, y), -sy.diff(stream, x)
+    pressure = sy.cos(sy.pi * x / lx) * sy.cos(sy.pi * y / ly) * sy.exp(-t)
+    forcing = []
+    for q, axis in ((u, x), (v, y)):
+        # Velocity scales with the amplitude, the convective term quadratically.
+        forcing.append(amplitude * (-nu * (sy.diff(q, x, 2) + sy.diff(q, y, 2))
+                                    + sy.diff(pressure, axis) + sy.diff(q, t))
+                       + amplitude ** 2 * (u * sy.diff(q, x) + v * sy.diff(q, y)))
+    functions = [sy.lambdify((x, y, t), expression, 'numpy') for expression in (forcing[0], forcing[1], u, v)]
+    return functions
+
+
+@pytest.mark.parametrize('scheme_name', ['sdirk2', 'sdirk2_mrsav'])
+def test_the_schemes_drive_the_spectral_model_at_second_order_in_time(scheme_name):
+    """The point of the seam: both schemes run on this discretisation unmodified.
+
+    The reference is the same scheme at a much smaller step, so what is measured is the
+    temporal error; the spatial error is far below it at this resolution. First order here
+    means the nonlinear or the pressure term is wired in with the wrong mass convention,
+    which is exactly the failure that a mesh-convergence check cannot see.
+    """
+    scheme = {'sdirk2': SDIRK2(), 'sdirk2_mrsav': SDIRK2MRSAV()}[scheme_name]
+    lx = ly = 1.
+    nu = .1
+    amplitude = .1
+    final_time = .2
+    space = Space(16, lx, ly)
+    forcing_u, forcing_v, exact_u, exact_v = _manufactured(lx, ly, nu, amplitude)
+    model = SpectralModel(space, nu, tolerance=1e-12,
+                          force=lambda t: np.concatenate([model.project(lambda x, y: forcing_u(x, y, t)),
+                                                          model.project(lambda x, y: forcing_v(x, y, t))]))
+    initial = model.state(0., np.concatenate([model.project(lambda x, y: exact_u(x, y, 0.)),
+                                              model.project(lambda x, y: exact_v(x, y, 0.))]), 1.)
+
+    def run(step):
+        state = initial
+        for _ in range(round(final_time / step)):
+            state = scheme.step(model, state, step).state
+        return model.vector(state)
+
+    reference = run(final_time / 256)
+    error = {}
+    # The coarse pair on purpose. Both schemes show a clean second order here, and the
+    # SAV scheme is measured at 1.89/1.73 at smaller steps on the *MAC* model as well as on
+    # this one, resolution-independently, so the degradation is a property of the scheme
+    # rather than of either discretisation (docs/spectral.md records the comparison). This
+    # test asserts the leading second order; a first-order regression would give a ratio of
+    # about two and still fail.
+    for step in (final_time / 4, final_time / 8):
+        difference = run(step) - reference
+        error[step] = float(np.sqrt(max(model.inner(difference, difference), 0.)))
+    coarse, medium = error[final_time / 4], error[final_time / 8]
+    assert coarse > 100 * np.finfo(float).eps
+    assert 3.4 < coarse / medium < 4.6, (coarse, medium, coarse / medium)

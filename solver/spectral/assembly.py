@@ -75,27 +75,36 @@ class Space:
         chi, eta = self.pressure_values(x, y)
         return eta.T @ coefficients.T @ chi
 
-    def load(self, function: Callable[[Array, Array], Array]) -> Array:
+    def project(self, values: Array, extra: int = 3) -> Array:
+        """Galerkin load int f phi_k psi_l for `values` sampled on nodes(extra).
+
+        `values` must be indexed [y, x] as meshgrid produces it. Exposed separately from
+        `load` because the nonlinearity is assembled on its own, wider quadrature: with
+        `extra` large enough the projection of a polynomial product is exact, which is what
+        lets the convective term be checked against an analytic value.
+        """
+        nodes_x, weights_x, nodes_y, weights_y = self.nodes(extra=extra)
+        phi, psi = self.velocity_values(nodes_x, nodes_y)
+        weighted_x = phi * weights_x[None, :]
+        weighted_y = psi * weights_y[None, :]
+        # meshgrid varies x along columns, so `values` is indexed [y, x] and has to be
+        # transposed before contacting the mode index; the result is [x, y] like every
+        # other coefficient array here. The order cannot be settled by reasoning about
+        # index conventions: on a square domain both orders agree, and an earlier
+        # "discriminator" was ambiguous because its non-zero pattern is symmetric. It is
+        # settled by comparing against sympy on a rectangle, where the un-transposed form
+        # swaps the (0,2) and (2,0) entries, and by the separable test in the test file.
+        return weighted_x @ values.T @ weighted_y.T
+
+    def load(self, function: Callable[[Array, Array], Array], extra: int = 3) -> Array:
         """Galerkin load int f phi_k psi_l dx dy by Gauss-Legendre quadrature.
 
         Exact when the integrand is a polynomial of the degree the nodes support, and
         spectrally accurate for the smooth manufactured forcings used in the tests.
         """
-        nodes_x, weights_x, nodes_y, weights_y = self.nodes()
+        nodes_x, _, nodes_y, _ = self.nodes(extra=extra)
         grid_x, grid_y = np.meshgrid(nodes_x, nodes_y)
-        values = function(grid_x, grid_y)
-        phi, psi = self.velocity_values(nodes_x, nodes_y)
-        weighted_x = phi * weights_x[None, :]
-        weighted_y = psi * weights_y[None, :]
-        # meshgrid(nodes_x, nodes_y) varies x along columns, so `values` is indexed
-        # [y, x] and has to be transposed before contracting with the mode index; the
-        # result is [x, y] like every other coefficient array here. The order is not a
-        # matter of taste and cannot be settled by reasoning about index conventions: on a
-        # square domain both orders agree, and an earlier "discriminator" was ambiguous
-        # because its non-zero pattern is symmetric. It is settled by comparing against
-        # sympy on a rectangle, where the un-transposed form swaps the (0,2) and (2,0)
-        # entries, and by the separable test in tests/test_spectral.py.
-        return weighted_x @ values.T @ weighted_y.T
+        return self.project(function(grid_x, grid_y), extra=extra)
 
     def evaluate(self, coefficients: Array, x: Array, y: Array) -> Array:
         """Values of sum C[k,l] phi_k(x) psi_l(y), shaped like meshgrid(x, y) i.e. [y, x].
