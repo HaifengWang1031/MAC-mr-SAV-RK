@@ -187,6 +187,18 @@ this fail at every size rather than converge slowly.
 
 ### Two discretisations, one scheme, one benchmark
 
+> **Corrected 2026-09-21, twice over.** Nothing in this subsection is a current measurement.
+> The numbers predate (a) the SAV pairing with a fixed lifting, which changed the auxiliary
+> variable's start and added the lifting work scalar to the stage scalar equation, and (b) the
+> repair of the comparison metric itself. The yardstick was measured by striding face values,
+> which samples half a cell away, because the face offsets of two grids differ by
+> `(factor-1)/2`; that mixed interpolation error into the yardstick and made the sharp-lid
+> ratio look far better than it is. Under the cell-centred metric the sharp lid *fails* the
+> "closer than the coarse grid" criterion (ratio 3.4-3.9) while the regularised lid satisfies
+> it comfortably (0.674). `docs/validation.md`, section "尖锐顶盖判据的度量缺陷", carries the
+> derivation and the current measurements; the assertions in `tests/test_spectral.py` now use
+> the narrowed criteria recorded there.
+
 The lid is imposed completely differently on the two sides of the comparison: the MAC
 solver adds a ghost-point viscous load `2 nu U / hy^2` to the top row of u faces (a pure
 right-hand side term), while the spectral solve splits the wall value off as a lifting whose
