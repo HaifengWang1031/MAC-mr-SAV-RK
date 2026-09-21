@@ -1,11 +1,13 @@
 """Velocity-pressure MAC model with an injectable coupled Stokes backend."""
 from collections.abc import Callable, Sequence
+from typing import Any
 import numpy as np
 from .core import State, Stage
 from .mac.grid import MACGrid, Array
 from .mac.operators import MACOperators
 from .mac.stokes import DirectStokes, StokesBackend, StokesResult
 from .mac.kernels import convection
+from .model import SolveResult
 
 class MACNavierStokes:
     def __init__(self, grid: MACGrid, nu: float, force: Callable[[float], Array] | None = None,
@@ -57,9 +59,10 @@ class MACNavierStokes:
     def solve(self, rhs: Array, *, mass: float, viscosity: float) -> StokesResult:
         return self.backend.solve(rhs,mass=mass,viscosity=viscosity)
 
-    def solve_columns(self, columns: Sequence[Array], *, mass: float, viscosity: float) -> list[StokesResult]:
+    def solve_columns(self, columns: Sequence[Any], *, mass: float, viscosity: float) -> list[SolveResult]:
         """One batched solve, split into per-column results (splitting is exact)."""
-        solved=self.backend.solve(np.column_stack(columns),mass=mass,viscosity=viscosity)
+        stacked=np.column_stack([np.asarray(column,dtype=float) for column in columns])
+        solved=self.backend.solve(stacked,mass=mass,viscosity=viscosity)
         return [StokesResult(solved.velocity[:,k],solved.pressure[:,:,k],solved.residual,solved.divergence_inf)
                 for k in range(len(columns))]
 

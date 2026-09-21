@@ -1,9 +1,8 @@
 """Accepted state and stage diagnostics; schemes do not mutate their input."""
 from dataclasses import dataclass, field
-from typing import Protocol, TYPE_CHECKING
+from typing import Any, Protocol
 from .mac.grid import Array
-if TYPE_CHECKING:
-    from .mac_ns import MACNavierStokes
+from .model import Model
 
 @dataclass(frozen=True)
 class State:
@@ -35,4 +34,6 @@ class History:
 
 class Scheme(Protocol):
     name: str
-    def step(self, model: 'MACNavierStokes', state: State, dt: float) -> Trial: ...
+    # `state` is Any rather than State because the distributed realisation carries its
+    # own state type; the schemes treat it as opaque and hand it back to the model.
+    def step(self, model: Model, state: Any, dt: float) -> Trial: ...
