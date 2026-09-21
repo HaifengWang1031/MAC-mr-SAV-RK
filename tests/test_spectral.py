@@ -307,8 +307,15 @@ def test_the_schemes_drive_the_spectral_model_at_second_order_in_time(scheme_nam
     model = SpectralModel(space, nu, tolerance=1e-12,
                           force=lambda t: np.concatenate([model.project(lambda x, y: forcing_u(x, y, t)),
                                                           model.project(lambda x, y: forcing_v(x, y, t))]))
-    initial = model.state(0., np.concatenate([model.project(lambda x, y: exact_u(x, y, 0.)),
-                                              model.project(lambda x, y: exact_v(x, y, 0.))]), 1.)
+    initial = model.state(0., np.concatenate([model.project(lambda x, y: amplitude * exact_u(x, y, 0.)),
+                                              model.project(lambda x, y: amplitude * exact_v(x, y, 0.))]), 0.)
+
+    # Check the physical initial field, not just a same-code time reference.
+    nodes_x, weights_x, nodes_y, weights_y = space.nodes(extra=10)
+    grid_x, grid_y = np.meshgrid(nodes_x, nodes_y)
+    for coefficients, exact in ((initial.u, exact_u), (initial.v, exact_v)):
+        np.testing.assert_allclose(space.evaluate(coefficients, nodes_x, nodes_y),
+                                   amplitude * exact(grid_x, grid_y, 0.), rtol=0., atol=1e-11)
 
     def run(step):
         state = initial
@@ -318,12 +325,14 @@ def test_the_schemes_drive_the_spectral_model_at_second_order_in_time(scheme_nam
 
     reference = run(final_time / 256)
     error = {}
-    # The coarse pair on purpose. Both schemes show a clean second order here, and the
-    # SAV scheme is measured at 1.89/1.73 at smaller steps on the *MAC* model as well as on
-    # this one, resolution-independently, so the degradation is a property of the scheme
-    # rather than of either discretisation (docs/spectral.md records the comparison). This
-    # test asserts the leading second order; a first-order regression would give a ratio of
-    # about two and still fail.
+    # Keep the original steps and ratio gate; compare the fine reference against the
+    # analytic solution as well so a shared initial/forcing mismatch cannot pass silently.
+    exact_error_squared = 0.
+    for index, exact in enumerate((exact_u, exact_v)):
+        coefficients = reference[index * model.modes:(index + 1) * model.modes].reshape(space.size, space.size)
+        defect = space.evaluate(coefficients, nodes_x, nodes_y) - amplitude * exact(grid_x, grid_y, final_time)
+        exact_error_squared += np.sum(np.outer(weights_y, weights_x) * defect ** 2)
+    assert np.sqrt(exact_error_squared) < 1e-6, np.sqrt(exact_error_squared)
     for step in (final_time / 4, final_time / 8):
         difference = run(step) - reference
         error[step] = float(np.sqrt(max(model.inner(difference, difference), 0.)))
@@ -422,7 +431,7 @@ def _mac_cavity(n, nu, speed, profile, final_time, dt):
     grid = MACGrid(n, n, 1., 1.)
     model = MACNavierStokes(grid, nu, force=lambda t: lid_viscous_load(grid, nu, speed, profile))
     scheme = SDIRK2MRSAV()
-    state = model.state(0., np.zeros(grid.size), 1.)
+    state = model.state(0., np.zeros(grid.size), 0.)
     for _ in range(round(final_time / dt)):
         state = scheme.step(model, state, dt).state
     u, v = grid.unpack(model.vector(state))
@@ -435,7 +444,7 @@ def _spectral_cavity(size, nu, profile, final_time, dt):
     lifting = LidLifting(space) if profile is None else LidLifting(space, profile)
     model = SpectralModel(space, nu, lifting=lifting)
     scheme = SDIRK2MRSAV()
-    state = model.state(0., model.zero_velocity(), 1.)
+    state = model.state(0., model.zero_velocity(), 0.)
     for _ in range(round(final_time / dt)):
         state = scheme.step(model, state, dt).state
     return space, lifting, state
@@ -475,3 +484,144 @@ def test_spectral_cavity_agrees_with_the_validated_mac_lid_load(lid, size):
     error = float(np.sqrt((np.sum((spectral_u[1:-1, 1:-1] - u[1:-1, 1:-1]) ** 2)
                            + np.sum((spectral_v[1:-1, 1:-1] - v[1:-1, 1:-1]) ** 2)) * area))
     assert error <= yardstick, (error, yardstick)
+
+
+@pytest.mark.parametrize('size', [8, 20, 28])
+def test_homogeneous_convection_has_zero_work_without_solenoidality(size):
+    model = SpectralModel(Space(size, 1.3, .8), .1)
+    velocity = np.random.default_rng(4).standard_normal(2 * model.modes)
+    assert np.max(np.abs(model.apply_D(velocity))) > 1e-3
+    nonlinear = model.nonlinear(velocity)
+    scale = np.sqrt(model.inner(velocity, velocity) * model.inner(nonlinear, nonlinear))
+    assert abs(model.inner(nonlinear, velocity)) < 1e-12 * scale
+
+
+def test_homogeneous_skew_convection_matches_independent_polynomial_load():
+    # A non-solenoidal field checks the half-divergence correction, which the
+    # existing divergence-free analytic test cannot distinguish from advection.
+    x, y = sy.symbols('x y')
+    u = x * (1.3 - x) * y * (.8 - y)
+    v = x * u
+    divergence = sy.diff(u, x) + sy.diff(v, y)
+    model = SpectralModel(Space(8, 1.3, .8), .1)
+    velocity = np.concatenate([_coefficients(model.space, model.mass, q) for q in (u, v)])
+    got = model.nonlinear(velocity)
+    for index, q in enumerate((u, v)):
+        exact = u * sy.diff(q, x) + v * sy.diff(q, y) + divergence * q / 2
+        load = model.space.load(sy.lambdify((x, y), exact, 'numpy'), extra=20).reshape(-1)
+        actual = model.mass @ got[index * model.modes:(index + 1) * model.modes]
+        np.testing.assert_allclose(actual, load, rtol=1e-11, atol=1e-13)
+
+
+def _total_skew_pairing(model, source, target):
+    """Independent physical-space b(source+g,source+g,target+g)."""
+    space = model.space
+    x, wx, y, wy = space.nodes(extra=model.quadrature_extra)
+    px, py = space.velocity_values(x, y)
+    dx, dy = space.velocity_derivatives(x, y)
+
+    def samples(vector):
+        a, b = vector.reshape(2, space.size, space.size)
+        u, v = space.evaluate(a, x, y), space.evaluate(b, x, y)
+        ux, uy, vx, vy = py.T @ a.T @ dx, dy.T @ a.T @ px, py.T @ b.T @ dx, dy.T @ b.T @ px
+        if model.lifting is not None:
+            gu, gv = model.lifting.velocity(x, y)
+            gux, guy, gvx, gvy = model.lifting.derivatives(x, y)
+            u, v, ux, uy, vx, vy = u+gu, v+gv, ux+gux, uy+guy, vx+gvx, vy+gvy
+        return u, v, ux, uy, vx, vy
+
+    u, v, ux, uy, vx, vy = samples(source)
+    a, b, ax, ay, bx, by = samples(target)
+    value = (u*ux+v*uy)*a + (u*vx+v*vy)*b - (u*ax+v*ay)*u - (u*bx+v*by)*v
+    return .5 * float(np.sum(np.outer(wy, wx) * value))
+
+
+def test_lifting_convection_pairs_with_total_velocity():
+    space = Space(8, 1.3, .8)
+    model = SpectralModel(space, .1, lifting=LidLifting(space, lambda x: (1-x*x)**2))
+    rng = np.random.default_rng(41)
+    source, target = rng.standard_normal((2, 2*model.modes))
+    convection, work = model.nonlinear_with_lifting(source)
+    assert abs(work) > 1e-3  # omission of the lifting work is observable
+    assert abs(model.inner(convection, source)+work) < 1e-11
+    np.testing.assert_allclose(model.inner(convection, target)+work,
+                               _total_skew_pairing(model, source, target), rtol=1e-12, atol=1e-11)
+
+
+def test_zero_lifting_reproduces_homogeneous_sav_step():
+    space = Space(8)
+    homogeneous = SpectralModel(space, .1)
+    lifted = SpectralModel(space, .1, lifting=LidLifting(space, lambda x: np.zeros_like(x)))
+    velocity = homogeneous.solve(np.random.default_rng(2).standard_normal(128), mass=1., viscosity=.01).velocity
+    first = SDIRK2MRSAV().step(homogeneous, homogeneous.state(0., velocity), .001)
+    second = SDIRK2MRSAV().step(lifted, lifted.state(0., velocity), .001)
+    np.testing.assert_allclose(lifted.vector(second.state), homogeneous.vector(first.state), rtol=1e-12, atol=1e-13)
+    assert abs(first.state.r-second.state.r) < 1e-13
+
+
+def test_lifting_sav_stages_satisfy_total_velocity_scalar_equations():
+    from solver.schemes.sdirk2 import ETA, DELTA
+
+    class RecordedScheme(SDIRK2MRSAV):
+        def _stage(self, *args, **kwargs):
+            result = super()._stage(*args, **kwargs)
+            self.velocities.append(result[0].copy())
+            return result
+
+    space = Space(8)
+    model = SpectralModel(space, .1, lifting=LidLifting(space, lambda x: (1-x*x)**2))
+    # Start on the affine divergence constraint; zero interior coefficients would not.
+    old = model.solve(model.zero_velocity(), mass=1., viscosity=.01).velocity
+    scheme = RecordedScheme(); scheme.velocities = []
+    dt = .003
+    trial = scheme.step(model, model.state(0., old, 0.), dt)
+    first, second = scheme.velocities
+    r1, r2 = (stage.r for stage in trial.stages)
+    pairing1 = ETA * _total_skew_pairing(model, old, first)
+    pairing2 = -_total_skew_pairing(model, old, second)+(1-DELTA)*_total_skew_pairing(model, first, second)
+    residual1 = (1+scheme.gamma*ETA*dt)*r1 + dt*(1+r1)*pairing1
+    residual2 = ((1+scheme.gamma*ETA*dt)*r2-(1-scheme.gamma*dt*(1-2*ETA))*r1
+                 + dt*(1+r2)*pairing2)
+    assert max(abs(residual1), abs(residual2)) < 1e-12
+    assert max(stage.residual for stage in trial.stages) < 1e-8
+
+
+def test_regularised_lifting_sav_time_refinement():
+    from solver.spectral.lifting import regularised
+    space = Space(12)
+    model = SpectralModel(space, .01, lifting=LidLifting(space, regularised))
+    initial = model.solve(model.zero_velocity(), mass=1., viscosity=.01).velocity
+    velocities, peaks = [], []
+    for dt in (.02, .01, .005, .0025, .00125):
+        state = model.state(0., initial.copy(), 0.)
+        peak = 0.
+        for _ in range(round(.2/dt)):
+            trial = SDIRK2MRSAV().step(model, state, dt)
+            state = trial.state
+            peak = max(peak, *(abs(stage.r) for stage in trial.stages))
+        velocities.append(model.vector(state))
+        peaks.append(peak)
+    # A fixed-space regression, not a claim of a general time-uniform bound.
+    ratios = np.array(peaks[:-1]) / np.array(peaks[1:])
+    assert np.all((ratios > 1.8) & (ratios < 2.2)), peaks
+    errors = [np.sqrt(model.inner(v-velocities[-1], v-velocities[-1])) for v in velocities[:3]]
+    assert 3.3 < errors[0]/errors[1] < 5., errors
+    assert 3.3 < errors[1]/errors[2] < 5., errors
+
+
+@pytest.mark.parametrize('size', [20, 28, 40])
+@pytest.mark.parametrize('with_lifting', [False, True])
+def test_dealiased_convection_matches_overintegrated_reference(size, with_lifting):
+    space = Space(size, 1.3, .8)
+    lifting = LidLifting(space) if with_lifting else None
+    model = SpectralModel(space, .1, dealias=3, lifting=lifting)
+    reference = SpectralModel(space, .1, dealias=2*size, lifting=lifting)
+    assert 2*(size+model.quadrature_extra)-1 >= 3*(size+1)
+    assert reference.quadrature_extra == 2*size
+    velocity = np.random.default_rng(17).standard_normal(2*size*size)
+    got, work = model.nonlinear_with_lifting(velocity)
+    expected, expected_work = reference.nonlinear_with_lifting(velocity)
+    difference = got-expected
+    assert np.sqrt(model.inner(difference, difference)/model.inner(expected, expected)) < 1e-11
+    assert abs(work-expected_work) < 1e-11*(1+abs(expected_work))
+    assert abs(model.inner(got, velocity)+work) < 1e-11*(1+np.sqrt(model.inner(got, got)*model.inner(velocity, velocity)))

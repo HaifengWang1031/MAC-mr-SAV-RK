@@ -251,3 +251,32 @@ comparison is the remaining independent check.
 - Open, and separate from S3: whether the SAV scheme's sub-second order at small steps is
   intended. The decisive experiment is a dt -> 0 study of the scalar `r` and of the stage
   residual on one fixed discretisation, which this seam now makes cheap to run.
+
+
+## Fixed lifting: SAV pairing with total velocity (2026-09-21)
+
+The stored state is the homogeneous part $w_h$, while the physical velocity is $u_h=w_h+g$ for a fixed lifting. Both homogeneous and lifted convection now use the antisymmetric quadrature form
+\[
+b_h(a,b,c)=\tfrac12[(a\cdot\nabla b,c)_Q-(a\cdot\nabla c,b)_Q].
+\]
+The model returns both the homogeneous-test load $N_h(w_h)$ and the scalar $\ell_h(w_h)=b_h(u_h,u_h,g)$ through `nonlinear_with_lifting`. The latter is integrated directly against the lifting on the same nodes, not against a projected lifting. Thus $(N_h(w_h),w_h)+\ell_h(w_h)=0$ to roundoff. MAC models return zero lifting work.
+
+For the incremental stages, combine the scalar using the same weights as the convective vector:
+\[
+\ell_{n,1}=\eta\ell_h(w^n),\qquad
+\ell_{n,2}=-\ell_h(w^n)+(1-\delta)\ell_h(w_{n,1}).
+\]
+The scalar stage equation uses $(B_{n,i},w_{n,i})+\ell_{n,i}$, representing the weak pairing with total stage velocity. In the existing cubic only $\alpha$ changes to $(B_{n,i},V)+\ell_{n,i}$; $\beta=(B_{n,i},W)$ and the two Stokes solves are unchanged. The scalar residual check includes the same term. Cross-stage pairing is not forced to zero.
+
+This restores the zero-$r$ invariant of the fixed-space semidiscrete extension. It does not prove a general time-uniform $O(\tau)$ estimate or a moving-wall energy theorem: the boundary-driven energy balance needs its own lifting terms. Time-dependent lifting is not supported by this derivation. Underintegration remains a separate accuracy issue even though algebraic skew cancellation is exact. Earlier cavity error numbers in this document predate this correction and are historical, not current measurements.
+
+
+## Polynomial de-aliasing quadrature (2026-09-21)
+
+With N=space.size modes, phi_k=P_k-P_{k+2}, k=0,...,N-1, has maximum degree p=N+1. Each convective weak integrand is a product of three fields with one derivative; in the direction not differentiated its degree can reach 3p. A safe tensor Gauss rule therefore satisfies 2q-1 >= 3(N+1) in each direction. The effective node count is
+
+`q = max(N + dealias, (3*(N+1)+2)//2)`.
+
+`dealias` retains its meaning as the user-requested extra-node lower bound. `quadrature_extra` exposes the effective value, recalculated if that request changes. Convection loads, the direct lifting pairing, and spectral-model physical diagnostics use this rule consistently. The built-in LidLifting is a projected polynomial in x and linear in y, so the same degree bound applies, including the sharp-lid polynomial projection. This does not remove sharp-corner spatial truncation/Gibbs error, nor prove exact integration for arbitrary non-polynomial custom liftings or forcings. Force projection remains independently controlled by its existing extra argument.
+
+The earlier warning that the default convection rule underintegrates high modes is resolved by this change. The skew identity alone was insufficient; mass-norm agreement with a substantially denser quadrature is now tested at 20, 28 and 40 modes, both with and without a lifting.

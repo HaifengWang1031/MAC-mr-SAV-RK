@@ -67,6 +67,19 @@ class SpectralModel:
         self.force: Callable[[float], Array] = force if force is not None else lambda t: self.zero_velocity()
 
     @property
+    def quadrature_extra(self) -> int:
+        """Effective extra Gauss nodes for polynomial convection and fixed LidLifting.
+
+        size modes phi_k=P_k-P_{k+2} have maximum degree p=size+1.
+        A convective weak integrand has degree at most 3p in either direction
+        (the derivative can be in the other direction). Require 2q-1 >= 3p.
+        User dealias remains a lower bound and may request denser integration.
+        Arbitrary non-polynomial custom liftings have no exactness guarantee.
+        """
+        minimum_nodes = (3 * (self.space.size + 1) + 2) // 2
+        return max(self.dealias, minimum_nodes - self.space.size)
+
+    @property
     def modes(self) -> int:
         return self.space.velocity_dofs
 
@@ -167,14 +180,18 @@ class SpectralModel:
         return self._mass_solve(self.space.load(function, extra=extra))
 
     def nonlinear(self, velocity: Array) -> Array:
-        """N(v) = (u.grad)u, assembled on the wide quadrature, projected and solved.
+        return self.nonlinear_with_lifting(velocity)[0]
 
-        The convection uses the *total* velocity: with a lifting the unknown is only the
-        interior part, and the products of its derivatives are not the physical term.
+    def nonlinear_with_lifting(self, velocity: Array) -> tuple[Array, float]:
+        """Return N(w) and b(w+g,w+g,g) for a fixed lifting g.
+
+        N represents the antisymmetric load on homogeneous tests. The scalar is
+        integrated directly against g, not against its homogeneous-space projection.
+        Both use the same quadrature, so <N(w),w> + lifting_work cancels algebraically.
         """
         space, modes = self.space, self.modes
         size = space.size
-        nodes_x, _, nodes_y, _ = space.nodes(extra=self.dealias)
+        nodes_x, _, nodes_y, _ = space.nodes(extra=self.quadrature_extra)
         values_x, values_y = space.velocity_values(nodes_x, nodes_y)
         derivative_x, derivative_y = space.velocity_derivatives(nodes_x, nodes_y)
         coefficients_x = np.asarray(velocity)[:modes].reshape(size, size)
@@ -191,13 +208,25 @@ class SpectralModel:
             u, v = u + g_u, v + g_v
             du_dx, du_dy = du_dx + dg_u_x, du_dy + dg_u_y
             dv_dx, dv_dy = dv_dx + dg_v_x, dv_dy + dg_v_y
-        return np.concatenate([self._mass_solve(space.project(u * du_dx + v * du_dy, extra=self.dealias)),
-                               self._mass_solve(space.project(u * dv_dx + v * dv_dy, extra=self.dealias))])
+        # Assemble half of ((u.grad)u,test) - ((u.grad)test,u).
+        load_u = .5 * (space.project(u * du_dx + v * du_dy, extra=self.quadrature_extra)
+                       - space.stiffness_load(u * u, v * u))
+        load_v = .5 * (space.project(u * dv_dx + v * dv_dy, extra=self.quadrature_extra)
+                       - space.stiffness_load(u * v, v * v))
+        lifting_work = 0.
+        if self.lifting is not None:
+            _, weights_x, _, weights_y = space.nodes(extra=self.quadrature_extra)
+            integrand = ((u * du_dx + v * du_dy) * g_u
+                         + (u * dv_dx + v * dv_dy) * g_v
+                         - (u * dg_u_x + v * dg_u_y) * u
+                         - (u * dg_v_x + v * dg_v_y) * v)
+            lifting_work = .5 * float(np.sum(np.outer(weights_y, weights_x) * integrand))
+        return np.concatenate([self._mass_solve(load_u), self._mass_solve(load_v)]), lifting_work
 
     def _total_divergence_inf(self, coefficients_x: Array, coefficients_y: Array) -> float:
         """max |div u| in physical space, including the lifting when there is one."""
         space = self.space
-        nodes_x, _, nodes_y, _ = space.nodes(extra=self.dealias)
+        nodes_x, _, nodes_y, _ = space.nodes(extra=self.quadrature_extra)
         values_x, values_y = space.velocity_values(nodes_x, nodes_y)
         derivative_x, derivative_y = space.velocity_derivatives(nodes_x, nodes_y)
         divergence = (values_y.T @ coefficients_x.T @ derivative_x
@@ -260,7 +289,7 @@ class SpectralModel:
         """
         space, modes = self.space, self.modes
         velocity = self.vector(state)
-        nodes_x, weights_x, nodes_y, weights_y = space.nodes(extra=self.dealias)
+        nodes_x, weights_x, nodes_y, weights_y = space.nodes(extra=self.quadrature_extra)
         values_x, values_y = space.velocity_values(nodes_x, nodes_y)
         derivative_x, derivative_y = space.velocity_derivatives(nodes_x, nodes_y)
         coefficients_x = np.asarray(velocity)[:modes].reshape(space.size, space.size)

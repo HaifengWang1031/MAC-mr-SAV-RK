@@ -41,6 +41,13 @@ class Model(Protocol):
     def nonlinear(self, velocity: Any) -> Any:
         """Convective term N(v) on the model's velocity representation."""
 
+    def nonlinear_with_lifting(self, velocity: Any) -> tuple[Any, float]:
+        """Return convection and its weak pairing with the fixed boundary lifting.
+
+        Zero scalar for models without an explicit lifting. SAV combines this scalar
+        with the same stage weights as convection, then adds it to <B,stage velocity>.
+        """
+
     def combine(self, *terms: tuple[float, Any]) -> Any:
         """Sum of scalar*field pairs, accumulated in the order given.
 

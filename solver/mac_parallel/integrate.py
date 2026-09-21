@@ -58,6 +58,9 @@ class ParallelNS:
     def nonlinear(self,velocity: Any) -> Any:
         return self.stokes.layout.nonlinear(velocity)
 
+    def nonlinear_with_lifting(self, velocity: Any) -> tuple[Any, float]:
+        return self.nonlinear(velocity), 0.
+
     def inner(self,left: Any,right: Any) -> float:
         return float(self.grid.area*left.dot(right))
 

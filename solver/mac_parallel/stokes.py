@@ -7,6 +7,7 @@ import numpy as np
 from petsc4py import PETSc
 from mpi4py import MPI
 from .layout import SlabLayout
+from .failures import local_call
 from ..mac.grid import MACGrid
 
 @dataclass
@@ -63,9 +64,15 @@ class ParallelStokes:
         self.tolerance_floor=tolerance_floor
         self.layout=SlabLayout(grid,comm)
         self.cache: OrderedDict = OrderedDict()
+        self._retired_velocity_seconds=0.
+        self._retired_pressure_seconds=0.
         self.setup_seconds=0.;self.solve_seconds=0.;self.iterations: list[int]=[]
         self.attempts: list[int]=[]
-        self.K,self.D,self.full_D,self.Q=self._assemble()
+        try:
+            self.K,self.D,self.full_D,self.Q=self._assemble()
+        except Exception:
+            self.layout.close()
+            raise
         self.G=self.D.copy();self.G.transpose();self.G.scale(-1.)
 
     def _assemble(self) -> tuple[Any,Any,Any,Any]:
@@ -76,35 +83,40 @@ class ParallelStokes:
         D=matrix(l.local_p,g.np-1,l.local_n,g.size)
         full=matrix(l.rows*g.nx,g.np,l.local_n,g.size)
         Q=matrix(l.local_p,g.np-1,l.local_p,g.np-1)
-        for j in range(l.start,l.end):
-            for i in range(1,g.nx):
-                row=l.u_index(j,i); diagonal=2/g.hx**2+(3 if j in (0,g.ny-1) else 2)/g.hy**2
-                cols=[row];vals=[diagonal]
-                for jj,ii,value in ((j,i-1,-1/g.hx**2),(j,i+1,-1/g.hx**2),(j-1,i,-1/g.hy**2),(j+1,i,-1/g.hy**2)):
-                    if 0<=jj<g.ny and 0<ii<g.nx: cols.append(l.u_index(jj,ii));vals.append(value)
-                K.setValues(row,cols,vals)
-        for j in range(l.start+1,min(l.end,g.ny-1)+1):
-            for i in range(g.nx):
-                row=l.v_index(j,i);cols=[row];vals=[(3 if i in (0,g.nx-1) else 2)/g.hx**2+2/g.hy**2]
-                for jj,ii,value in ((j,i-1,-1/g.hx**2),(j,i+1,-1/g.hx**2),(j-1,i,-1/g.hy**2),(j+1,i,-1/g.hy**2)):
-                    if 0<jj<g.ny and 0<=ii<g.nx: cols.append(l.v_index(jj,ii));vals.append(value)
-                K.setValues(row,cols,vals)
-        for j in range(l.start,l.end):
-            for i in range(g.nx):
-                row=j*g.nx+i;cols=[];vals=[]
-                if i<g.nx-1:cols.append(l.u_index(j,i+1));vals.append(1/g.hx)
-                if i>0:cols.append(l.u_index(j,i));vals.append(-1/g.hx)
-                if j<g.ny-1:cols.append(l.v_index(j+1,i));vals.append(1/g.hy)
-                if j>0:cols.append(l.v_index(j,i));vals.append(-1/g.hy)
-                full.setValues(row,cols,vals)
-                if row==g.np-1:continue
-                D.setValues(row,cols,vals)
-                qcols=[];qvals=[];diagonal=0.
-                for jj,ii,value in ((j,i-1,1/g.hx**2),(j,i+1,1/g.hx**2),(j-1,i,1/g.hy**2),(j+1,i,1/g.hy**2)):
-                    if 0<=jj<g.ny and 0<=ii<g.nx:
-                        diagonal+=value
-                        if jj*g.nx+ii<g.np-1:qcols.append(jj*g.nx+ii);qvals.append(-value)
-                Q.setValues(row,[row]+qcols,[diagonal]+qvals)
+        def fill_local_rows() -> None:
+            for j in range(l.start,l.end):
+                for i in range(1,g.nx):
+                    row=l.u_index(j,i); diagonal=2/g.hx**2+(3 if j in (0,g.ny-1) else 2)/g.hy**2
+                    cols=[row];vals=[diagonal]
+                    for jj,ii,value in ((j,i-1,-1/g.hx**2),(j,i+1,-1/g.hx**2),(j-1,i,-1/g.hy**2),(j+1,i,-1/g.hy**2)):
+                        if 0<=jj<g.ny and 0<ii<g.nx: cols.append(l.u_index(jj,ii));vals.append(value)
+                    K.setValues(row,cols,vals)
+            for j in range(l.start+1,min(l.end,g.ny-1)+1):
+                for i in range(g.nx):
+                    row=l.v_index(j,i);cols=[row];vals=[(3 if i in (0,g.nx-1) else 2)/g.hx**2+2/g.hy**2]
+                    for jj,ii,value in ((j,i-1,-1/g.hx**2),(j,i+1,-1/g.hx**2),(j-1,i,-1/g.hy**2),(j+1,i,-1/g.hy**2)):
+                        if 0<jj<g.ny and 0<=ii<g.nx: cols.append(l.v_index(jj,ii));vals.append(value)
+                    K.setValues(row,cols,vals)
+            for j in range(l.start,l.end):
+                for i in range(g.nx):
+                    row=j*g.nx+i;cols=[];vals=[]
+                    if i<g.nx-1:cols.append(l.u_index(j,i+1));vals.append(1/g.hx)
+                    if i>0:cols.append(l.u_index(j,i));vals.append(-1/g.hx)
+                    if j<g.ny-1:cols.append(l.v_index(j+1,i));vals.append(1/g.hy)
+                    if j>0:cols.append(l.v_index(j,i));vals.append(-1/g.hy)
+                    full.setValues(row,cols,vals)
+                    if row==g.np-1:continue
+                    D.setValues(row,cols,vals)
+                    qcols=[];qvals=[];diagonal=0.
+                    for jj,ii,value in ((j,i-1,1/g.hx**2),(j,i+1,1/g.hx**2),(j-1,i,1/g.hy**2),(j+1,i,1/g.hy**2)):
+                        if 0<=jj<g.ny and 0<=ii<g.nx:
+                            diagonal+=value
+                            if jj*g.nx+ii<g.np-1:qcols.append(jj*g.nx+ii);qvals.append(-value)
+                    Q.setValues(row,[row]+qcols,[diagonal]+qvals)
+        try:local_call(self.comm,'matrix row assembly',fill_local_rows)
+        except Exception:
+            for mat in (K,D,full,Q):mat.destroy()
+            raise
         for mat in (K,D,full,Q):mat.assemble()
         return K,D,full,Q
 
@@ -136,7 +148,7 @@ class ParallelStokes:
             ksp.setUp()
             self.cache[key]=(L,lower,A,pc,ksp)
             self.setup_seconds+=perf_counter()-start
-            if len(self.cache)>self.cache_size:self._destroy(self.cache.popitem(last=False)[1])
+            if len(self.cache)>self.cache_size:self._retire(self.cache.popitem(last=False)[1])
         self.cache.move_to_end(key)
         return self.cache[key]
 
@@ -181,14 +193,20 @@ class ParallelStokes:
     def _destroy(system: tuple[Any,...]) -> None:
         L,lower,A,pc,ksp=system;ksp.destroy();pc.close();A.destroy();lower.destroy();L.destroy()
 
+    def _retire(self, system: tuple[Any,...]) -> None:
+        """Retain application times before releasing an evicted or closed system."""
+        self._retired_velocity_seconds+=system[3].velocity_seconds
+        self._retired_pressure_seconds+=system[3].pressure_seconds
+        self._destroy(system)
+
     @property
     def preconditioner_seconds(self) -> tuple[float,float]:
-        """(velocity block, pressure block) application time, summed over cached systems."""
-        return (sum(system[3].velocity_seconds for system in self.cache.values()),
-                sum(system[3].pressure_seconds for system in self.cache.values()))
+        """(velocity block, pressure block) application time over all solves, including retired systems."""
+        return (self._retired_velocity_seconds+sum(system[3].velocity_seconds for system in self.cache.values()),
+                self._retired_pressure_seconds+sum(system[3].pressure_seconds for system in self.cache.values()))
 
     def close(self) -> None:
-        for system in self.cache.values():self._destroy(system)
+        for system in self.cache.values():self._retire(system)
         self.cache.clear()
         for mat in (self.G,self.D,self.full_D,self.K,self.Q):mat.destroy()
         self.layout.close()

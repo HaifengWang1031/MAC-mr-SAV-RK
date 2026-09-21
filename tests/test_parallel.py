@@ -176,3 +176,29 @@ def test_one_scheme_object_drives_both_models():
             for stage in dtrial.stages:stage.pressure.destroy()
         finally:
             distributed.close()
+
+
+
+def test_preconditioner_timing_survives_cache_hits_evictions_and_close():
+    solver = ParallelStokes(MACGrid(8, 6), tolerance=1e-11, cache_size=2)
+    rhs = solver.layout.vector(lambda x, y: np.sin(3*x+2*y), lambda x, y: np.cos(x-4*y))
+    accumulated = np.zeros(2)
+    try:
+        # Includes a hit, eviction, rebuilding an evicted shift, and further eviction.
+        for viscosity in (.01, .02, .01, .03, .02, .04):
+            key = (1., viscosity)
+            previous = solver.cache.get(key)
+            before = (np.array([previous[3].velocity_seconds, previous[3].pressure_seconds])
+                      if previous is not None else np.zeros(2))
+            solved = solver.solve(rhs, mass=1., viscosity=viscosity)
+            pc = solver.cache[key][3]
+            accumulated += np.array([pc.velocity_seconds, pc.pressure_seconds])-before
+            np.testing.assert_allclose(solver.preconditioner_seconds, accumulated, rtol=1e-12, atol=1e-15)
+            assert len(solver.cache) <= 2
+            assert solved.residual < 1e-8 and solved.divergence_inf < 1e-8
+            solved.velocity.destroy(); solved.pressure.destroy()
+        assert np.all(accumulated > 0.)
+    finally:
+        rhs.destroy()
+        solver.close()
+    np.testing.assert_allclose(solver.preconditioner_seconds, accumulated, rtol=1e-12, atol=1e-15)

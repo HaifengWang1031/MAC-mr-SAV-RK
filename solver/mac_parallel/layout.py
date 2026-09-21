@@ -5,6 +5,7 @@ from petsc4py import PETSc
 from mpi4py import MPI
 from ..mac.grid import MACGrid
 from ..mac.kernels import convection
+from .failures import local_call
 
 class SlabLayout:
     def __init__(self, grid: MACGrid, comm: Any = MPI.COMM_WORLD) -> None:
@@ -51,42 +52,61 @@ class SlabLayout:
         return offset+(last-first)*(g.nx-1)+(j-first-1)*g.nx+i
 
     def vector(self, u: Callable, v: Callable) -> Any:
-        g=self.grid
-        xu,yu=np.meshgrid(np.arange(1,g.nx)*g.hx,(np.arange(self.start,self.end)+.5)*g.hy)
-        xv,yv=np.meshgrid((np.arange(g.nx)+.5)*g.hx,np.arange(self.start+1,self.start+self.vrows+1)*g.hy)
+        def evaluate() -> Any:
+            g=self.grid
+            xu,yu=np.meshgrid(np.arange(1,g.nx)*g.hx,(np.arange(self.start,self.end)+.5)*g.hy)
+            xv,yv=np.meshgrid((np.arange(g.nx)+.5)*g.hx,np.arange(self.start+1,self.start+self.vrows+1)*g.hy)
+            return np.concatenate([np.broadcast_to(u(xu,yu),xu.shape).ravel(),
+                                   np.broadcast_to(v(xv,yv),xv.shape).ravel()])
+        values=local_call(self.comm,'field evaluation',evaluate)
         result=self.template.duplicate()
-        result.array[:self.local_u]=np.broadcast_to(u(xu,yu),xu.shape).ravel()
-        result.array[self.local_u:]=np.broadcast_to(v(xv,yv),xv.shape).ravel()
+        try:
+            local_call(self.comm,'field assignment',lambda: np.copyto(result.array,values))
+        except Exception:
+            result.destroy()
+            raise
         return result
 
     def nonlinear(self, velocity: Any) -> Any:
         self.scatter.scatter(velocity,self.halo,addv=PETSc.InsertMode.INSERT,mode=PETSc.ScatterMode.FORWARD)
-        us,vs=self.halo_shapes
-        values=np.zeros(np.prod(us)+np.prod(vs))
-        values[self.halo_positions]=self.halo.array
-        u=values[:np.prod(us)].reshape(us);v=values[np.prod(us):].reshape(vs)
-        cu,cv=convection(u,v,self.grid.hx,self.grid.hy)
+        def evaluate() -> Any:
+            us,vs=self.halo_shapes
+            values=np.zeros(np.prod(us)+np.prod(vs))
+            values[self.halo_positions]=self.halo.array
+            u=values[:np.prod(us)].reshape(us);v=values[np.prod(us):].reshape(vs)
+            cu,cv=convection(u,v,self.grid.hx,self.grid.hy)
+            return np.concatenate([cu[1:self.rows+1,1:-1].ravel(),cv[2:self.vrows+2,:].ravel()])
+        values=local_call(self.comm,'convection kernel',evaluate)
         result=self.template.duplicate()
-        result.array[:self.local_u]=cu[1:self.rows+1,1:-1].ravel()
-        result.array[self.local_u:]=cv[2:self.vrows+2,:].ravel()
+        try:
+            local_call(self.comm,'convection assignment',lambda: np.copyto(result.array,values))
+        except Exception:
+            result.destroy()
+            raise
         return result
 
     def gather(self, velocity: Any, root: int = 0) -> Any:
         """Collect global fields only for output or explicit reference tests."""
-        pieces=self.comm.gather(velocity.array.copy(),root=root)
-        if self.rank!=root: return None
-        g=self.grid; u=np.zeros((g.ny,g.nx+1));v=np.zeros((g.ny+1,g.nx))
-        for rank,part in enumerate(pieces):
-            first,last=map(int,self.edges[rank:rank+2]); n=(last-first)*(g.nx-1)
-            u[first:last,1:-1]=part[:n].reshape(last-first,g.nx-1)
-            v[first+1:min(last,g.ny-1)+1,:]=part[n:].reshape(min(last,g.ny-1)-first,g.nx)
-        return u,v
+        values=local_call(self.comm,'gather velocity preparation',lambda: velocity.array.copy())
+        pieces=self.comm.gather(values,root=root)
+        def assemble() -> Any:
+            if self.rank!=root:return None
+            g=self.grid;u=np.zeros((g.ny,g.nx+1));v=np.zeros((g.ny+1,g.nx))
+            for rank,part in enumerate(pieces):
+                first,last=map(int,self.edges[rank:rank+2]);n=(last-first)*(g.nx-1)
+                u[first:last,1:-1]=part[:n].reshape(last-first,g.nx-1)
+                v[first+1:min(last,g.ny-1)+1,:]=part[n:].reshape(min(last,g.ny-1)-first,g.nx)
+            return u,v
+        return local_call(self.comm,'gather velocity assembly',assemble)
 
     def gather_pressure(self, pressure: Any, root: int = 0) -> Any:
-        pieces=self.comm.gather(pressure.array.copy(),root=root)
-        if self.rank!=root: return None
-        p=np.r_[np.concatenate(pieces),0.];p-=p.mean()
-        return p.reshape(self.grid.ny,self.grid.nx)
+        values=local_call(self.comm,'gather pressure preparation',lambda: pressure.array.copy())
+        pieces=self.comm.gather(values,root=root)
+        def assemble() -> Any:
+            if self.rank!=root:return None
+            p=np.r_[np.concatenate(pieces),0.];p-=p.mean()
+            return p.reshape(self.grid.ny,self.grid.nx)
+        return local_call(self.comm,'gather pressure assembly',assemble)
 
     def close(self) -> None:
         self.scatter.destroy(); self.halo.destroy();self.template.destroy();self.p_template.destroy()

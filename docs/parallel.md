@@ -12,10 +12,26 @@ macOS 使用 Homebrew PETSc 3.25.5 / Open MPI；先检查已有安装，安装�
 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_AUTOREMOVE=1 brew install petsc
 uv python install 3.12
 uv venv --python 3.12 --managed-python
-PETSC_DIR="$(brew --prefix petsc)" uv sync --locked --extra mpi
+# Apple Silicon Homebrew: ensure compilation finds Open MPI, not Conda MPICH.
+PATH=/opt/homebrew/bin:/usr/bin:/bin \
+PETSC_DIR=/opt/homebrew/opt/petsc \
+MPICC=/opt/homebrew/opt/open-mpi/bin/mpicc \
+MPICXX=/opt/homebrew/opt/open-mpi/bin/mpicxx \
+uv sync --locked --extra mpi --managed-python --no-cache
 ```
 
 不要把 Conda 的 MPICH 与 Homebrew Open MPI 混合。若曾用错误的编译器/库路径构建 petsc4py，需要在干净的 uv CPython 环境中清除该绑定的构建缓存并重建。所有 MPI 进程必须使用同一个 Python 和 PETSc 安装。仅设置进程数不会把原 SciPy 矩阵变成分布式矩阵。
+
+日常运行保留 MPI extra，避免同步时移除可选依赖：
+
+```sh
+uv run --locked --extra mpi python -c 'from petsc4py import PETSc; from mpi4py import MPI; print(PETSc.Sys.getVersion(), MPI.Get_library_version())'
+uv run --locked --extra mpi pytest -q
+uv run --locked --extra mpi mpiexec -n 2 .venv/bin/python -m pytest -q tests/test_parallel.py
+uv run --locked --extra mpi mpiexec -n 4 .venv/bin/python -m pytest -q tests/test_parallel.py
+```
+
+重建已有错误环境时，先停用使用该环境的任务并将 `.venv` 移到独立备份位置，再创建新环境。不要同时设置 `UV_PYTHON_PREFERENCE` 和 `--managed-python`；uv 会拒绝这组重复选项。以上原生库路径适用于本机 Apple Silicon Homebrew，服务器需要替换为当地安装路径。
 
 ## 数据和算法
 
@@ -152,3 +168,19 @@ uv pip install --python /tmp/mpi_env/bin/python --reinstall --no-cache-dir mpi4p
 ```
 
 第二步是关键：`--reinstall --no-cache-dir` 才会绕开陈旧缓存（`UV_NO_BINARY=mpi4py` 在本机没有生效——日志里没有出现 mpi4py 的源码构建），而 `MPICC` 保证链接的是 libpetsc 所用的那套 Open MPI。之后 `PYTHONPATH=<repo> /tmp/mpi_env/bin/python -m pytest tests/test_parallel.py` 在 1/2/4 进程下全部通过。主仓库的 venv 保持不含 `mpi` extra：不装时并行测试自动跳过，`tools/validate.py` 的并行档也会显式跳过并记录原因。
+
+
+## 协调失败与记录（2026-09-21）
+
+局部场/外力求值、对流核、矩阵行填充、gather 前的本地数据准备、gather 后的根进程组装及诊断有效性检查，均在进入下一个通信步骤前交换异常。失败记录包含 rank、phase 与原因；根进程的快照、接受步记录及文件 I/O 通过 on_root 广播错误。局部协调函数 `local_call` 的回调严格禁止 MPI/PETSc 集合操作：不能把整个时间步包进该函数，否则异常仍可能导致通信顺序错位。自定义并行外力应通过 layout.vector 的局部求值回调构造；新增局部计算也必须在相应通信前设置协调边界。
+
+初始化、时间推进、结果保存统一纳入运行生命周期保护。已完成且诊断通过的时间步才被接受；失败试算不替换接受状态。可恢复推进失败保存 HDF5 接受前缀；初始化未完成时只保证失败 manifest/log，不虚构结果。最终结果先写 `results.pending.h5`，成功后改名 `results.h5`，再写校验和。保存失败记录实际已接受步数，但不能保证磁盘故障时保存数值前缀；不完整临时文件不作为完成结果复用。资源清理覆盖已构造的模型、最终状态与阶段压力，以及返回后未接受的试算。
+
+此协议不声称恢复进程退出、MPI 内部故障、PETSc 集合调用内部的非协调错误或所有任意位置的内存错误。若连失败 manifest 的写入也不可用，错误会传播给所有进程，任务以失败退出，不能保证磁盘上状态已更新。强制终止仍可能留下 running 记录。
+
+`tests/test_parallel_failures.py` 从单进程 pytest 启动独立 2/4-rank 作业；每个作业限制45秒，超时终止进程组。注入非主进程对流核、外力求值、初始场、外力初始化，以及根进程保存异常；对流核覆盖两种格式。推进失败保存的一步前缀与独立正常运行结果对照。此文件不要在 mpiexec 内再次运行；多进程常规测试继续使用 tests/test_parallel.py。
+
+
+## 预条件器累计耗时（2026-09-21）
+
+速度块、压力块耗时分别累计：已释放系统的历史时间加上当前缓存系统的时间。LRU 淘汰和关闭均在释放前转存计时；缓存命中不转存，因此不重复累计，关闭后仍可读取完整累计值。记录中的跨进程归约方式保持不变。本次仅修复报告统计，不修改迭代算法。

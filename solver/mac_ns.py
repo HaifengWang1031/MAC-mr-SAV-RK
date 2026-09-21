@@ -24,6 +24,9 @@ class MACNavierStokes:
         cu,cv=convection(u,v,self.grid.hx,self.grid.hy)
         return self.grid.pack(cu,cv)
 
+    def nonlinear_with_lifting(self, velocity: Any) -> tuple[Any, float]:
+        return self.nonlinear(velocity), 0.
+
     def vector(self, state: State) -> Array:
         return self.grid.pack(state.u,state.v)
 

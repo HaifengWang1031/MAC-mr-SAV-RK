@@ -17,20 +17,26 @@ from solver.mac.grid import MACGrid
 from solver.core import State,Stage
 from solver.integrate import Result
 from solver.mac_parallel.integrate import ParallelNS
+from solver.mac_parallel.failures import local_call, ParallelFailure
 from solver.schemes.sdirk2 import SDIRK2
 from solver.schemes.sdirk2_mrsav import SDIRK2MRSAV
 from experiments.workflow import PROJECT,effective_config,provenance,write_json,save_result,digest,verified
 
 
-def on_root(comm: Any, action: Callable) -> Any:
+def on_root(comm: Any, action: Callable, phase: str = "root I/O") -> Any:
     """Propagate root-side validation/I/O failures before entering collectives."""
     message: tuple[str | None, Any] | None = None
     if comm.rank==0:
         try:message=(None,action())
         except Exception as exc:message=(f'{type(exc).__name__}: {exc}',None)
     error,value=comm.bcast(message,root=0)
-    if error:raise RuntimeError(error)
+    if error:raise ParallelFailure([{'rank':0,'phase':phase,'error':error}])
     return value
+
+
+def validate_diagnostic(diagnostic: dict[str,float]) -> None:
+    if not all(np.isfinite(v) for v in diagnostic.values()):
+        raise FloatingPointError('Nonfinite diagnostic')
 
 
 def run_parallel(config: dict,*,root: Path=PROJECT,rerun: bool=False,comm: Any=MPI.COMM_WORLD) -> Path:
@@ -62,95 +68,135 @@ def run_parallel(config: dict,*,root: Path=PROJECT,rerun: bool=False,comm: Any=M
     prepared=on_root(comm,prepare)
     if 'reuse' in prepared:return Path(prepared['reuse'])
     directory=Path(prepared['directory']);cfg=prepared['config'];manifest=prepared['manifest']
-    grid=MACGrid(cfg['nx'],cfg['ny'],cfg['lx'],cfg['ly'])
-    comm.Barrier();start=perf_counter()
-    model=ParallelNS(grid,cfg['nu'],comm=comm,tolerance=cfg['linear_tolerance'],max_iterations=cfg['max_iterations'],cache_size=cfg['cache_size'])
-    state: Any=model.initial(amplitude=cfg['amplitude'] if cfg['experiment']!='cavity' else 0.)
-    if cfg['experiment']=='cavity':
-        def force(t: float) -> Any:
-            value=model.zero();layout=model.stokes.layout
-            if layout.end==grid.ny:
-                value.array[layout.local_u-grid.nx+1:layout.local_u]=2*cfg['nu']*cfg['lid_speed']/grid.hy**2
-            return value
-        model.force=force
-    elif cfg['experiment']=='ns_mms':
-        # Reuse the analytic expressions, evaluating only locally owned faces.
-        from experiments.problems import _expressions
-        expressions=_expressions(grid.lx,grid.ly,cfg['nu']);amplitude=cfg['amplitude']
-        model.force=lambda t:model.stokes.layout.vector(
-            lambda x,y:amplitude*expressions[7](x,y,t)+amplitude**2*expressions[8](x,y,t),
-            lambda x,y:amplitude*expressions[9](x,y,t)+amplitude**2*expressions[10](x,y,t))
-    scheme=SDIRK2() if cfg['scheme']=='sdirk2' else SDIRK2MRSAV(cfg['gamma'])
-    times=[0.];diagnostics=[model.diagnostics(state)];stage_records=[]
-    nodes=np.r_[0.,np.cumsum(cfg['actual_steps'])]
-    requests=cfg['snapshots'];indices=[]
-    for t in requests:
-        distances=np.abs(nodes-t);tie=8*np.finfo(float).eps*max(float(nodes[-1]),abs(t))
-        indices.append(int(np.flatnonzero(distances<=distances.min()+tie)[0]))
-    # Distributed payloads, typed Any because core.Trial carries the serial State and Stage
-    # types while the model builds its own; the accesses below are checked at run time.
-    snapshots={};last_stages: list[Any]=[];status='complete';error=''
-    def keep(index: int) -> None:
-        if index in indices:
-            fields=model.stokes.layout.gather(state.velocity)
-            if comm.rank==0:
-                assert fields is not None
-                snapshots[index]=State(state.t,fields[0],fields[1],state.r)
-    keep(0)
-    for n,dt in enumerate(cfg['actual_steps']):
-        try:
-            trial=scheme.step(model,state,dt)
-            new_state: Any=trial.state
-            diagnostic=model.diagnostics(new_state)
-            if not all(np.isfinite(v) for v in diagnostic.values()):raise FloatingPointError('Nonfinite diagnostic')
-            state.velocity.destroy();state=new_state
-            for old in last_stages:old.pressure.destroy()
-            last_stages=trial.stages
-            if comm.rank==0:
-                times.append(state.t);diagnostics.append(diagnostic)
-                stage_records.append([{'r':s.r,'root_count':len(s.candidates),'candidates':s.candidates,
-                                       'root_residuals':s.root_residuals,'residual':s.residual,
-                                       'scalar_residual':s.scalar_residual,'divergence_inf':s.divergence_inf} for s in last_stages])
-            keep(n+1)
-            if (n+1)%100==0:
-                def progress() -> None:
-                    with (directory/'run.log').open('a') as log:log.write(f'accepted={n+1}, t={state.t:.8g}, elapsed={perf_counter()-start:.3f}s\n')
-                on_root(comm,progress)
-        except Exception as exc:
-            status='failed';error=f'{type(exc).__name__}: {exc}';break
-    fields=model.stokes.layout.gather(state.velocity)
-    pressures=[model.stokes.layout.gather_pressure(s.pressure) for s in last_stages]
-    local_storage=model.stokes.layout.local_n
-    metrics={'total_seconds':comm.allreduce(perf_counter()-start,op=MPI.MAX),
-             'setup_seconds':comm.allreduce(model.stokes.setup_seconds,op=MPI.MAX),
-             'linear_solve_seconds':comm.allreduce(model.stokes.solve_seconds,op=MPI.MAX),
-             'velocity_precond_seconds':comm.allreduce(model.stokes.preconditioner_seconds[0],op=MPI.MAX),
-             'pressure_precond_seconds':comm.allreduce(model.stokes.preconditioner_seconds[1],op=MPI.MAX),
-             'max_iterations':max(model.stokes.iterations,default=0),
-             'mean_iterations':float(np.mean(model.stokes.iterations)) if model.stokes.iterations else 0.,
-             'max_attempts':max(model.stokes.attempts,default=0),
-             'mean_attempts':float(np.mean(model.stokes.attempts)) if model.stokes.attempts else 0.,
-             'linear_solves':len(model.stokes.iterations),
-             'owned_velocity_dofs_per_rank':comm.allgather(local_storage),
-             'global_velocity_dofs':grid.size}
-    def finish() -> None:
-        assert fields is not None
-        final=State(state.t,fields[0],fields[1],state.r)
-        result=Result(final,times,diagnostics,stages=stage_records,status=status,error=error,seconds=metrics['total_seconds'])
-        for stage,p in zip(last_stages,pressures):result.final_stages.append(Stage(p,stage.residual,stage.divergence_inf,stage.r,stage.candidates,stage.root_residuals,stage.scalar_residual))
-        for request,index in zip(requests,indices):
-            if index in snapshots:
-                result.snapshot_requests.append(request);result.snapshot_times.append(snapshots[index].t);result.snapshots.append(snapshots[index])
-        save_result(directory/'results.h5',result,metrics)
-        manifest.update(status=status,error=error,accepted_steps=len(times)-1,final_time=state.t,metrics=metrics,
-                        finished_utc=datetime.now(timezone.utc).isoformat(),results_sha256=digest(directory/'results.h5'))
-        write_json(directory/'manifest.json',manifest)
-        with (directory/'run.log').open('a') as log:log.write(json.dumps({'status':status,'error':error,'metrics':metrics})+'\n')
-    try:on_root(comm,finish)
+    model: Any=None
+    state: Any=None
+    last_stages: list[Any]=[]
+    accepted_steps=0
+    failure_details: list[dict[str,Any]]=[]
+    phase='initialization'
+    try:
+        grid=MACGrid(cfg['nx'],cfg['ny'],cfg['lx'],cfg['ly'])
+        comm.Barrier();start=perf_counter()
+        model=ParallelNS(grid,cfg['nu'],comm=comm,tolerance=cfg['linear_tolerance'],max_iterations=cfg['max_iterations'],cache_size=cfg['cache_size'])
+        state=model.initial(amplitude=cfg['amplitude'] if cfg['experiment']!='cavity' else 0.)
+        if cfg['experiment']=='cavity':
+            def force(t: float) -> Any:
+                value=model.zero();layout=model.stokes.layout
+                def fill() -> None:
+                    if layout.end==grid.ny:
+                        value.array[layout.local_u-grid.nx+1:layout.local_u]=2*cfg['nu']*cfg['lid_speed']/grid.hy**2
+                try:local_call(comm,'lid force',fill)
+                except Exception:
+                    value.destroy()
+                    raise
+                return value
+            model.force=force
+        elif cfg['experiment']=='ns_mms':
+            # Reuse the analytic expressions, evaluating only locally owned faces.
+            from experiments.problems import _expressions
+            expressions=local_call(comm,'forcing setup',lambda:_expressions(grid.lx,grid.ly,cfg['nu']));amplitude=cfg['amplitude']
+            model.force=lambda t:model.stokes.layout.vector(
+                lambda x,y:amplitude*expressions[7](x,y,t)+amplitude**2*expressions[8](x,y,t),
+                lambda x,y:amplitude*expressions[9](x,y,t)+amplitude**2*expressions[10](x,y,t))
+        scheme=SDIRK2() if cfg['scheme']=='sdirk2' else SDIRK2MRSAV(cfg['gamma'])
+        initial_diagnostic=model.diagnostics(state)
+        local_call(comm,'initial diagnostics',lambda:validate_diagnostic(initial_diagnostic))
+        times=[0.];diagnostics=[initial_diagnostic];stage_records=[]
+        nodes=np.r_[0.,np.cumsum(cfg['actual_steps'])]
+        requests=cfg['snapshots'];indices=[]
+        for t in requests:
+            distances=np.abs(nodes-t);tie=8*np.finfo(float).eps*max(float(nodes[-1]),abs(t))
+            indices.append(int(np.flatnonzero(distances<=distances.min()+tie)[0]))
+        # Distributed payloads, typed Any because core.Trial carries the serial State and Stage
+        # types while the model builds its own; the accesses below are checked at run time.
+        snapshots={};last_stages=[];status='complete';error=''
+        def keep(index: int) -> None:
+            if index in indices:
+                fields=model.stokes.layout.gather(state.velocity)
+                def record_snapshot() -> None:
+                    assert fields is not None
+                    snapshots[index]=State(state.t,fields[0],fields[1],state.r)
+                on_root(comm,record_snapshot,'snapshot record')
+        keep(0)
+        phase='time integration'
+        for n,dt in enumerate(cfg['actual_steps']):
+            trial: Any=None
+            try:
+                trial=scheme.step(model,state,dt)
+                new_state: Any=trial.state
+                diagnostic=model.diagnostics(new_state)
+                local_call(comm,'diagnostics validation',lambda:validate_diagnostic(diagnostic))
+                def record_step() -> None:
+                    times.append(new_state.t);diagnostics.append(diagnostic)
+                    stage_records.append([{'r':s.r,'root_count':len(s.candidates),'candidates':s.candidates,
+                                           'root_residuals':s.root_residuals,'residual':s.residual,
+                                           'scalar_residual':s.scalar_residual,'divergence_inf':s.divergence_inf} for s in trial.stages])
+                on_root(comm,record_step,'accepted step record')
+                state.velocity.destroy();state=new_state
+                for old in last_stages:old.pressure.destroy()
+                last_stages=trial.stages
+                accepted_steps=n+1
+                keep(n+1)
+                if (n+1)%100==0:
+                    def progress() -> None:
+                        with (directory/'run.log').open('a') as log:log.write(f'accepted={n+1}, t={state.t:.8g}, elapsed={perf_counter()-start:.3f}s\n')
+                    on_root(comm,progress)
+            except Exception as exc:
+                if trial is not None and trial.state is not state:
+                    trial.state.velocity.destroy()
+                    for stage in trial.stages:stage.pressure.destroy()
+                # Roll back any partially appended root-side metadata to the accepted prefix.
+                del times[accepted_steps+1:];del diagnostics[accepted_steps+1:];del stage_records[accepted_steps:]
+                status='failed';error=f'{type(exc).__name__}: {exc}'
+                failure_details=getattr(exc,'failures',[{'rank':None,'phase':'time step','error':error}])
+                break
+        fields=model.stokes.layout.gather(state.velocity)
+        pressures=[model.stokes.layout.gather_pressure(s.pressure) for s in last_stages]
+        local_storage=model.stokes.layout.local_n
+        metrics={'total_seconds':comm.allreduce(perf_counter()-start,op=MPI.MAX),
+                 'setup_seconds':comm.allreduce(model.stokes.setup_seconds,op=MPI.MAX),
+                 'linear_solve_seconds':comm.allreduce(model.stokes.solve_seconds,op=MPI.MAX),
+                 'velocity_precond_seconds':comm.allreduce(model.stokes.preconditioner_seconds[0],op=MPI.MAX),
+                 'pressure_precond_seconds':comm.allreduce(model.stokes.preconditioner_seconds[1],op=MPI.MAX),
+                 'max_iterations':max(model.stokes.iterations,default=0),
+                 'mean_iterations':float(np.mean(model.stokes.iterations)) if model.stokes.iterations else 0.,
+                 'max_attempts':max(model.stokes.attempts,default=0),
+                 'mean_attempts':float(np.mean(model.stokes.attempts)) if model.stokes.attempts else 0.,
+                 'linear_solves':len(model.stokes.iterations),
+                 'owned_velocity_dofs_per_rank':comm.allgather(local_storage),
+                 'global_velocity_dofs':grid.size}
+        def finish() -> None:
+            assert fields is not None
+            final=State(state.t,fields[0],fields[1],state.r)
+            result=Result(final,times,diagnostics,stages=stage_records,status=status,error=error,seconds=metrics['total_seconds'])
+            for stage,p in zip(last_stages,pressures):result.final_stages.append(Stage(p,stage.residual,stage.divergence_inf,stage.r,stage.candidates,stage.root_residuals,stage.scalar_residual))
+            for request,index in zip(requests,indices):
+                if index in snapshots:
+                    result.snapshot_requests.append(request);result.snapshot_times.append(snapshots[index].t);result.snapshots.append(snapshots[index])
+            save_result(directory/'results.pending.h5',result,metrics)
+            (directory/'results.pending.h5').replace(directory/'results.h5')
+            manifest.update(status=status,error=error,failures=failure_details,accepted_steps=len(times)-1,final_time=state.t,metrics=metrics,
+                            finished_utc=datetime.now(timezone.utc).isoformat(),results_sha256=digest(directory/'results.h5'))
+            write_json(directory/'manifest.json',manifest)
+            with (directory/'run.log').open('a') as log:log.write(json.dumps({'status':status,'error':error,'metrics':metrics})+'\n')
+        phase='result saving'
+        on_root(comm,finish,phase)
+    except Exception as exc:
+        error=f'{type(exc).__name__}: {exc}'
+        details=getattr(exc,'failures',[{'rank':None,'phase':phase,'error':error}])
+        def record_failure() -> None:
+            manifest.update(status='failed',error=error,failures=details,
+                            accepted_steps=accepted_steps,final_time=state.t if state is not None else 0.,
+                            finished_utc=datetime.now(timezone.utc).isoformat())
+            manifest.pop('results_sha256',None)
+            write_json(directory/'manifest.json',manifest)
+            with (directory/'run.log').open('a') as log:
+                log.write(json.dumps({'status':'failed','error':error,'failures':details})+'\n')
+        on_root(comm,record_failure,'failure record')
     finally:
-        state.velocity.destroy()
+        if state is not None:state.velocity.destroy()
         for stage in last_stages:stage.pressure.destroy()
-        model.close()
+        if model is not None:model.close()
     return directory
 
 
