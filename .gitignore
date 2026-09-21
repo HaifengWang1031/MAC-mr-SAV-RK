@@ -9,3 +9,4 @@ reports/
 .scratch/*
 !.scratch/implementation.md
 .venv/
+.DS_Store
