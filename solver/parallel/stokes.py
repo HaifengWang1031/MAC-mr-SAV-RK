@@ -21,19 +21,28 @@ class BlockPreconditioner:
     """Approximate lower inverse; Schur inverse ~ mass*Poisson^-1 + viscosity*I."""
     def __init__(self, L: Any, Q: Any, D: Any, mass: float, viscosity: float) -> None:
         self.mass,self.viscosity,self.D=mass,viscosity,D
+        # Inner solves are tunable through PETSC_OPTIONS with the vel_/pres_ prefixes;
+        # defaults are unchanged when no options are supplied.
         self.velocity=PETSc.KSP().create(comm=L.comm)
+        self.velocity.setOptionsPrefix('vel_')
         self.velocity.setOperators(L);self.velocity.setType('preonly');self.velocity.getPC().setType('gamg' if viscosity>0 else 'jacobi')
-        self.velocity.setUp()
+        self.velocity.setFromOptions();self.velocity.setUp()
         self.pressure=PETSc.KSP().create(comm=Q.comm)
+        self.pressure.setOptionsPrefix('pres_')
         self.pressure.setOperators(Q);self.pressure.setType('preonly');self.pressure.getPC().setType('gamg')
-        self.pressure.setUp()
+        self.pressure.setFromOptions();self.pressure.setUp()
         self.work=Q.createVecRight();self.poisson=Q.createVecRight()
+        self.velocity_seconds=0.;self.pressure_seconds=0.
 
     def apply(self, pc: Any, rhs: Any, out: Any) -> None:
         ru,rp=rhs.getNestSubVecs();zu,zp=out.getNestSubVecs()
+        start=perf_counter()
         self.velocity.solve(ru,zu)
+        self.velocity_seconds+=perf_counter()-start
         self.D.mult(zu,self.work);self.work.axpy(1.,rp)
+        start=perf_counter()
         self.pressure.solve(self.work,self.poisson)
+        self.pressure_seconds+=perf_counter()-start
         self.poisson.copy(zp);zp.scale(-self.mass);zp.axpy(-self.viscosity,self.work)
 
     def close(self) -> None:
@@ -116,6 +125,7 @@ class ParallelStokes:
             ksp.setType('fgmres');ksp.setGMRESRestart(60)
             ksp.setTolerances(rtol=self.tolerance,atol=self.tolerance*1e-3,max_it=self.max_iterations)
             ksp.getPC().setType('python');ksp.getPC().setPythonContext(pc)
+            ksp.setFromOptions()
             ksp.setUp()
             self.cache[key]=(L,lower,A,pc,ksp)
             self.setup_seconds+=perf_counter()-start
@@ -144,6 +154,12 @@ class ParallelStokes:
     @staticmethod
     def _destroy(system: tuple[Any,...]) -> None:
         L,lower,A,pc,ksp=system;ksp.destroy();pc.close();A.destroy();lower.destroy();L.destroy()
+
+    @property
+    def preconditioner_seconds(self) -> tuple[float,float]:
+        """(velocity block, pressure block) application time, summed over cached systems."""
+        return (sum(system[3].velocity_seconds for system in self.cache.values()),
+                sum(system[3].pressure_seconds for system in self.cache.values()))
 
     def close(self) -> None:
         for system in self.cache.values():self._destroy(system)

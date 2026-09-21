@@ -5,6 +5,7 @@ if __package__ in (None,''):sys.path.insert(0,str(Path(__file__).resolve().paren
 import argparse
 import hashlib
 import json
+import os
 from datetime import datetime,timezone
 from uuid import uuid4
 from time import perf_counter
@@ -39,7 +40,8 @@ def run_parallel(config: dict,*,root: Path=PROJECT,rerun: bool=False,comm: Any=M
         if controls['linear_tolerance']<=0 or not np.isfinite(controls['linear_tolerance']) or controls['max_iterations']<1:
             raise ValueError('Invalid linear solver controls')
         cfg.update(controls);cfg.update(backend='petsc_mpi',mpi_ranks=comm.size)
-        source=provenance();source.update(petsc_version=PETSc.Sys.getVersion(),mpi_library=MPI.Get_library_version().strip('\0'))
+        source=provenance();source.update(petsc_version=PETSc.Sys.getVersion(),mpi_library=MPI.Get_library_version().strip('\0'),
+                                          petsc_options=os.environ.get('PETSC_OPTIONS'))
         identity=hashlib.sha256(json.dumps({'config':cfg,'source':source},sort_keys=True).encode()).hexdigest()
         parent=root/'runs/parallel_ns';parent.mkdir(parents=True,exist_ok=True)
         if not rerun:
@@ -117,6 +119,8 @@ def run_parallel(config: dict,*,root: Path=PROJECT,rerun: bool=False,comm: Any=M
     metrics={'total_seconds':comm.allreduce(perf_counter()-start,op=MPI.MAX),
              'setup_seconds':comm.allreduce(model.stokes.setup_seconds,op=MPI.MAX),
              'linear_solve_seconds':comm.allreduce(model.stokes.solve_seconds,op=MPI.MAX),
+             'velocity_precond_seconds':comm.allreduce(model.stokes.preconditioner_seconds[0],op=MPI.MAX),
+             'pressure_precond_seconds':comm.allreduce(model.stokes.preconditioner_seconds[1],op=MPI.MAX),
              'max_iterations':max(model.stokes.iterations,default=0),
              'mean_iterations':float(np.mean(model.stokes.iterations)) if model.stokes.iterations else 0.,
              'linear_solves':len(model.stokes.iterations),
