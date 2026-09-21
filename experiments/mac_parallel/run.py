@@ -43,7 +43,7 @@ def run_parallel(config: dict,*,root: Path=PROJECT,rerun: bool=False,comm: Any=M
         source=provenance();source.update(petsc_version=PETSc.Sys.getVersion(),mpi_library=MPI.Get_library_version().strip('\0'),
                                           petsc_options=os.environ.get('PETSC_OPTIONS'))
         identity=hashlib.sha256(json.dumps({'config':cfg,'source':source},sort_keys=True).encode()).hexdigest()
-        parent=root/'runs/parallel_ns';parent.mkdir(parents=True,exist_ok=True)
+        parent=root/'runs/mac_parallel';parent.mkdir(parents=True,exist_ok=True)
         if not rerun:
             for file in sorted(parent.glob('*/manifest.json')):
                 try:old=json.loads(file.read_text())

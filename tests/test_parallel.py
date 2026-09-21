@@ -84,7 +84,7 @@ def test_distributed_time_steps_match_serial_sdirk(sav):
 def test_parallel_run_reuse_and_failed_prefix(tmp_path):
     import json
     from mpi4py import MPI
-    from experiments.parallel_ns.run import run_parallel
+    from experiments.mac_parallel.run import run_parallel
     root=MPI.COMM_WORLD.bcast(str(tmp_path) if MPI.COMM_WORLD.rank==0 else None,root=0)
     from pathlib import Path
     cfg={'experiment':'decay','nx':8,'ny':7,'nu':.1,'T':.02,'steps':[.01,.01]}

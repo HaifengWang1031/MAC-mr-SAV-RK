@@ -23,9 +23,9 @@ def parallel_tier(root: Path = PROJECT) -> dict:
         return {'status':'skipped','reason':'mpiexec not on PATH'}
     records=[]
     for name,ranks in (('ladder_64',4),('ladder_256',2),('ladder_512',4)):
-        config=PROJECT/f'experiments/parallel_ns/configs/{name}.json'
+        config=PROJECT/f'experiments/mac_parallel/configs/{name}.json'
         completed=subprocess.run([mpiexec,'-n',str(ranks),sys.executable,
-                                  'experiments/parallel_ns/run.py','--config',str(config),'--root',str(root)],
+                                  'experiments/mac_parallel/run.py','--config',str(config),'--root',str(root)],
                                  cwd=PROJECT,capture_output=True,text=True)
         report=completed.stdout.strip().splitlines()
         if completed.returncode!=0:

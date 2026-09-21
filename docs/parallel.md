@@ -27,7 +27,7 @@ PETSC_DIR="$(brew --prefix petsc)" uv sync --locked --extra mpi
 
 ## 已验证的规模与限制
 
-2026-09-21 在本机（10 核，24 GB，上文列出的 PETSc 3.25.5 / Open MPI 5.0.10）实测。配置为 `decay`、ν=0.1、dt=1e-3、SDIRK2、固定步长，见 `experiments/parallel_ns/configs/ladder_{64,128,256,512}.json`；对照组是同一配置的原串行 SciPy/SuperLU 直接法（`experiments/decay/run.py`）。总时间为进程级墙钟，每解耗时按每步两次线性求解折算。
+2026-09-21 在本机（10 核，24 GB，上文列出的 PETSc 3.25.5 / Open MPI 5.0.10）实测。配置为 `decay`、ν=0.1、dt=1e-3、SDIRK2、固定步长，见 `experiments/mac_parallel/configs/ladder_{64,128,256,512}.json`；对照组是同一配置的原串行 SciPy/SuperLU 直接法（`experiments/decay/run.py`）。总时间为进程级墙钟，每解耗时按每步两次线性求解折算。
 
 | 网格 | 步数 | 直接法总时 | 并行 n=1 / 2 / 4 | 直接法每解 | 并行每解（n=4） | FGMRES 迭代数 |
 |---|---|---|---|---|---|---|
@@ -113,7 +113,7 @@ PETSC_DIR="$(brew --prefix petsc)" uv sync --locked --extra mpi
 
 ### 1024² × 20 步：散度判据在时间积分下的行为
 
-配置见 `experiments/parallel_ns/configs/ladder_1024_20steps.json`（T=0.02、τ=1e-3，共 40 次线性求解），`-ksp_type bcgs`：
+配置见 `experiments/mac_parallel/configs/ladder_1024_20steps.json`（T=0.02、τ=1e-3，共 40 次线性求解），`-ksp_type bcgs`：
 
 | | n=4 | n=2 |
 |---|---|---|
