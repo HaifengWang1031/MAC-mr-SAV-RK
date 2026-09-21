@@ -130,6 +130,31 @@ Gate: 7 parallel tests pass on 1, 2 and 4 ranks in a dedicated environment
 (`docs/parallel.md` records the verified build recipe and the corrected diagnosis of the
 MPI mismatch), the serial suite is unchanged, and mypy is clean.
 
+## Slice 4 record (2026-09-21)
+
+`test_distributed_time_steps_match_serial_sdirk` now drives the *shared* scheme — one
+instance per case — through the distributed model on 2 and 4 ranks and through the
+serial model on rank 0, over three step sizes, comparing the packed velocity, the
+scalar `r` and every stage root. That is seam 1 at scale. It also checks that every rank
+selects the same roots, which is what the removed rank-0 root broadcast used to
+guarantee: the shared scheme derives the cubic from globally reduced inner products, so
+each rank computes identical coefficients.
+
+A hypothesised ownership problem was refuted by measurement instead of designed around.
+The shared schemes discard the intermediate vectors a solve returns (the raw velocities
+and pressures before `combine` builds the stage values), and the removed `ParallelSDIRK2`
+destroyed those explicitly, so a leak looked likely — at 1024² it would have been roughly
+eight vectors per step, about 64 MB. Measured on a 128² grid over 25 steps, peak RSS grew
+by 0.6 MB for SDIRK2-mr-ccSAV and 0.0 MB for SDIRK2, against the ~30 MB the leak would
+have produced at that size. No leak exists: CPython's reference counting collects the
+petsc4py wrappers promptly and they destroy their PETSc objects. The seam therefore gains
+no `release` member, and the only residual condition is that this rests on the wrappers
+becoming unreachable — if a later change keeps a reference to an intermediate, its
+lifetime becomes that reference's, which is ordinary Python behaviour rather than a seam
+gap.
+
+Gate: 7 parallel tests pass on 1, 2 and 4 ranks; the serial suite is unchanged.
+
 ## Risks
 
 - The schemes are validated numerical code and the seam touches their arithmetic.

@@ -46,7 +46,9 @@ class SDIRK2MRSAV:
         # earlier explicit finiteness check on the velocity array.
         if not np.isfinite([residual,scalar_residual,divergence]).all() or scalar_residual>1e-8 \
                 or residual>1e-8 or divergence>1e-8*(1+model.max_abs(velocity)):
-            raise RuntimeError(f'SAV stage residuals {residual}, {scalar_residual}')
+            # All three are reported: the divergence is the one that fails whenever the linear
+            # tolerance is loose, and omitting it made earlier failures look like residual ones.
+            raise RuntimeError(f'SAV stage residuals {residual}, {scalar_residual}, divergence {divergence}')
         return velocity,model.stage(pressure,residual,divergence,r,choice.candidates,
                                     choice.residuals,scalar_residual)
 

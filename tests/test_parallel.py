@@ -48,18 +48,24 @@ def test_partitioned_stencils_and_stokes_match_serial_reference():
 
 @pytest.mark.parametrize('sav',[False,True])
 def test_distributed_time_steps_match_serial_sdirk(sav):
-    from solver.mac_parallel.integrate import ParallelNS,ParallelSDIRK2
+    """One scheme object drives the distributed model here and the serial model there.
+
+    This is seam 1 at scale: the same instance steps the distributed model on 2 or 4
+    ranks and the serial model on rank 0, over three different step sizes, and the
+    roots are compared as well as the fields.
+    """
+    from solver.mac_parallel.integrate import ParallelNS
     from solver.mac_ns import MACNavierStokes
     from solver.schemes.sdirk2 import SDIRK2
     from solver.schemes.sdirk2_mrsav import SDIRK2MRSAV
     from experiments.problems import initial_velocity
     grid=MACGrid(12,9)
+    scheme=SDIRK2MRSAV(1.) if sav else SDIRK2()
     model=ParallelNS(grid,.1,tolerance=1e-12)
     state=model.initial(amplitude=.2)
-    stepper=ParallelSDIRK2(sav=sav,gamma=1.)
     roots=[]
     for dt in (.01,.006,.014):
-        trial=stepper.step(model,state,dt)
+        trial=scheme.step(model,state,dt)
         state.velocity.destroy();state=trial.state
         roots.append([s.r for s in trial.stages])
         for stage in trial.stages:stage.pressure.destroy()
@@ -68,7 +74,6 @@ def test_distributed_time_steps_match_serial_sdirk(sav):
     if model.comm.rank==0:
         serial=MACNavierStokes(grid,.1)
         expected=serial.state(0,initial_velocity(grid,.2))
-        scheme=SDIRK2MRSAV(1.) if sav else SDIRK2()
         expected_roots=[]
         for dt in (.01,.006,.014):
             tr=scheme.step(serial,expected,dt);expected=tr.state
@@ -77,6 +82,12 @@ def test_distributed_time_steps_match_serial_sdirk(sav):
                   np.max(np.abs(np.array(roots)-expected_roots)))
     error=model.comm.bcast(error,root=0)
     assert error<1e-8,error
+    # Every rank must pick the same roots. The shared scheme derives them from globally
+    # reduced inner products, which is what the removed rank-0 root broadcast used to
+    # guarantee, so this checks that the replacement holds.
+    local=np.array(roots)
+    agree=model.comm.bcast(local if model.comm.rank==0 else None,root=0)
+    assert np.array_equal(local,agree),'ranks selected different SAV roots'
     assert model.diagnostics(state)['divergence_inf']<1e-8
     state.velocity.destroy();model.close()
 

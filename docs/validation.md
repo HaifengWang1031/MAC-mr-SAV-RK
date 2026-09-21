@@ -52,7 +52,7 @@ Stokes 定常制造解；NS 制造解取 ν=0.1、A=0.1、T=0.02、τ=0.0005。�
 
 2026-09-21 增补。上文数字仍属 2026-09-20 的串行验收；本节记录并行后端的证据与边界，报告与配置见 [parallel.md](parallel.md)。
 
-自动检查：`mypy` 42 个源文件通过；`pytest -q` 22 项通过，`tests/test_parallel.py` 在无 petsc4py 时跳过 1 项；在 `mpiexec -n 2` 与 `-n 4` 下并行 6 项全部通过。
+自动检查：`mypy` 43 个源文件通过；`pytest -q` 27 项通过，`tests/test_parallel.py` 在无 petsc4py 时跳过 1 项；在 `mpiexec -n 2` 与 `-n 4` 下并行 7 项全部通过（含共享格式在 1/2/4 进程驱动分布式模型并与串行参考对照的整步检查）。
 
 与串行基准的逐项对照：
 
