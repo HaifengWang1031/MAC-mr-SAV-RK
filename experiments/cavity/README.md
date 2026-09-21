@@ -13,4 +13,6 @@ uv run python experiments/cavity/analyze.py --runs runs/cavity/<32网格运行�
 
 计算和绘图分离。图包含速度大小/流函数等值线、内点涡量，以及两条中心线的网格比较。主涡位置从顶点流函数极小值估计。稳态指标是投影后的连续半离散 NS 右端 L2 范数；没有仅凭 T 或小散度宣称稳态。两网格差是敏感性检查，不是完整网格收敛证明。原始结果、边界配置和来源随运行记录保存。
 
+- 正则化顶盖（角点无间断）由 `lid_viscous_load(..., profile=regularised_lid)` 提供，spectral 侧的同一轮廓用于 `LidLifting`；两侧对比见 `docs/spectral.md` 的 S3 一节。
+
 经典文献：Ghia, Ghia & Shin (1982), High-Re solutions for incompressible flow using the Navier–Stokes equations and a multigrid method. https://doi.org/10.1016/0021-9991(82)90058-4 。本次不把两网格比较称为已通过 Ghia 数据验证。

@@ -46,7 +46,8 @@ class SpectralSolution:
 
 class SpectralModel:
     def __init__(self, space: Space, nu: float, *, force: Callable[[float], Array] | None = None,
-                 tolerance: float = 1e-10, cache_size: int = 4, dealias: int = 8) -> None:
+                 tolerance: float = 1e-10, cache_size: int = 4, dealias: int = 8,
+                 lifting: Any = None) -> None:
         if not np.isfinite(nu) or nu <= 0:
             raise ValueError('nu must be positive and finite')
         if dealias < 3:
@@ -59,6 +60,10 @@ class SpectralModel:
         self.divergence_x, self.divergence_y = assembly.divergence_blocks(space)
         self.stokes = SpectralStokes(space, tolerance=tolerance, cache_size=cache_size)
         self._mass_factorization: Any = None
+        # A nonzero wall value is carried by a known field whose loads are constant in
+        # time, so they are assembled once and folded into every solve. See lifting.py.
+        self.lifting = lifting
+        self._lifting = lifting.loads() if lifting is not None else None
         self.force: Callable[[float], Array] = force if force is not None else lambda t: self.zero_velocity()
 
     @property
@@ -88,7 +93,7 @@ class SpectralModel:
         return total
 
     def apply_K(self, velocity: Array) -> Array:
-        """The weak Laplacian as a field operator: M^-1 S, not S.
+        """The weak Laplacian as a field operator: M^-1 S, of the *total* field.
 
         S is the weak stiffness, i.e. it maps coefficients to a *load*. The seam adds the
         result of this call to other fields and hands the sum to `solve`, so it has to
@@ -96,11 +101,19 @@ class SpectralModel:
         make this choice because its basis functions are nodal indicators and its mass
         matrix is diagonal; a modal basis does, and picking the wrong convention is a
         silent O(1) error rather than a visible one.
+
+        A lifting is part of the physical field but not of the state, so its stiffness load
+        is added here as well as being subtracted in `solve`. The two have to agree: the
+        schemes build their stage defect out of this call and would otherwise keep an O(1)
+        leftover and fail their own gate.
         """
         modes = self.modes
         out = np.empty_like(np.asarray(velocity))
         out[:modes] = self._mass_solve(self.stiffness @ velocity[:modes])
         out[modes:] = self._mass_solve(self.stiffness @ velocity[modes:])
+        if self._lifting is not None:
+            out[:modes] += self._mass_solve(self._lifting[0].reshape(-1))
+            out[modes:] += self._mass_solve(self._lifting[1].reshape(-1))
         return out
 
     def apply_G(self, pressure: Array) -> Array:
@@ -109,8 +122,20 @@ class SpectralModel:
                                self._mass_solve(-(self.divergence_y.T @ pressure))])
 
     def apply_D(self, velocity: Array) -> Array:
+        """Weak divergence of the *total* field over the constrained pressure modes.
+
+        With a lifting the interior unknown satisfies `div w = -div g`, so the constraint
+        residual reported to the schemes is the physical one, `div w + div g`. The constant
+        pressure mode is the removed gauge, so its row is excluded: for a homogeneous field
+        it vanishes anyway, because the basis carries no flux through the walls, but with a
+        lid it would hold the cavity's net flux, which this formulation deliberately does
+        not impose. What the schemes gate on is the residual `solve` actually enforces.
+        """
         modes = self.modes
-        return self.divergence_x @ velocity[:modes] + self.divergence_y @ velocity[modes:]
+        constraint = self.divergence_x @ velocity[:modes] + self.divergence_y @ velocity[modes:]
+        if self._lifting is not None:
+            constraint = constraint + self._lifting[2].reshape(-1)
+        return constraint[1:]
 
     def inner(self, left: Array, right: Array) -> float:
         modes = self.modes
@@ -142,7 +167,11 @@ class SpectralModel:
         return self._mass_solve(self.space.load(function, extra=extra))
 
     def nonlinear(self, velocity: Array) -> Array:
-        """N(v) = (u.grad)u, assembled on the wide quadrature, projected and solved."""
+        """N(v) = (u.grad)u, assembled on the wide quadrature, projected and solved.
+
+        The convection uses the *total* velocity: with a lifting the unknown is only the
+        interior part, and the products of its derivatives are not the physical term.
+        """
         space, modes = self.space, self.modes
         size = space.size
         nodes_x, _, nodes_y, _ = space.nodes(extra=self.dealias)
@@ -156,27 +185,65 @@ class SpectralModel:
         du_dy = derivative_y.T @ coefficients_x.T @ values_x
         dv_dx = values_y.T @ coefficients_y.T @ derivative_x
         dv_dy = derivative_y.T @ coefficients_y.T @ values_x
+        if self.lifting is not None:
+            g_u, g_v = self.lifting.velocity(nodes_x, nodes_y)
+            dg_u_x, dg_u_y, dg_v_x, dg_v_y = self.lifting.derivatives(nodes_x, nodes_y)
+            u, v = u + g_u, v + g_v
+            du_dx, du_dy = du_dx + dg_u_x, du_dy + dg_u_y
+            dv_dx, dv_dy = dv_dx + dg_v_x, dv_dy + dg_v_y
         return np.concatenate([self._mass_solve(space.project(u * du_dx + v * du_dy, extra=self.dealias)),
                                self._mass_solve(space.project(u * dv_dx + v * dv_dy, extra=self.dealias))])
 
-    def solve(self, rhs: Array, *, mass: float, viscosity: float) -> SolveResult:
+    def _total_divergence_inf(self, coefficients_x: Array, coefficients_y: Array) -> float:
+        """max |div u| in physical space, including the lifting when there is one."""
+        space = self.space
+        nodes_x, _, nodes_y, _ = space.nodes(extra=self.dealias)
+        values_x, values_y = space.velocity_values(nodes_x, nodes_y)
+        derivative_x, derivative_y = space.velocity_derivatives(nodes_x, nodes_y)
+        divergence = (values_y.T @ coefficients_x.T @ derivative_x
+                      + derivative_y.T @ coefficients_y.T @ values_x)
+        if self.lifting is not None:
+            divergence = divergence + self.lifting.samples(nodes_x, nodes_y)[3]
+        return float(np.max(np.abs(divergence)))
+
+    def solve(self, rhs: Array, *, mass: float, viscosity: float, with_boundary_data: bool = True) -> SolveResult:
         """Solve the shifted Stokes problem for a forcing given in the field representation.
 
-        The system is [nu S, G; D, 0] [c; p] = [load; 0] with S, G, D the weak matrices, so
-        the incoming field is turned into a load by the mass matrix before the solve and
-        the coefficients that come back need no further conversion.
+        The system is [nu S, G; D, 0] [c; p] = [load; continuity] with S, G, D the weak
+        matrices, so the incoming field is turned into a load by the mass matrix before the
+        solve and the coefficients that come back need no further conversion. With a
+        lifting the boundary values contribute a constant momentum load with the same
+        viscosity they are shifted by, and an inhomogeneous continuity row; both are
+        switched off by `with_boundary_data=False`, which is what the correction columns of
+        `solve_columns` need.
         """
         modes = self.modes
         size = self.space.size
-        load = self.mass @ np.asarray(rhs)[:modes]
-        solution = self.stokes.solve(load.reshape(size, size), (self.mass @ np.asarray(rhs)[modes:]).reshape(size, size),
-                                     mass=mass, viscosity=viscosity)
+        load_x = self.mass @ np.asarray(rhs)[:modes]
+        load_y = self.mass @ np.asarray(rhs)[modes:]
+        continuity = None
+        if self._lifting is not None and with_boundary_data:
+            load_x = load_x - viscosity * self._lifting[0].reshape(-1)
+            load_y = load_y - viscosity * self._lifting[1].reshape(-1)
+            continuity = -self._lifting[2].reshape(-1)
+        solution = self.stokes.solve(load_x.reshape(size, size), load_y.reshape(size, size),
+                                     mass=mass, viscosity=viscosity, continuity=continuity)
         return SpectralSolution(np.concatenate([solution.velocity_x.reshape(-1), solution.velocity_y.reshape(-1)]),
-                                solution.pressure.reshape(-1), solution.residual, solution.divergence_inf)
+                                solution.pressure.reshape(-1), solution.residual,
+                                self._total_divergence_inf(solution.velocity_x, solution.velocity_y))
 
     def solve_columns(self, columns: Sequence[Array], *, mass: float, viscosity: float) -> list[SolveResult]:
-        """One solve per right-hand side; the factorization is reused from the cache."""
-        return [self.solve(column, mass=mass, viscosity=viscosity) for column in columns]
+        """One solve per right-hand side; only the first one carries the boundary data.
+
+        The schemes add the later columns to the first as corrections, so the inhomogeneous
+        Dirichlet datum has to survive that combination. Solving every column with the same
+        datum would multiply it by the sum of the coefficients, so the correction columns
+        are solved with a homogeneous one: because the model is linear, the combination is
+        then exactly the solution of the combined right-hand side. Factorizations are
+        reused from the cache either way.
+        """
+        return [self.solve(column, mass=mass, viscosity=viscosity, with_boundary_data=index == 0)
+                for index, column in enumerate(columns)]
 
     def stage(self, pressure: Array, residual: float, divergence_inf: float, r: float = 0.,
               candidates: Sequence[float] = (), root_residuals: Sequence[float] = (),
@@ -185,11 +252,38 @@ class SpectralModel:
                      list(root_residuals), scalar_residual)
 
     def diagnostics(self, state: State) -> dict[str, float]:
+        """Physical diagnostics of the *total* field, integrated by Gauss quadrature.
+
+        For a field in the space these integrals equal the mass-matrix forms exactly, so
+        this is a physical-space rewrite rather than an approximation; with a lifting it is
+        also the only form that includes the boundary values.
+        """
+        space, modes = self.space, self.modes
         velocity = self.vector(state)
-        kinetic = .5 * self.inner(velocity, velocity)
+        nodes_x, weights_x, nodes_y, weights_y = space.nodes(extra=self.dealias)
+        values_x, values_y = space.velocity_values(nodes_x, nodes_y)
+        derivative_x, derivative_y = space.velocity_derivatives(nodes_x, nodes_y)
+        coefficients_x = np.asarray(velocity)[:modes].reshape(space.size, space.size)
+        coefficients_y = np.asarray(velocity)[modes:].reshape(space.size, space.size)
+        u = space.evaluate(coefficients_x, nodes_x, nodes_y)
+        v = space.evaluate(coefficients_y, nodes_x, nodes_y)
+        du_dx = values_y.T @ coefficients_x.T @ derivative_x
+        du_dy = derivative_y.T @ coefficients_x.T @ values_x
+        dv_dx = values_y.T @ coefficients_y.T @ derivative_x
+        dv_dy = derivative_y.T @ coefficients_y.T @ values_x
+        if self.lifting is not None:
+            g_u, g_v = self.lifting.velocity(nodes_x, nodes_y)
+            dg_u_x, dg_u_y, dg_v_x, dg_v_y = self.lifting.derivatives(nodes_x, nodes_y)
+            u, v = u + g_u, v + g_v
+            du_dx, du_dy = du_dx + dg_u_x, du_dy + dg_u_y
+            dv_dx, dv_dy = dv_dx + dg_v_x, dv_dy + dg_v_y
+        weight = np.outer(weights_y, weights_x)
+        kinetic = .5 * float(np.sum(weight * (u ** 2 + v ** 2)))
         return {'kinetic': kinetic, 'modified_energy': kinetic + .5 * (state.r - 1) ** 2,
-                'divergence_inf': self.stokes.divergence_inf(np.asarray(state.u), np.asarray(state.v)),
-                'h1_seminorm_squared': self.inner(velocity, self.apply_K(velocity)), 'r': state.r}
+                'divergence_inf': float(np.max(np.abs(du_dx + dv_dy))),
+                'h1_seminorm_squared': float(np.sum(weight * (du_dx ** 2 + du_dy ** 2
+                                                              + dv_dx ** 2 + dv_dy ** 2))),
+                'r': state.r}
 
     def close(self) -> None:
         self.stokes.cache.clear()

@@ -11,6 +11,7 @@ import pytest
 import sympy as sy
 from solver.spectral import basis
 from solver.spectral.assembly import Space, divergence_blocks, velocity_mass, velocity_stiffness
+from solver.spectral.lifting import LidLifting
 from solver.spectral.model import SpectralModel
 from solver.spectral.stokes import SpectralStokes
 from solver.schemes.sdirk2 import SDIRK2
@@ -247,7 +248,10 @@ def test_operators_are_a_compatible_pair_and_the_stiffness_form_is_symmetric():
     velocity = generator.standard_normal(2 * model.modes)
     other = generator.standard_normal(2 * model.modes)
     pressure = generator.standard_normal(model.modes)
-    assert abs(model.inner(model.apply_G(pressure), velocity) + pressure @ model.apply_D(velocity)) < 1e-11
+    # `apply_D` drops the constant pressure row, which is the removed gauge, so the adjoint
+    # identity is stated on the constrained rows. That mode of the pressure is zero anyway.
+    assert abs(model.inner(model.apply_G(pressure), velocity)
+               + pressure.reshape(-1)[1:] @ model.apply_D(velocity)) < 1e-11
     assert abs(model.inner(model.apply_K(velocity), other) - model.inner(velocity, model.apply_K(other))) < 1e-11
 
 
@@ -326,3 +330,148 @@ def test_the_schemes_drive_the_spectral_model_at_second_order_in_time(scheme_nam
     coarse, medium = error[final_time / 4], error[final_time / 8]
     assert coarse > 100 * np.finfo(float).eps
     assert 3.4 < coarse / medium < 4.6, (coarse, medium, coarse / medium)
+
+
+def _inhomogeneous_manufactured(lx, ly):
+    """Exact divergence-free field whose wall trace matches a zero-mean lid profile.
+
+    The profile is ``A(xi) = xi (1-xi^2)^2`` and the vertical factor h satisfies h'(1) =
+    ly/2, so the top trace of u is exactly A at the reference coordinate. The profile is
+    odd, which is what makes the net flux zero: with a nonzero flux the continuous problem
+    has no divergence-free solution at all. That is the cavity's corner singularity rather
+    than a property of the lifting, which is why the cavity is compared against the MAC
+    solver instead of against an analytic field.
+    """
+    x, y, s, t = sy.symbols('x y s t')
+    profile = s * (1 - s ** 2) ** 2
+    vertical = -(ly * (t + 1) ** 2 * (1 - t)) / 8
+    stream = profile.subs(s, 2 * x / lx - 1) * vertical.subs(t, 2 * y / ly - 1)
+    u, v = sy.diff(stream, y), -sy.diff(stream, x)
+    return profile, u, v
+
+
+@pytest.mark.parametrize('pressure_kind', ['polynomial', 'smooth'])
+def test_lifting_solves_an_inhomogeneous_manufactured_problem(pressure_kind):
+    """The lifting, against an analytic solution that is *not* zero on the boundary.
+
+    With a polynomial pressure the exact velocity minus the lifting lies in the velocity
+    space, so the discrete solve has to reproduce it to roundoff; with a smooth pressure the
+    pressure projection is the only error left and it has to be spectrally small. Without
+    the lifting the interior unknown cannot satisfy a nonzero trace at all, so this fails
+    before it converges rather than degrading slowly.
+    """
+    x, y, s = sy.symbols('x y s')
+    lx = ly = 1.
+    nu = .1
+    profile, u, v = _inhomogeneous_manufactured(lx, ly)
+    pressure = ((2 * x / lx - 1) * (2 * y / ly - 1) if pressure_kind == 'polynomial'
+                else sy.cos(sy.pi * x / lx) * sy.cos(sy.pi * y / ly))
+    forcing = [-nu * (sy.diff(q, x, 2) + sy.diff(q, y, 2)) + sy.diff(pressure, axis)
+               for q, axis in ((u, x), (v, y))]
+    exact_u, exact_v = sy.lambdify((x, y), u, 'numpy'), sy.lambdify((x, y), v, 'numpy')
+    errors = []
+    for size in (8, 12, 16):
+        space = Space(size, lx, ly)
+        lifting = LidLifting(space, sy.lambdify(s, profile, 'numpy'))
+        model = SpectralModel(space, nu, lifting=lifting)
+        solution = model.solve(np.concatenate([model.project(sy.lambdify((x, y), forcing[0], 'numpy')),
+                                               model.project(sy.lambdify((x, y), forcing[1], 'numpy'))]),
+                               mass=0., viscosity=nu)
+        nodes_x, weights_x, nodes_y, weights_y = space.nodes(extra=10)
+        grid_x, grid_y = np.meshgrid(nodes_x, nodes_y)
+        error_u = space.evaluate(solution.velocity[:model.modes].reshape(size, size), nodes_x, nodes_y) \
+            + lifting.velocity(nodes_x, nodes_y)[0] - exact_u(grid_x, grid_y)
+        error_v = space.evaluate(solution.velocity[model.modes:].reshape(size, size), nodes_x, nodes_y) \
+            + lifting.velocity(nodes_x, nodes_y)[1] - exact_v(grid_x, grid_y)
+        errors.append(float(np.sqrt(np.sum(np.outer(weights_y, weights_x) * (error_u ** 2 + error_v ** 2)))))
+    if pressure_kind == 'polynomial':
+        # The exact solution minus the lifting lies in the space, so every size is at
+        # roundoff and the sequence is not monotone; only the level is meaningful here.
+        assert errors[2] < 1e-13, errors
+    else:
+        assert errors[2] < errors[1] < errors[0]
+        assert errors[2] < 1e-9, errors
+
+
+def test_the_lifting_trace_is_the_prescribed_lid():
+    """The boundary values are carried by the lifting, so its trace *is* the boundary condition.
+
+    Checked on all four walls for the regularised profile, which the 1D Dirichlet basis
+    represents exactly; the sharp lid is only reproduced as its projection, which is what
+    the cavity comparison documents.
+    """
+    space = Space(10, 1., 1.)
+    lifting = LidLifting(space, lambda ξ: (1 - np.asarray(ξ) ** 2) ** 2)
+    x = np.linspace(0, 1, 33)
+    lid, _ = lifting.velocity(x, np.full_like(x, 1.))
+    assert np.max(np.abs(lid - (1 - (2 * x - 1) ** 2) ** 2)) < 1e-14
+    bottom, _ = lifting.velocity(x, np.zeros_like(x))
+    assert np.max(np.abs(bottom)) < 1e-14
+    y = np.linspace(0, 1, 33)
+    for side in (0., 1.):
+        values, cross = lifting.velocity(np.full_like(y, side), y)
+        assert np.max(np.abs(values)) < 1e-14
+        assert np.max(np.abs(cross)) < 1e-14
+
+
+def _mac_cavity(n, nu, speed, profile, final_time, dt):
+    """Run the validated MAC cavity, whose lid enters as a ghost-point viscous load."""
+    from solver.mac.grid import MACGrid
+    from solver.mac_ns import MACNavierStokes
+    from experiments.cavity.model import lid_viscous_load
+    grid = MACGrid(n, n, 1., 1.)
+    model = MACNavierStokes(grid, nu, force=lambda t: lid_viscous_load(grid, nu, speed, profile))
+    scheme = SDIRK2MRSAV()
+    state = model.state(0., np.zeros(grid.size), 1.)
+    for _ in range(round(final_time / dt)):
+        state = scheme.step(model, state, dt).state
+    u, v = grid.unpack(model.vector(state))
+    return grid, u, v
+
+
+def _spectral_cavity(size, nu, profile, final_time, dt):
+    """Run the same cavity on the spectral model, whose lid enters as a lifting."""
+    space = Space(size, 1., 1.)
+    lifting = LidLifting(space) if profile is None else LidLifting(space, profile)
+    model = SpectralModel(space, nu, lifting=lifting)
+    scheme = SDIRK2MRSAV()
+    state = model.state(0., model.zero_velocity(), 1.)
+    for _ in range(round(final_time / dt)):
+        state = scheme.step(model, state, dt).state
+    return space, lifting, state
+
+
+@pytest.mark.parametrize('lid,size', [('sharp', 20), ('regularised', 16)])
+def test_spectral_cavity_agrees_with_the_validated_mac_lid_load(lid, size):
+    """S3's comparison: two discretisations, one scheme, one benchmark flow.
+
+    The yardstick is the MAC solver's own grid sensitivity, measured here rather than
+    assumed: the spectral solution has to be at least as close to the fine MAC solution as
+    the coarse MAC grid is. The lid is imposed completely differently on the two sides -- a
+    ghost-point viscous load on the MAC, a lifting whose trace is the wall value in the
+    spectral space -- so agreeing on the primary vortex at Re=100 is a real statement about
+    both. The sharp lid is the harder case because its constant profile is not representable
+    and arrives as a projection with Gibbs oscillations near the corners.
+    """
+    from experiments.cavity.model import regularised_lid
+    nu = .01
+    speed = 1.
+    final_time = 10.
+    dt = .04
+    profile = regularised_lid if lid == 'regularised' else None
+    coarse_grid, coarse_u, coarse_v = _mac_cavity(32, nu, speed, profile, final_time, dt)
+    grid, u, v = _mac_cavity(64, nu, speed, profile, final_time, dt)
+    area = grid.hx * grid.hy
+    difference_u = coarse_u[1:-1, 1:-1] - u[1::2, ::2][1:-1, 1:-1]
+    difference_v = coarse_v[1:-1, 1:-1] - v[::2, 1::2][1:-1, 1:-1]
+    yardstick = float(np.sqrt((np.sum(difference_u ** 2) + np.sum(difference_v ** 2)) * area))
+    space, lifting, state = _spectral_cavity(size, nu, profile, final_time, dt)
+    # The grid is a tensor product, so the axes of the meshgrids are the point lists the
+    # spectral basis expects; flattened meshgrids would build a product, not a pairing.
+    xu, yu = grid.coordinates('u')
+    xv, yv = grid.coordinates('v')
+    spectral_u = space.evaluate(state.u, xu[0, :], yu[:, 0]) + lifting.velocity(xu[0, :], yu[:, 0])[0]
+    spectral_v = space.evaluate(state.v, xv[0, :], yv[:, 0]) + lifting.velocity(xv[0, :], yv[:, 0])[1]
+    error = float(np.sqrt((np.sum((spectral_u[1:-1, 1:-1] - u[1:-1, 1:-1]) ** 2)
+                           + np.sum((spectral_v[1:-1, 1:-1] - v[1:-1, 1:-1]) ** 2)) * area))
+    assert error <= yardstick, (error, yardstick)

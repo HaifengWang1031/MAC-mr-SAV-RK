@@ -80,14 +80,26 @@ class SpectralStokes:
             self.factorization_seconds += perf_counter() - start
         return self.cache[key]
 
-    def solve(self, load_x: Array, load_y: Array, *, mass: float, viscosity: float) -> StokesSolution:
+    def solve(self, load_x: Array, load_y: Array, *, mass: float, viscosity: float,
+              continuity: Array | None = None) -> StokesSolution:
+        """Solve the saddle point for the given loads.
+
+        `continuity` is the right-hand side of the divergence rows, needed as soon as the
+        boundary values are carried by a lifting: the interior unknown then satisfies
+        `div w = -div g` rather than `div w = 0`. Its constant pressure mode is the removed
+        gauge row and is ignored.
+        """
         if not np.isfinite([mass, viscosity]).all() or mass < 0 or viscosity < 0 or mass + viscosity <= 0:
             raise ValueError('Require mass, viscosity >= 0 and nonzero total')
         space = self.space
         size = space.velocity_dofs
+        constraint = (np.zeros(self.pressure_dofs) if continuity is None
+                      else np.asarray(continuity).reshape(-1)[1:])
+        if constraint.size != self.pressure_dofs:
+            raise ValueError('Continuity load has the wrong size')
         lu, matrix = self._system(mass, viscosity)
         load = np.concatenate([np.asarray(load_x).reshape(-1), np.asarray(load_y).reshape(-1),
-                               np.zeros(self.pressure_dofs)])
+                               constraint])
         solution = lu.solve(load)
         velocity_x = solution[:size].reshape(space.size, space.size)
         velocity_y = solution[size:2 * size].reshape(space.size, space.size)
@@ -108,12 +120,15 @@ class SpectralStokes:
         # The constraint is imposed weakly, so the gate is the modal continuity residual
         # (machine zero, all rows including the gauge row) rather than the pointwise
         # divergence, which is a resolution diagnostic: the pressure space cannot represent
-        # the unresolved part and the value falls only as the velocity converges.
-        continuity = float(np.max(np.abs(self.divergence_x @ velocity_x.reshape(-1)
-                                         + self.divergence_y @ velocity_y.reshape(-1))))
+        # the unresolved part and the value falls only as the velocity converges. With a
+        # lifting the residual is measured against the inhomogeneous right-hand side, so a
+        # nonzero load does not look like a failed solve.
+        continuity_residual = float(np.max(np.abs(self.divergence_x[1:] @ velocity_x.reshape(-1)
+                                                  + self.divergence_y[1:] @ velocity_y.reshape(-1)
+                                                  - constraint)))
         divergence = self.divergence_inf(velocity_x, velocity_y)
-        if not np.isfinite(solution).all() or residual > 100 * self.tolerance or continuity > 100 * self.tolerance:
-            raise RuntimeError(f'Spectral Stokes residual={residual:.3e}, continuity={continuity:.3e}')
+        if not np.isfinite(solution).all() or residual > 100 * self.tolerance or continuity_residual > 100 * self.tolerance:
+            raise RuntimeError(f'Spectral Stokes residual={residual:.3e}, continuity={continuity_residual:.3e}')
         return StokesSolution(velocity_x, velocity_y, pressure, residual, divergence)
 
     def divergence_inf(self, velocity_x: Array, velocity_y: Array) -> float:

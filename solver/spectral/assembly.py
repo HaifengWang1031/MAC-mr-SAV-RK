@@ -123,6 +123,48 @@ class Space:
         flat = np.asarray(coefficients).reshape(-1)
         return float(np.sqrt(abs(flat @ (mass @ flat))))
 
+    def _sampling(self, values: Array) -> tuple[Array, Array, Array, Array]:
+        """Quadrature nodes matching a sampled [y, x] array, whose size fixes `extra`.
+
+        The caller samples on `nodes(extra)`, so the node count is read back from the array
+        instead of passed twice: a mismatch between the two is silent in the loads and only
+        shows up as a wrong answer.
+        """
+        sampled = np.asarray(values)
+        if sampled.ndim != 2 or sampled.shape[0] != sampled.shape[1] or sampled.shape[0] <= self.size:
+            raise ValueError('Samples must be square [y, x] on nodes(extra) with extra > 0')
+        return self.nodes(extra=sampled.shape[0] - self.size)
+
+    def stiffness_load(self, derivative_x: Array, derivative_y: Array) -> Array:
+        """Weak loads int (a d_x + b d_y)(phi_k psi_l) for a sampled gradient (a, b).
+
+        These are the momentum loads of a known field g, which is how a nonzero Dirichlet
+        value enters: the trial basis vanishes on the walls, so the wall value is split off
+        as a known g and its loads move to the right-hand side. For g that lies in the
+        space this returns exactly `velocity_stiffness @ coefficients`, which is the
+        identity the test pins down.
+        """
+        nodes_x, weights_x, nodes_y, weights_y = self._sampling(derivative_x)
+        phi, psi = self.velocity_values(nodes_x, nodes_y)
+        phi_prime, psi_prime = self.velocity_derivatives(nodes_x, nodes_y)
+        weight = weights_y[:, None] * weights_x[None, :]
+        first = psi @ (np.asarray(derivative_x) * weight) @ phi_prime.T
+        second = psi_prime @ (np.asarray(derivative_y) * weight) @ phi.T
+        return first.T + second.T
+
+    def divergence_load(self, divergence: Array) -> Array:
+        """Weak loads int d chi_m eta_n of the divergence of a known field.
+
+        Indexed [m, n] like the pressure coefficients, including the constant mode, which
+        the Stokes solve drops as the gauge. The quadrature convention is pinned by the
+        same identity as `stiffness_load`: for a field in the velocity space this must
+        reproduce the assembled divergence blocks.
+        """
+        nodes_x, weights_x, nodes_y, weights_y = self._sampling(divergence)
+        chi, eta = self.pressure_values(nodes_x, nodes_y)
+        weight = weights_y[:, None] * weights_x[None, :]
+        return (eta @ (np.asarray(divergence) * weight) @ chi.T).T
+
 
 def _sparse(matrix: Array) -> sp.csr_matrix:
     """One sparse factor for kron: passing a dense array would switch its output type."""
