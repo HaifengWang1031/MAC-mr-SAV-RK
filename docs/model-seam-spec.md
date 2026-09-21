@@ -1,8 +1,8 @@
 # Confirmed model-seam specification
 
-Status: proposed 2026-09-21. Implement only after the test seams in the last section
-are confirmed. Source of the request: the plan to add finite-element and spectral
-solvers.
+Status: confirmed 2026-09-21 — the test seams and the rounding gate below were
+confirmed by the user, so implementation may proceed slice by slice. Source of the
+request: the plan to add finite-element and spectral solvers.
 
 ## Purpose
 
@@ -58,7 +58,9 @@ distributed path an owning PETSc vector.
    behaviour-identical wrappers (`combine` over NumPy, `apply_K` = `ops.K @ V`, …).
    Gate: the entire existing suite passes unchanged.
 2. Rewrite `sdirk2.py` and `sdirk2_mrsav.py` against the protocol only.
-   Gate: the scheme, integration and workflow tests pass unchanged.
+   Gate: the scheme, integration and workflow tests pass unchanged, the confirmed
+   seam 1 comparison passes, and the deviation from pre-refactor output is measured
+   and recorded here (see the rounding gate below).
 3. Drive the shared schemes through `PETScStokes` (single-rank PETSc adapter).
    Gate: agreement with the SuperLU reference.
 4. Drive them through `ParallelStokes` on 2 and 4 ranks.
@@ -75,26 +77,47 @@ Each slice is independently revertible and leaves the repository green.
   Mitigation: the slicing above, plus independent references (SuperLU, the serial MAC
   path, the ghost-point stencil) instead of assertions recomputed the way the code
   computes them.
-- The serial `combine` must reproduce the current expression order and temporaries;
-  otherwise every recorded result shifts at roundoff, identities change and stored
-  comparisons stop matching. Slice 1 must show bitwise-identical scheme output.
+- Rounding: the confirmed decision is that the serial `combine` stays generic (a
+  term-by-term `axpy` accumulation), so its association order differs from today's
+  hand-written expressions and results shift at roundoff. Measured consequence and
+  gate:
+
+  * Slice 1 changes no scheme arithmetic — it only adds wrappers — so its output is
+    unchanged by construction, and the existing suite passing unchanged is the whole
+    gate.
+  * Slice 2 introduces the shift. Its gate is agreement with pre-refactor output
+    within a low relative tolerance whose **actual measured value must be reported in
+    this document when slice 2 lands**, not declared in advance. Identity hashing
+    already treats a code change as a new run identity, so nothing is silently
+    reused; the point of measuring is to show the shift is roundoff and not a
+    formula change.
+  * `docs/validation.md` gains a note when slice 2 lands, because the recorded
+    tables there were produced by the pre-refactor expression order and are no longer
+    bitwise comparable.
 - The distributed SAV stage currently broadcasts the selected root from rank 0. With
   a global-reducing `inner`, every rank derives identical coefficients, so the
   broadcast becomes redundant; removing it belongs to slice 4 and must not change the
   selected root, which is itself residual-checked.
 
-## Proposed test seams (needs confirmation before any test is written)
+## Confirmed test seams
 
-1. **Scheme-versus-model** (new): one test drives both schemes through the serial MAC
-   model and through the single-rank PETSc model and requires identical results,
-   extending today's adapter test from one SDIRK2 step to both schemes.
-2. **Distributed-versus-serial** (existing, must keep passing unchanged):
+Confirmed 2026-09-21. No test is written outside these seams.
+
+1. **Scheme versus model** (new, confirmed): one test drives *the same* scheme object
+   through the serial MAC model and through the single-rank distributed model, for
+   both SDIRK2 and SDIRK2-mr-ccSAV, and requires agreement. This is the invariant the
+   refactor creates: today only two separate implementations are compared, afterwards
+   one implementation must serve both models, so an incomplete seam fails here
+   directly.
+2. **Distributed versus serial** (existing, unchanged):
    `tests/test_parallel.py::test_distributed_time_steps_match_serial_sdirk` for both
-   `sav=False` and `sav=True`.
-3. **Seam members** (new): `combine`, `apply_K`, `inner` and `max_abs` are checked
-   against independent references — the current serial expressions, and NumPy applied
-   to gathered fields — so a wrong wrapper cannot pass by construction.
-4. **Unchanged seams**: the agreed list in `docs/spec.md` (public MAC operators and
-   boundary behaviour, JIT kernels versus an independent reference, Stokes/stage
-   residuals and root behaviour, integration/convergence, run/save/load/analyze/
-   reuse/rerun) continues to gate every slice.
+   `sav=False` and `sav=True`, as the gate for every slice.
+3. **Seam members** (new, confirmed in full): all four adapted members — `combine`,
+   `apply_K`, `inner`, `max_abs` — are checked against independent references: the
+   pre-refactor serial expressions for the first two, and NumPy applied to gathered
+   fields for the last two. A wrong wrapper must fail here rather than drift into a
+   scheme-level difference.
+4. **Unchanged seams** (confirmed): the agreed list in `docs/spec.md` (public MAC
+   operators and boundary behaviour, JIT kernels versus an independent reference,
+   Stokes/stage residuals and root behaviour, integration/convergence, run/save/load/
+   analyze/reuse/rerun) continues to gate every slice.
