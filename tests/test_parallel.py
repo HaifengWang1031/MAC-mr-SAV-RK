@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 pytest.importorskip("petsc4py")
-from solver.parallel.stokes import ParallelStokes
+from solver.mac_parallel.stokes import ParallelStokes
 from solver.mac.grid import MACGrid
 
 
@@ -48,7 +48,7 @@ def test_partitioned_stencils_and_stokes_match_serial_reference():
 
 @pytest.mark.parametrize('sav',[False,True])
 def test_distributed_time_steps_match_serial_sdirk(sav):
-    from solver.parallel.integrate import ParallelNS,ParallelSDIRK2
+    from solver.mac_parallel.integrate import ParallelNS,ParallelSDIRK2
     from solver.mac_ns import MACNavierStokes
     from solver.schemes.sdirk2 import SDIRK2
     from solver.schemes.sdirk2_mrsav import SDIRK2MRSAV
@@ -110,7 +110,7 @@ def test_single_rank_petsc_adapter_matches_direct_backend():
     from solver.mac.stokes import DirectStokes
     from solver.mac_ns import MACNavierStokes
     from solver.schemes.sdirk2 import SDIRK2
-    from solver.parallel.serial_adapter import PETScStokes
+    from solver.mac_parallel.serial_adapter import PETScStokes
     from experiments.problems import initial_velocity
     rng=np.random.default_rng(11)
     g=MACGrid(9,7,1.3,.8)

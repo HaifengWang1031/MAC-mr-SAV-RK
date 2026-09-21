@@ -16,7 +16,7 @@ from petsc4py import PETSc
 from solver.mac.grid import MACGrid
 from solver.core import State,Stage
 from solver.integrate import Result
-from solver.parallel.integrate import ParallelNS,ParallelSDIRK2,DistributedStage
+from solver.mac_parallel.integrate import ParallelNS,ParallelSDIRK2,DistributedStage
 from experiments.workflow import PROJECT,effective_config,provenance,write_json,save_result,digest,verified
 
 

@@ -31,6 +31,11 @@ solver/
     operators.py          D、G、K 的相容离散
     kernels.py            Numba 对流、散度、内积核
     stokes.py             耦合稀疏求解、LU 缓存、后端接口
+  mac_parallel/           MAC 离散的分布式实现（PETSc/MPI，可选 extra）
+    layout.py             沿 y 分条带、halo 交换与全局编号
+    stokes.py             PETSc 分布式装配、FGMRES/BiCGStab 与块 AMG 预条件
+    integrate.py          分布式状态与同一套 SDIRK2 / SDIRK2-mr-ccSAV 阶段公式
+    serial_adapter.py     单 rank PETSc 适配串行 StokesBackend，与 SuperLU 交叉验证
   schemes/
     sdirk2.py             普通 IMEX-SDIRK2
     sdirk2_mrsav.py        增量 SDIRK2-mr-ccSAV
