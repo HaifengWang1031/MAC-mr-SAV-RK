@@ -111,10 +111,56 @@ def test_load_of_a_basis_function_is_its_mass_column():
         assert np.max(np.abs(load.reshape(-1) - reference)) < 1e-11 * np.max(np.abs(reference))
 
 
-@pytest.mark.xfail(reason='slice S1 is not finished: see docs/spectral.md', strict=False)
-def test_manufactured_steady_stokes_converges_spectrally():
+def test_load_of_a_separable_function_factors_on_a_rectangle():
+    """The rectangular reference that the transposed tensor-product order cannot pass.
+
+    f = x * y(1 - y/ly) is separable, so the load must be the outer product of two 1D
+    integrals, and its non-zero pattern {0,1} x {0,2} is not symmetric. The transposed
+    order returns that outer product transposed, which passes every square-domain test
+    (where the fields and basis are symmetric under x <-> y) and fails only here.
+    """
+    lx, ly = 1.3, .8
+    space = Space(5, lx, ly)
+    nodes_x, weights_x, nodes_y, weights_y = space.nodes(extra=6)
+    basis_x = basis.dirichlet_values(space.size, 2 * nodes_x / lx - 1)
+    basis_y = basis.dirichlet_values(space.size, 2 * nodes_y / ly - 1)
+    integral_x = basis_x @ (nodes_x * weights_x)
+    integral_y = basis_y @ ((nodes_y * (1 - nodes_y / ly)) * weights_y)
+    load = space.load(lambda x, y: x * (y * (1 - y / ly)))
+    np.testing.assert_allclose(load, np.outer(integral_x, integral_y), rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.parametrize('lx,ly', [(1., 1.), (1.3, .8)])
+def test_diffusion_reproduces_a_polynomial_exactly(lx, ly):
+    """The strongest per-mode reference: no pressure coupling and the exact solution is in
+    the space, so the discrete solution must be exact up to roundoff. This is the test that
+    exposed the transposed load, which every square-domain check passed."""
+    import sympy as sy
+    from scipy.sparse.linalg import splu
+    symbolic_x, symbolic_y = sy.symbols('x y')
+    nu = .1
+    exact = (symbolic_x / lx) * (1 - symbolic_x / lx) * (symbolic_y / ly) * (1 - symbolic_y / ly)
+    forcing = -nu * (sy.diff(exact, symbolic_x, 2) + sy.diff(exact, symbolic_y, 2))
+    exact_function = sy.lambdify((symbolic_x, symbolic_y), exact, 'numpy')
+    forcing_function = sy.lambdify((symbolic_x, symbolic_y), forcing, 'numpy')
+    for size in (3, 6, 10):
+        space = Space(size, lx, ly)
+        coefficients = splu((nu * velocity_stiffness(space)).tocsc()).solve(space.load(forcing_function).reshape(-1))
+        nodes_x, _, nodes_y, _ = space.nodes(extra=8)
+        grid_x, grid_y = np.meshgrid(nodes_x, nodes_y)
+        error = space.evaluate(coefficients.reshape(size, size), nodes_x, nodes_y) - exact_function(grid_x, grid_y)
+        assert np.max(np.abs(error)) < 1e-13
+
+
+@pytest.mark.parametrize('lx,ly', [(1., 1.), (1.3, .8)])
+def test_manufactured_steady_stokes_converges_spectrally(lx, ly):
+    """Spectral convergence of both fields against the manufactured solution.
+
+    The rectangular case is the one that matters: the square domain cannot see a
+    transposition of a mode-indexed array, because the fields and the basis are then
+    symmetric under x <-> y.
+    """
     from experiments.problems import _expressions
-    lx = ly = 1.
     nu, amplitude = .1, .2
     expressions = _expressions(lx, ly, nu)
     load_x = lambda x, y: amplitude * expressions[3](x, y, 0.)
@@ -122,8 +168,8 @@ def test_manufactured_steady_stokes_converges_spectrally():
     exact_x = lambda x, y: amplitude * expressions[0](x, y, 0.)
     exact_y = lambda x, y: amplitude * expressions[1](x, y, 0.)
     exact_p = lambda x, y: amplitude * expressions[2](x, y, 0.)
-    errors = []
-    for size in (8, 12, 16, 20, 24):
+    errors_u, errors_p = [], []
+    for size in (8, 12, 16, 20):
         space = Space(size, lx, ly)
         solver = SpectralStokes(space, tolerance=1e-11)
         solution = solver.solve(space.load(load_x), space.load(load_y), mass=0., viscosity=nu)
@@ -132,11 +178,13 @@ def test_manufactured_steady_stokes_converges_spectrally():
         weights = np.outer(weights_y, weights_x)
         error = np.hypot(space.evaluate(solution.velocity_x, nodes_x, nodes_y) - exact_x(grid_x, grid_y),
                          space.evaluate(solution.velocity_y, nodes_x, nodes_y) - exact_y(grid_x, grid_y))
-        errors.append(float(np.sqrt(np.sum(weights * error ** 2))))
-        assert solution.divergence_inf < 1e-6
-    # spectral convergence on a smooth solution: four extra modes per step must buy at
-    # least two decades, which algebraic convergence of the same order cannot deliver.
-    assert errors[-1] < 1e-8, errors
-    assert errors[-1] < 1e-2 * errors[0], errors
-    for earlier, later in zip(errors, errors[1:]):
-        assert later < earlier
+        errors_u.append(float(np.sqrt(np.sum(weights * error ** 2))))
+        errors_p.append(float(np.sqrt(np.sum(weights * (space.evaluate_pressure(solution.pressure, nodes_x, nodes_y)
+                                                        - exact_p(grid_x, grid_y)) ** 2))))
+        assert solution.divergence_inf < 1e-3 * (1 + np.max(np.abs(exact_x(grid_x, grid_y))))
+    # A smooth manufactured solution: four more modes per direction buy four decades here,
+    # which is far beyond anything an algebraic rate of the same resolution could give.
+    assert errors_u[1] < 1e-2 * errors_u[0], errors_u
+    assert errors_u[2] < 1e-2 * errors_u[1], errors_u
+    assert errors_u[3] < 1e-12, errors_u
+    assert errors_p[3] < 1e-12, errors_p

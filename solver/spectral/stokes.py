@@ -105,9 +105,15 @@ class SpectralStokes:
             - self.divergence_y.T @ pressure_flat - np.asarray(load_y).reshape(-1)])
         scale = 1 + np.max(np.abs(load_velocity))
         residual = float(np.max(np.abs(defect)) / scale)
+        # The constraint is imposed weakly, so the gate is the modal continuity residual
+        # (machine zero, all rows including the gauge row) rather than the pointwise
+        # divergence, which is a resolution diagnostic: the pressure space cannot represent
+        # the unresolved part and the value falls only as the velocity converges.
+        continuity = float(np.max(np.abs(self.divergence_x @ velocity_x.reshape(-1)
+                                         + self.divergence_y @ velocity_y.reshape(-1))))
         divergence = self.divergence_inf(velocity_x, velocity_y)
-        if not np.isfinite(solution).all() or residual > 100 * self.tolerance or divergence > 100 * self.tolerance:
-            raise RuntimeError(f'Spectral Stokes residual={residual:.3e}, divergence={divergence:.3e}')
+        if not np.isfinite(solution).all() or residual > 100 * self.tolerance or continuity > 100 * self.tolerance:
+            raise RuntimeError(f'Spectral Stokes residual={residual:.3e}, continuity={continuity:.3e}')
         return StokesSolution(velocity_x, velocity_y, pressure, residual, divergence)
 
     def divergence_inf(self, velocity_x: Array, velocity_y: Array) -> float:
@@ -118,6 +124,8 @@ class SpectralStokes:
         values_x, values_y = space.velocity_values(nodes_x, nodes_y)
         # u pairs with the x derivative, v with the y derivative; the results come out in
         # the [y, x] order that meshgrid uses.
-        divergence = (values_y.T @ velocity_x @ derivative_x
-                      + derivative_y.T @ velocity_y @ values_x)
+        # Same [x mode, y mode] index as everywhere else, so the coefficient matrices are
+        # transposed before contacting the mode axis of the y basis.
+        divergence = (values_y.T @ velocity_x.T @ derivative_x
+                      + derivative_y.T @ velocity_y.T @ values_x)
         return float(np.max(np.abs(divergence)))

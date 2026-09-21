@@ -47,72 +47,54 @@ scaled by `lx`, which pushed the reference coordinate outside `[-1, 1]`; and the
 of `Dx` used the velocity mass where the pressure test function requires the
 pressure-times-velocity projection, which silently enforced a different constraint.
 
-## What is not verified yet: the manufactured steady Stokes solution
+## What was wrong, and how it was found
 
-`tests/test_spectral.py::test_manufactured_steady_stokes_converges_spectrally` is marked
-xfail. Measured behaviour with the manufactured fields of `experiments/problems.py`
-(`psi = A sin^2(pi x) sin^2(pi y)`, `nu = 0.1`, `A = 0.2`):
+The first version of this slice looked like a solver bug: the manufactured Stokes velocity
+came out three times too small, the errors did not move with resolution, and the pointwise
+divergence sat at O(1). It was not a solver bug — the algebraic residuals were machine zero
+throughout. Three real defects, all of them in the *projection and comparison* code:
 
-- the algebraic residuals are machine zero — momentum 1e-16 and the continuity rows 1e-16,
-  including the row whose pressure mode was removed;
-- but the discrete velocity is about three times smaller than the exact one
-  (max 0.19 against 0.62), and the L2 errors stay at 3.4e-1 and 4.5e-1 for every
-  resolution from 8 to 32 modes: they do not converge;
-- the pointwise divergence sits at about 3.1 and drifts slightly upward with resolution.
+1. `Space.load` contracted the `meshgrid` output in the wrong order, so on a rectangle the
+   load was the transpose of the right one. Every square-domain test passed either way,
+   because the manufactured fields and the basis are then symmetric under `x <-> y`; the
+   defect appeared only against symbolic integration on a rectangle, and only in the (0,2)
+   and (2,0) entries.
+2. `Space.evaluate` had the same transposition, so it returned the field of the transposed
+   coefficients. That is invisible for symmetric coefficients — a square domain, or a field
+   built from `phi_0 psi_0` — which is why the exact-polynomial diffusion test passed while
+   the manufactured comparison did not.
+3. The pressure was evaluated with the *velocity* basis. The pressure space uses plain
+   Legendre, so the manufactured pressure looked non-convergent while the velocity was
+   already at machine precision. `Space.evaluate_pressure` now exists for it.
 
-A non-zero load, operators verified against quadrature of the same weak forms, and a
-machine-zero residual together mean the discrete problem being solved is not the intended
-one. The error is therefore in the setup rather than in the assembly, and every
-self-consistent check — assembly against quadrature of the same weak form — is blind to it
-by construction. Earlier attempts to explain it as a leak, a quadrature error or a
-missing factor were each refuted by measurement and are recorded here so they are not
-retried.
+Three process lessons, recorded because they cost hours:
 
-## Next step
+- An index convention cannot be settled by reasoning; it has to be compared against a value
+  produced somewhere else. Symbolic integration is that somewhere else.
+- A check that passes on a square domain proves nothing about mode ordering. Ordering
+  defects need a rectangle, or a mode pattern that is not symmetric.
+- When a residual is machine zero and the answer looks wrong, suspect the comparison before
+  the solver. Every intermediate here was telling the truth except the diagnostics.
 
-Decouple the pieces instead of guessing:
+## What is verified now
 
-1. solve a pure diffusion (Helmholtz) problem with the same machinery and a polynomial
-   exact solution that the Dirichlet basis reproduces exactly — no pressure coupling, so
-   any remaining error is in the operator or the load;
-2. add the pressure coupling and repeat the manufactured test, expecting spectral
-   convergence;
-3. add the moving-lid lifting for the inhomogeneous boundary;
-4. only then compare against the validated MAC cavity solutions and produce the figures.
+| check | result |
+|---|---|
+| 1D matrices against sympy symbolic integration | exact, deviation 0 |
+| 2D blocks against quadrature of the same weak forms, basis by basis, square and rectangle | below 1e-12 relative |
+| load of a separable function on a rectangle against the outer product of two 1D integrals | below 1e-12; the transposed order fails this |
+| diffusion with a polynomial exact solution, square and rectangle, `nu = 0.1` and `2.5` | exact to 1e-16 |
+| manufactured steady Stokes, velocity | 1.2e-05 at 8 modes, 3.2e-09 at 12, 2.7e-13 at 16, 4e-16 at 20 |
+| manufactured steady Stokes, pressure | 1.0e-06 at 8 modes, 1.8e-10 at 12, 1.2e-14 at 16, 1.3e-16 at 20 |
+| modal continuity residual | machine zero, including the row whose pressure mode is the gauge |
 
-## Progress after the diffusion decoupling (2026-09-21)
-
-The decoupled diffusion problem — no pressure coupling, and a polynomial exact solution
-that lies in the trial space — is **exact on the square domain**: `max|u_h - u|` between
-1e-17 and 3e-17 for `nu = 0.1` and for `nu = 2.5`, at every resolution tried. Operator,
-load and solve are therefore all correct there.
-
-On the rectangular domain the error stays at 3.5e-3 regardless of resolution, and it is now
-localized to exactly two load entries:
-
-| entry | sympy | assembled load | assembled `nu*S*c_exact` |
-|---|---|---|---|
-| (0,2) | -0.00410256 | **-0.01083333** | -0.00410256 |
-| (2,0) | -0.01083333 | **-0.00410256** | -0.01083333 |
-
-The stiffness applied to the exact solution matches symbolic integration exactly, so the
-stiffness is right and the load is transposed in that pair. The continuous identity
-`int nu grad(u):grad(v) = int f v` holds symbolically to 1e-14 for those same modes, which
-is what makes the table decisive rather than suggestive.
-
-Two traps cost real time here and are recorded so they are not repeated:
-
-- On a square domain the transposition is *invisible*, because the manufactured fields and
-  the basis are then symmetric under `x <-> y`. Every square-domain test passes either way,
-  so only a rectangular domain can expose it.
-- The one-line discriminator tried earlier — the non-zero pattern of `int x phi_k psi_l` —
-  is ambiguous, because that pattern is itself symmetric: a load with non-zeros only in the
-  first row and one with non-zeros only in the first column produce the same set of row and
-  column maxima. Only the numeric value of a known entry settles the convention.
+Both fields converge spectrally on the square and on the rectangle. Beyond 20 modes the
+error sits at roundoff and drifts slowly upward: that is the accuracy limit of a single
+Legendre element in double precision, and it is the reason a multi-element basis exists.
 
 ## Next step
 
-Assemble the load component by component, one basis pair at a time, with no tensor-product
-shortcut and compare against the symbolic table above. That removes the ambiguity by
-construction instead of by argument. Once the rectangular diffusion problem is exact too,
-the pressure coupling can be revisited with the same per-mode references.
+- S2: implement `solver/model.py` for this discretisation, so `SDIRK2` and `SDIRK2-mr-ccSAV`
+  drive it and the unsteady manufactured test shows the expected second order in time.
+- S3: add the moving-lid lifting for the inhomogeneous boundary, run the sharp and the
+  regularised lid-driven cavity, and compare against the validated MAC solutions.

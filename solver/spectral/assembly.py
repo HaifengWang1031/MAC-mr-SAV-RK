@@ -58,6 +58,23 @@ class Space:
         return (basis.dirichlet_derivatives(self.size, reference_x) * (2 / self.lx),
                 basis.dirichlet_derivatives(self.size, reference_y) * (2 / self.ly))
 
+    def pressure_values(self, x: Array, y: Array) -> tuple[Array, Array]:
+        """chi_m(x) and eta_n(y), the plain Legendre basis the pressure space uses.
+
+        The pressure basis is not the Dirichlet-combined one, so evaluating a pressure with
+        `evaluate` silently returns a different field; that mistake made the manufactured
+        pressure look non-convergent while the velocity was already at machine precision.
+        """
+        reference_x = 2 * np.asarray(x) / self.lx - 1
+        reference_y = 2 * np.asarray(y) / self.ly - 1
+        return (basis.legendre_values(self.size, reference_x)[:self.size],
+                basis.legendre_values(self.size, reference_y)[:self.size])
+
+    def evaluate_pressure(self, coefficients: Array, x: Array, y: Array) -> Array:
+        """Values of sum C[m,n] chi_m(x) eta_n(y), shaped like meshgrid(x, y) i.e. [y, x]."""
+        chi, eta = self.pressure_values(x, y)
+        return eta.T @ coefficients.T @ chi
+
     def load(self, function: Callable[[Array, Array], Array]) -> Array:
         """Galerkin load int f phi_k psi_l dx dy by Gauss-Legendre quadrature.
 
@@ -70,18 +87,26 @@ class Space:
         phi, psi = self.velocity_values(nodes_x, nodes_y)
         weighted_x = phi * weights_x[None, :]
         weighted_y = psi * weights_y[None, :]
-        # `values` is indexed [y, x] because meshgrid(nodes_x, nodes_y) puts x in the
-        # columns, so the y weights contract its rows and the x weights its columns, and
-        # the result is [x, y] like every other coefficient array here. The decisive check
-        # is analytic: int x phi_k psi_l is non-zero only in column zero, and int y phi_k
-        # psi_l only in row zero. Two earlier attempts to "fix" this line transposed it the
-        # wrong way; the discriminator above is what settles it.
-        return weighted_y @ values @ weighted_x.T
+        # meshgrid(nodes_x, nodes_y) varies x along columns, so `values` is indexed
+        # [y, x] and has to be transposed before contracting with the mode index; the
+        # result is [x, y] like every other coefficient array here. The order is not a
+        # matter of taste and cannot be settled by reasoning about index conventions: on a
+        # square domain both orders agree, and an earlier "discriminator" was ambiguous
+        # because its non-zero pattern is symmetric. It is settled by comparing against
+        # sympy on a rectangle, where the un-transposed form swaps the (0,2) and (2,0)
+        # entries, and by the separable test in tests/test_spectral.py.
+        return weighted_x @ values.T @ weighted_y.T
 
     def evaluate(self, coefficients: Array, x: Array, y: Array) -> Array:
-        """Values of sum C[k,l] phi_k(x) psi_l(y), shaped like meshgrid(x, y) i.e. [y, x]."""
+        """Values of sum C[k,l] phi_k(x) psi_l(y), shaped like meshgrid(x, y) i.e. [y, x].
+
+        The coefficient matrix is indexed [x mode, y mode], so it has to be transposed
+        before contacting the mode axis of psi; without that this returns the field of the
+        transposed coefficients, which is invisible whenever those coefficients are
+        symmetric (a square domain, or a field built from phi_0 psi_0) and wrong otherwise.
+        """
         phi, psi = self.velocity_values(x, y)
-        return psi.T @ coefficients @ phi
+        return psi.T @ coefficients.T @ phi
 
     def l2_norm(self, coefficients: Array) -> float:
         """||f||_2 of the represented field, from the exact velocity mass matrix."""
