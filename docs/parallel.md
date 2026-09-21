@@ -63,7 +63,10 @@ PETSC_DIR="$(brew --prefix petsc)" uv sync --locked --extra mpi
 
 **已试过且行不通的方向（不要重试）。**
 
-- `-pres_pc_gamg_type geo`（几何粗化）：**失败**，`PCSetUp` 报 PETSc error 77。GAMG 的几何粗化需要有 DM 提供网格层次，而本实现直接用裸 Mat/Vec，因此**几何多重网格无法靠选项获得，必须把 `ParallelStokes` 改写到 `DMDA` 上**。
+- `-pres_pc_gamg_type geo`（几何粗化）：**失败**，`PCSetUp` 报 PETSc error 77。**即使给 PC 挂上匹配的 `DMDA` 也一样失败**（隔离测试：`agg` + DM、`agg` + 零空间 + DM、带/不带前缀与 `setFromOptions` 均正常，只要换成 `geo` 就报 77）。所以 GAMG 的几何粗化在本机 PETSc 3.25.5 上不可用。
+- **给 GAMG 挂 DMDA 本身不带来任何加速**：128² 实测 0.434 ms/次（不挂 DM 0.422 ms），256² 1.85 ms/次（不挂 DM 1.94 ms）。矩阵由 `DMCreateMatrix` 创建、布局与 DM 一致也不行。
+- **`PCMG`（真正的几何多重网格）无法直接建立**：`pc.setType('mg')` + `setMGLevels(n)` + `PC.setDM(da)` 在 `KSPSetUp` 报 error 75（2/3/5 层都一样）；加上 `-pc_mg_galerkin` 与逐层光滑子选项后改报 error 83（`KSPSetFromOptions`）。要让它工作还需要显式提供插值/限制（`PCMGSetInterpolation`）或改用 `DMComposite` 重排分块，或换一个带齐相关解算器的 PETSc 构建。
+- **结论（2026-09-21）**：`DMDA` 重写的收益**尚未被证实**。已证的只有「挂 DM 没有收益」；几何/V-cycle 变便宜的那一半在 PETSc 层就没走通。继续这条路之前，应先写一个能真正建立几何 V-cycle 的原型（显式插值或 `DMComposite`），并同时量好「单次应用成本」与「单次应用降残差比」两个量——前者决定时间，后者决定外层 Krylov 会多花多少次迭代。与上面所有实验一样，这些都可用 `PETSC_OPTIONS` 重做，且会写入运行身份。
 - 弱化速度块预条件（`-vel_pc_type jacobi` 或 `none`）：外层迭代数 27 → 115–119，总时间慢 4.7 倍。尽管速度块 L=mI+κK 在 m≫κ 时接近恒等，块预条件的质量仍依赖它。
 - 廉价光滑子（`-pres_mg_levels_ksp_max_it 1` 配合 sor、`agg_nsmooths 0`）：**失败**，撞 300 次迭代上限且散度未收敛。
 - 正对照（`-pres_pc_type jacobi`）也失败，这正好证明选项已真正传到内层 KSP/PC。
