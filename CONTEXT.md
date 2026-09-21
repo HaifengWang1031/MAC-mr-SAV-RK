@@ -8,3 +8,5 @@ Stage pressure is an incremental multiplier, not a demonstrated second-order phy
 最新约定：不使用 nextgen/ 命名；直接在 solver/ 下组织模型、时间推进、MAC 算子及具体格式。使用 uv 管理环境，提交 uv.lock，标准命令为 uv sync --locked 和 uv run。
 
 2026-09-20 可视化扩展：experiments/cavity 支持常速度移动顶盖；法向速度仍为零，黏性边界载荷显式加入阶段右端。原齐次边界实验保持原语义。
+
+2026-09-21 并行扩展：solver/mac_parallel/ 提供同一 MAC 离散的分布式实现（PETSc/MPI，沿 y 分条带，作为可选 extra `mpi`，不装入时不导入 petsc4py）。沿用同一套 IMEX-SDIRK2 / SDIRK2-mr-ccSAV 阶段公式、同一压力定标与全散度检查；外层 FGMRES 或 BiCGStab，速度块与压力块各用 AMG 近似，停止判据同时要求动量残差与散度。串行路径与 V1 语义不变；该后端把散度解到迭代容差级而非机器零，超过 4 进程、二维域分解与多节点均未验证。
