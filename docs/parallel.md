@@ -128,3 +128,22 @@ PETSC_DIR="$(brew --prefix petsc)" uv sync --locked --extra mpi
 **直接法 20 步基线未测**（运行时被中断）。若按其 1024² 实测值推算（分解 413.7 s + 40 次求解 × 3.485 s）约为 553 s，即并行 n=4 约快 5.4×、n=2 约 4.9×。这两个输入量都是 1024² 上的**实测**值（不是跨网格外推），但和数仍是推算，未实测。
 
 未验证：2048² 及以上、二维域分解、并行 HDF5、多节点；1024² 的直接法 20 步基线（见上）。以上并行运行都在本机单节点 4 进程以内。
+
+### 主仓库环境的已知坑（2026-09-21 实测）
+
+在主仓库的 venv 里直接 `PETSC_DIR="$(brew --prefix petsc)" uv sync --locked --extra mpi` 会装上**预编译的 mpi4py wheel**，它与 brew 的 PETSc 编译时所用的 Open MPI 不是同一次构建（实测 mpi4py 对应 libmpi 81.7.0，brew PETSc 对应 81.3.0）。导入 petsc4py 即触发 PETSc 的运行时 MPI-ABI 检查：
+
+```
+PETSC ERROR: MPI library at runtime is not compatible with MPI used at compile time
+PETSC ERROR: Application was linked against both Open MPI and MPICH based MPI libraries
+→ Segmentation fault
+```
+
+两者其实都是 Open MPI，wheel 也未自带 MPI（`@rpath/libmpi.40.dylib` 与 brew 的绝对路径指向同一套安装），所以这是**构建代次不一致**，而不是 MPI 种类混用。副作用比报错本身麻烦：`tests/test_parallel.py` 顶部的 `importorskip` 会真的去导入 petsc4py，于是整个 pytest 进程 abort（而不是跳过）。
+
+两条可行修法：
+
+1. 让 mpi4py 也对着同一套 MPI **源码构建**：在 pyproject 加 `[tool.uv] no-binary-package = ["mpi4py"]`，或用 `UV_NO_BINARY=mpi4py`；
+2. 用同一工具链构建 PETSc / petsc4py。
+
+无论哪条，都建议在**独立环境**里做。主仓库的 venv 保持不含 `mpi` extra：不装时并行测试自动跳过（22 通过 + 1 跳过），`tools/validate.py` 的并行档也会显式跳过并在 `validation_results.json` 里记录原因。

@@ -7,6 +7,43 @@ from experiments.analysis import analyze_runs
 from experiments.workflow import PROJECT,run_experiment,write_json,provenance
 from experiments.convergence import analyze_temporal
 
+def parallel_tier(root: Path = PROJECT) -> dict:
+    """Distributed acceptance tier; explicitly skipped when the mpi extra is unavailable.
+
+    Runs the documented default configuration (outer FGMRES, no PETSC_OPTIONS) on a
+    small ladder so a broken distributed path fails acceptance instead of only being
+    covered by tests. The tier is bounded: 64^2 on 4 ranks, 256^2 on 2 and 512^2 on 4.
+    """
+    import importlib.util,shutil,subprocess
+    for module in ('petsc4py','mpi4py'):
+        if importlib.util.find_spec(module) is None:
+            return {'status':'skipped','reason':f'{module} not installed (uv sync --locked --extra mpi)'}
+    mpiexec=shutil.which('mpiexec')
+    if mpiexec is None:
+        return {'status':'skipped','reason':'mpiexec not on PATH'}
+    records=[]
+    for name,ranks in (('ladder_64',4),('ladder_256',2),('ladder_512',4)):
+        config=PROJECT/f'experiments/parallel_ns/configs/{name}.json'
+        completed=subprocess.run([mpiexec,'-n',str(ranks),sys.executable,
+                                  'experiments/parallel_ns/run.py','--config',str(config),'--root',str(root)],
+                                 cwd=PROJECT,capture_output=True,text=True)
+        report=completed.stdout.strip().splitlines()
+        if completed.returncode!=0:
+            detail=(completed.stderr or completed.stdout).strip().splitlines()
+            raise RuntimeError(f'Parallel tier failed: {name} on {ranks} ranks: {detail[-1] if detail else completed.returncode}')
+        directory=Path(report[-1])
+        manifest=json.loads((directory/'manifest.json').read_text())
+        metrics=manifest['metrics']
+        records.append({'config':name,'ranks':ranks,'path':str(directory.relative_to(root)),
+                        'status':manifest['status'],'accepted_steps':manifest['accepted_steps'],
+                        'iterations':{'mean':metrics['mean_iterations'],'max':metrics['max_iterations']},
+                        'attempts':{'mean':metrics['mean_attempts'],'max':metrics['max_attempts']},
+                        'seconds':{'total':metrics['total_seconds'],'setup':metrics['setup_seconds'],
+                                   'linear_solve':metrics['linear_solve_seconds']}})
+        print('parallel',name,ranks,'ranks',manifest['status'],metrics,flush=True)
+        if manifest['status']!='complete': raise RuntimeError(str(directory))
+    return {'status':'complete','records':records}
+
 def main() -> None:
     records=[]
     for experiment in ('stokes_mms','ns_mms'):
@@ -38,7 +75,8 @@ def main() -> None:
     record={'source':provenance(),'spatial_report':str(spatial.relative_to(PROJECT)),
             'temporal_reports':[str(p.relative_to(PROJECT)) for p in temporal],
             'decay_report':str(decay_report.relative_to(PROJECT)),
-            'spatial_runs':[str(p.relative_to(PROJECT)) for p in records]}
+            'spatial_runs':[str(p.relative_to(PROJECT)) for p in records],
+            'parallel':parallel_tier()}
     write_json(PROJECT/'docs/validation_results.json',record)
     print('Saved docs/validation_results.json',flush=True)
 
