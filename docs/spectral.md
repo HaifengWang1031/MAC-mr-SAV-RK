@@ -79,3 +79,40 @@ Decouple the pieces instead of guessing:
    convergence;
 3. add the moving-lid lifting for the inhomogeneous boundary;
 4. only then compare against the validated MAC cavity solutions and produce the figures.
+
+## Progress after the diffusion decoupling (2026-09-21)
+
+The decoupled diffusion problem — no pressure coupling, and a polynomial exact solution
+that lies in the trial space — is **exact on the square domain**: `max|u_h - u|` between
+1e-17 and 3e-17 for `nu = 0.1` and for `nu = 2.5`, at every resolution tried. Operator,
+load and solve are therefore all correct there.
+
+On the rectangular domain the error stays at 3.5e-3 regardless of resolution, and it is now
+localized to exactly two load entries:
+
+| entry | sympy | assembled load | assembled `nu*S*c_exact` |
+|---|---|---|---|
+| (0,2) | -0.00410256 | **-0.01083333** | -0.00410256 |
+| (2,0) | -0.01083333 | **-0.00410256** | -0.01083333 |
+
+The stiffness applied to the exact solution matches symbolic integration exactly, so the
+stiffness is right and the load is transposed in that pair. The continuous identity
+`int nu grad(u):grad(v) = int f v` holds symbolically to 1e-14 for those same modes, which
+is what makes the table decisive rather than suggestive.
+
+Two traps cost real time here and are recorded so they are not repeated:
+
+- On a square domain the transposition is *invisible*, because the manufactured fields and
+  the basis are then symmetric under `x <-> y`. Every square-domain test passes either way,
+  so only a rectangular domain can expose it.
+- The one-line discriminator tried earlier — the non-zero pattern of `int x phi_k psi_l` —
+  is ambiguous, because that pattern is itself symmetric: a load with non-zeros only in the
+  first row and one with non-zeros only in the first column produce the same set of row and
+  column maxima. Only the numeric value of a known entry settles the convention.
+
+## Next step
+
+Assemble the load component by component, one basis pair at a time, with no tensor-product
+shortcut and compare against the symbolic table above. That removes the ambiguity by
+construction instead of by argument. Once the rectangular diffusion problem is exact too,
+the pressure coupling can be revisited with the same per-mode references.

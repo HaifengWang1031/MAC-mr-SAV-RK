@@ -70,6 +70,12 @@ class Space:
         phi, psi = self.velocity_values(nodes_x, nodes_y)
         weighted_x = phi * weights_x[None, :]
         weighted_y = psi * weights_y[None, :]
+        # `values` is indexed [y, x] because meshgrid(nodes_x, nodes_y) puts x in the
+        # columns, so the y weights contract its rows and the x weights its columns, and
+        # the result is [x, y] like every other coefficient array here. The decisive check
+        # is analytic: int x phi_k psi_l is non-zero only in column zero, and int y phi_k
+        # psi_l only in row zero. Two earlier attempts to "fix" this line transposed it the
+        # wrong way; the discriminator above is what settles it.
         return weighted_y @ values @ weighted_x.T
 
     def evaluate(self, coefficients: Array, x: Array, y: Array) -> Array:
