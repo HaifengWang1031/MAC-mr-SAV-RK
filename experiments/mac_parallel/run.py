@@ -16,7 +16,9 @@ from petsc4py import PETSc
 from solver.mac.grid import MACGrid
 from solver.core import State,Stage
 from solver.integrate import Result
-from solver.mac_parallel.integrate import ParallelNS,ParallelSDIRK2,DistributedStage
+from solver.mac_parallel.integrate import ParallelNS
+from solver.schemes.sdirk2 import SDIRK2
+from solver.schemes.sdirk2_mrsav import SDIRK2MRSAV
 from experiments.workflow import PROJECT,effective_config,provenance,write_json,save_result,digest,verified
 
 
@@ -63,7 +65,7 @@ def run_parallel(config: dict,*,root: Path=PROJECT,rerun: bool=False,comm: Any=M
     grid=MACGrid(cfg['nx'],cfg['ny'],cfg['lx'],cfg['ly'])
     comm.Barrier();start=perf_counter()
     model=ParallelNS(grid,cfg['nu'],comm=comm,tolerance=cfg['linear_tolerance'],max_iterations=cfg['max_iterations'],cache_size=cfg['cache_size'])
-    state=model.initial(amplitude=cfg['amplitude'] if cfg['experiment']!='cavity' else 0.)
+    state: Any=model.initial(amplitude=cfg['amplitude'] if cfg['experiment']!='cavity' else 0.)
     if cfg['experiment']=='cavity':
         def force(t: float) -> Any:
             value=model.zero();layout=model.stokes.layout
@@ -78,14 +80,16 @@ def run_parallel(config: dict,*,root: Path=PROJECT,rerun: bool=False,comm: Any=M
         model.force=lambda t:model.stokes.layout.vector(
             lambda x,y:amplitude*expressions[7](x,y,t)+amplitude**2*expressions[8](x,y,t),
             lambda x,y:amplitude*expressions[9](x,y,t)+amplitude**2*expressions[10](x,y,t))
-    stepper=ParallelSDIRK2(sav=cfg['scheme']=='sdirk2_mrsav',gamma=cfg['gamma'])
+    scheme=SDIRK2() if cfg['scheme']=='sdirk2' else SDIRK2MRSAV(cfg['gamma'])
     times=[0.];diagnostics=[model.diagnostics(state)];stage_records=[]
     nodes=np.r_[0.,np.cumsum(cfg['actual_steps'])]
     requests=cfg['snapshots'];indices=[]
     for t in requests:
         distances=np.abs(nodes-t);tie=8*np.finfo(float).eps*max(float(nodes[-1]),abs(t))
         indices.append(int(np.flatnonzero(distances<=distances.min()+tie)[0]))
-    snapshots={};last_stages: list[DistributedStage]=[];status='complete';error=''
+    # Distributed payloads, typed Any because core.Trial carries the serial State and Stage
+    # types while the model builds its own; the accesses below are checked at run time.
+    snapshots={};last_stages: list[Any]=[];status='complete';error=''
     def keep(index: int) -> None:
         if index in indices:
             fields=model.stokes.layout.gather(state.velocity)
@@ -95,10 +99,11 @@ def run_parallel(config: dict,*,root: Path=PROJECT,rerun: bool=False,comm: Any=M
     keep(0)
     for n,dt in enumerate(cfg['actual_steps']):
         try:
-            trial=stepper.step(model,state,dt)
-            diagnostic=model.diagnostics(trial.state)
+            trial=scheme.step(model,state,dt)
+            new_state: Any=trial.state
+            diagnostic=model.diagnostics(new_state)
             if not all(np.isfinite(v) for v in diagnostic.values()):raise FloatingPointError('Nonfinite diagnostic')
-            state.velocity.destroy();state=trial.state
+            state.velocity.destroy();state=new_state
             for old in last_stages:old.pressure.destroy()
             last_stages=trial.stages
             if comm.rank==0:

@@ -7,8 +7,6 @@ from mpi4py import MPI
 from petsc4py import PETSc
 from ..mac.grid import MACGrid
 from ..model import SolveResult
-from ..schemes.sdirk2 import ETA,DELTA
-from ..schemes.roots import real_roots
 from .stokes import ParallelStokes
 
 
@@ -32,11 +30,6 @@ class DistributedStage:
     candidates: list[float]=field(default_factory=list)
     root_residuals: list[float]=field(default_factory=list)
     scalar_residual: float=0.
-
-@dataclass
-class DistributedTrial:
-    state: DistributedState
-    stages: list[DistributedStage]
 
 class ParallelNS:
     def __init__(self,grid: MACGrid,nu: float,*,comm: Any=MPI.COMM_WORLD,
@@ -136,56 +129,3 @@ class ParallelNS:
         for buffer in self.buffers.values():buffer.destroy()
         self.buffers.clear()
         self.stokes.close()
-
-class ParallelSDIRK2:
-    def __init__(self,*,sav: bool=True,gamma: float=1.) -> None:
-        if not np.isfinite(gamma) or gamma<0:raise ValueError('Invalid gamma')
-        self.sav,self.gamma=sav,gamma
-
-    def _stage(self,model: ParallelNS,rhs: Any,scalar_rhs: float,B: Any,dt: float) -> tuple[Any,DistributedStage]:
-        if not self.sav:
-            combined=combine((1.,rhs),(-dt,B))
-            sol=model.stokes.solve(combined,mass=1.,viscosity=model.nu*ETA*dt);combined.destroy()
-            sol.pressure.scale(1/dt)
-            return sol.velocity,DistributedStage(sol.pressure,sol.residual,sol.divergence_inf)
-        first=model.stokes.solve(rhs,mass=1.,viscosity=model.nu*ETA*dt)
-        second=model.stokes.solve(B,mass=1.,viscosity=model.nu*ETA*dt)
-        alpha=model.inner(B,first.velocity);beta=model.inner(B,second.velocity)
-        if beta < -1e-12*(1+np.sqrt(model.inner(B,B)*model.inner(second.velocity,second.velocity))):
-            raise RuntimeError('Negative Stokes response energy')
-        beta=max(beta,0.)
-        message: Any=None
-        if model.comm.rank==0:
-            try:
-                choice=real_roots(np.array([dt*dt*beta,dt*dt*beta,1+self.gamma*ETA*dt+dt*alpha-dt*dt*beta,
-                                           -scalar_rhs+dt*alpha-dt*dt*beta]))
-                message=(None,choice.selected,choice.candidates,choice.residuals)
-            except Exception as exc:message=(str(exc),0.,[],[])
-        error,r,candidates,root_residuals=model.comm.bcast(message,root=0)
-        if error:raise RuntimeError(error)
-        velocity=combine((1.,first.velocity),(-dt*(1-r*r),second.velocity))
-        pressure=combine((1/dt,first.pressure),(-(1-r*r),second.pressure))
-        scalar=(1+self.gamma*ETA*dt)*r-scalar_rhs+dt*(1+r)*model.inner(B,velocity)
-        scalar_residual=abs(scalar)/(1+abs(scalar_rhs)+abs(r))
-        lap=model.viscous(velocity);gradient=model.stokes.gradient(pressure)
-        defect=combine((1.,velocity),(model.nu*ETA*dt,lap),(dt,gradient),(-1.,rhs),(dt*(1-r*r),B))
-        norm_inf=PETSc.NormType.NORM_INFINITY
-        residual=defect.norm(norm_inf)/(1+rhs.norm(norm_inf)+dt*abs(1-r*r)*B.norm(norm_inf))
-        div=model.stokes.full_D.createVecLeft();model.stokes.full_D.mult(velocity,div)
-        divergence=div.norm(norm_inf)
-        for vec in (first.velocity,second.velocity,first.pressure,second.pressure,lap,gradient,defect,div):vec.destroy()
-        if not np.isfinite([residual,scalar_residual,divergence]).all() or max(residual,scalar_residual,divergence)>1e-8:
-            velocity.destroy();pressure.destroy();raise RuntimeError(f'Stage residuals {residual}, {scalar_residual}, {divergence}')
-        return velocity,DistributedStage(pressure,float(residual),float(divergence),r,candidates,root_residuals,float(scalar_residual))
-
-    def step(self,model: ParallelNS,state: DistributedState,dt: float) -> DistributedTrial:
-        if not np.isfinite(dt) or dt<=0:raise ValueError('Invalid step size')
-        n0=model.nonlinear(state.velocity);f0=model.force(state.t)
-        rhs1=combine((1.,state.velocity),(ETA*dt,f0));b1=combine((ETA,n0))
-        first,s1=self._stage(model,rhs1,state.r,b1,dt)
-        k1=model.viscous(first);n1=model.nonlinear(first);f1=model.force(state.t+ETA*dt)
-        rhs2=combine((1.,first),(-model.nu*dt*(1-2*ETA),k1),(-dt,f0),(dt*(1-DELTA),f1))
-        b2=combine((-1.,n0),(1-DELTA,n1))
-        second,s2=self._stage(model,rhs2,(1-self.gamma*dt*(1-2*ETA))*s1.r,b2,dt)
-        for vec in (n0,f0,rhs1,b1,first,k1,n1,f1,rhs2,b2):vec.destroy()
-        return DistributedTrial(DistributedState(state.t+dt,second,s2.r),[s1,s2])

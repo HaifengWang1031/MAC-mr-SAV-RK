@@ -155,6 +155,32 @@ gap.
 
 Gate: 7 parallel tests pass on 1, 2 and 4 ranks; the serial suite is unchanged.
 
+## Slice 5 record (2026-09-21)
+
+The duplicated stage layer is gone. `ParallelSDIRK2` — 52 lines re-implementing both
+schemes against PETSc vectors — and `DistributedTrial` are deleted from
+`solver/mac_parallel/integrate.py`, which drops from 191 to 131 lines. Its imports of
+`ETA`, `DELTA` and `real_roots` go with it, so the stage formulas now exist only in
+`solver/schemes/`: that duplication was the reason this refactor exists. What remains is
+the discretisation and its distribution: `SlabLayout` with the halo exchange,
+`DistributedState`, `DistributedStage`, `ParallelNS` with the seam members, `combine`,
+and the block-preconditioner and stopping logic in `stokes.py`.
+
+`experiments/mac_parallel/run.py` builds a shared scheme instead of the removed stepper.
+Its distributed payloads are typed `Any`, with a comment saying why: `core.Trial` carries
+the serial `State` and `Stage` types, so a driver that holds PETSc vectors cannot use
+them without a lie. That is the price of keeping `State` as CONTEXT.md confirms it, and it
+is confined to the two parallel drivers.
+
+Gate: the parallel tests pass on 1, 2 and 4 ranks; a real CLI run under `mpiexec -n 2`
+and `-n 4` finishes complete, writes its record and is reused on a second invocation (5
+steps and 10 steps respectively); the serial suite is unchanged at 27 passed with
+`test_parallel.py` skipped; mypy is clean over 43 files.
+
+The refactor is not a line-count win — `solver/model.py` and the seam members add more
+than the 60 deleted lines — it removes the duplication that a third discretisation would
+have multiplied. The payoff is the next discretisation, not this diff.
+
 ## Risks
 
 - The schemes are validated numerical code and the seam touches their arithmetic.
