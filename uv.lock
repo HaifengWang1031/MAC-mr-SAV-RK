@@ -205,6 +205,12 @@ dependencies = [
     { name = "sympy" },
 ]
 
+[package.optional-dependencies]
+mpi = [
+    { name = "mpi4py" },
+    { name = "petsc4py" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
@@ -215,11 +221,14 @@ dev = [
 requires-dist = [
     { name = "h5py", specifier = ">=3.8" },
     { name = "matplotlib", specifier = ">=3.7" },
+    { name = "mpi4py", marker = "extra == 'mpi'", specifier = ">=4,<5" },
     { name = "numba", specifier = ">=0.59" },
     { name = "numpy", specifier = ">=1.24" },
+    { name = "petsc4py", marker = "extra == 'mpi'", specifier = "==3.25.5" },
     { name = "scipy", specifier = ">=1.10" },
     { name = "sympy", specifier = ">=1.12" },
 ]
+provides-extras = ["mpi"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -251,6 +260,24 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/84/39/02e21b74f7439bd643d717ea846006d46e309e6d29b632b57751265311d6/matplotlib-3.11.2-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:3aa4b8516fd26659e4363abbf317c703d9116496c5db2e9d0609a2866dd39dd2", size = 10810580, upload-time = "2026-09-11T19:03:31.402Z" },
     { url = "https://files.pythonhosted.org/packages/04/93/0d239bde12b308262265c2d98909b2f0ecad2b5deeae96241642e822e9c7/matplotlib-3.11.2-cp312-cp312-win_amd64.whl", hash = "sha256:c5c1c68ee401fc98271263410f0e5ce88285abacf7627132914e8adf3d70ff43", size = 9349409, upload-time = "2026-09-11T19:03:34.195Z" },
     { url = "https://files.pythonhosted.org/packages/49/a8/06baf901c02246c8a222b655cc4540ef9c15e1549a04e07927f9cde716c3/matplotlib-3.11.2-cp312-cp312-win_arm64.whl", hash = "sha256:643ff850d8e0f5b8319337f87ed3cb59506afb3df3cc48de777d85871233be7b", size = 9028084, upload-time = "2026-09-11T19:03:37.032Z" },
+]
+
+[[package]]
+name = "mpi4py"
+version = "4.1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/75/83/231445bbcf7ef10864746c244ff2d82000011449b79275642c5d4ed8c8f4/mpi4py-4.1.2.tar.gz", hash = "sha256:56860286dc45f20e8821e93cb06669e30462348bf866f685553fa4b712d58d02", size = 501709, upload-time = "2026-05-16T10:35:23.618Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bf/7e/1524baa98c3b4e3ddc030ec2ad5f6e5a362930317ed3e561d6da1c2e97b1/mpi4py-4.1.2-cp310-abi3-macosx_10_9_x86_64.whl", hash = "sha256:ceb3b6e6f27ba7a39f7721583c04514013b860b829e721769e77398dee97bfa3", size = 1411317, upload-time = "2026-05-16T10:33:56.706Z" },
+    { url = "https://files.pythonhosted.org/packages/2f/73/5918e062a65f40e3bd82a2dccf0c8ba22a284d327ccda46d84d2717985cc/mpi4py-4.1.2-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:251e8880f4cb98e9c8f63c6f6b2c7e819e22b5e4949d47767a0092eed6f814c2", size = 1304635, upload-time = "2026-05-16T10:33:58.685Z" },
+    { url = "https://files.pythonhosted.org/packages/a3/0a/1da7f403e0d8ce0e26d541f7538302cec00cf5b0a98a7a52b929f938a25c/mpi4py-4.1.2-cp310-abi3-manylinux1_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:2ef63b2e3083e6062fd90e4de8c4e3acbf81e0772406e0226eb8dde6a48cab8e", size = 1327130, upload-time = "2026-05-16T10:34:00.269Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/f9/65999152ae82bad914c6a083821ee774afefd6d0544e633b940c9a9ebf3f/mpi4py-4.1.2-cp310-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:6508e654b9c8ff9f611b19548b2a17d1e323b520a15168189f92221e6757b8ff", size = 1182268, upload-time = "2026-05-16T10:34:02.206Z" },
+    { url = "https://files.pythonhosted.org/packages/66/8f/90de8d5e0676f86f7866fd4665193252ea17764a54800d9545c7b53ac00a/mpi4py-4.1.2-cp310-abi3-win_amd64.whl", hash = "sha256:eb69f6273ad155f191850a593deebdf52aed6722979ba0693e02db5663e59699", size = 1466751, upload-time = "2026-05-16T10:34:04.278Z" },
+    { url = "https://files.pythonhosted.org/packages/3e/73/d3d747f74c5aa7be6faf84aef6b234458baeeb0acb35143c288bc04133c5/mpi4py-4.1.2-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:78983a9606e105af1af907878ec41627360344ea576c75afdaca4124db9d0b13", size = 1621733, upload-time = "2026-05-16T10:34:24.804Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/e0/2d029ea1907a477126039a48aadb30113cf3df5bd3c2f27331334b281415/mpi4py-4.1.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:4e5fdba71cf27d0d3b45e706736d6690060976345f45a6408b3594884bb0cc6e", size = 1393929, upload-time = "2026-05-16T10:34:26.585Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/2b/1e48c4c5f9acbdca8dd28beeba9123dde140cd2ca520f8e3a3cf22faeeaa/mpi4py-4.1.2-cp312-cp312-manylinux1_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:00f4cce8999d19f35243c3442ea22debbe3336f69c309cd5d3176df4e51c717a", size = 1358844, upload-time = "2026-05-16T10:34:28.247Z" },
+    { url = "https://files.pythonhosted.org/packages/94/46/a37225d47997fcf30adca25d3849d035bbb61d972118b024db900306e528/mpi4py-4.1.2-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:0a58e164776acb7b52414548b1bf0e5caafce0ee90345deff147873a64b6b2cc", size = 1227206, upload-time = "2026-05-16T10:34:29.866Z" },
+    { url = "https://files.pythonhosted.org/packages/b5/48/14173d8baaf622b76e0e8983f53fffff8538edcf24a020028432e63f20d3/mpi4py-4.1.2-cp312-cp312-win_amd64.whl", hash = "sha256:0a7227a53ba24102f2c4c2c1b226d028fabc473b20ceef5435f1a7ac8cbd508c", size = 1706260, upload-time = "2026-05-16T10:34:31.806Z" },
 ]
 
 [[package]]
@@ -345,6 +372,15 @@ sdist = { url = "https://files.pythonhosted.org/packages/5a/82/42f767fc1c1143d6f
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl", hash = "sha256:a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189", size = 57328, upload-time = "2026-04-27T01:46:07.06Z" },
 ]
+
+[[package]]
+name = "petsc4py"
+version = "3.25.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/93/8e/e74cbd55d455903ca5256b2dee9364704851c669237e3c54c88a1ae07ffb/petsc4py-3.25.5.tar.gz", hash = "sha256:a542fcdcd9471f49e996ee251461a81bf0645e299701de45a9433adee94b4489", size = 487194, upload-time = "2026-08-30T13:38:44.358Z" }
 
 [[package]]
 name = "pillow"
