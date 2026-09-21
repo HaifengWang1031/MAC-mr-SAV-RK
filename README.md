@@ -59,3 +59,7 @@ uv run python tools/validate.py
 - [确认的范围](docs/spec.md)、[领域约定](CONTEXT.md)。
 
 首版不包含变网格、非齐次边界、迭代 Stokes 实现、自适应控制或断点续算。阶段压力是增量乘子；除定常 Stokes 实验外，不将其视为物理终点压力的二阶近似。数值测试不能替代长期稳定性或收敛性的数学证明。
+
+## 经典算例可视化
+
+[顶盖驱动方腔流 Re=100](experiments/cavity/README.md)：新增常速度移动顶盖边界载荷、网格对比与流线/涡量图。

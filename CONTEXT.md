@@ -6,3 +6,5 @@ V1: IMEX-SDIRK2 and incremental SDIRK2-mr-ccSAV, fixed or explicitly prescribed 
 Stage pressure is an incremental multiplier, not a demonstrated second-order physical endpoint-pressure approximation. Candidate roots are enumerated and residual-checked; select minimum absolute r, then the smaller signed r in a tie.
 
 最新约定：不使用 nextgen/ 命名；直接在 solver/ 下组织模型、时间推进、MAC 算子及具体格式。使用 uv 管理环境，提交 uv.lock，标准命令为 uv sync --locked 和 uv run。
+
+2026-09-20 可视化扩展：experiments/cavity 支持常速度移动顶盖；法向速度仍为零，黏性边界载荷显式加入阶段右端。原齐次边界实验保持原语义。

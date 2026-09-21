@@ -10,7 +10,7 @@ from .workflow import PROJECT,run_experiment,write_json,provenance
 def run_batch(batch: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
     base=batch['base']; experiment=base['experiment']
     # Reject unknown base experiment before constructing an output path.
-    if experiment not in ('stokes_mms','ns_mms','decay'): raise ValueError('Unknown experiment')
+    if experiment not in ('stokes_mms','ns_mms','decay','cavity'): raise ValueError('Unknown experiment')
     directory=root/'runs'/experiment/'batches'/(datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')+'-'+uuid4().hex[:8])
     directory.mkdir(parents=True)
     record: dict={'status':'running','config':batch,'source':provenance(),'members':[]}

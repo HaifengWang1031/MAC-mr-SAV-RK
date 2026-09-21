@@ -48,10 +48,15 @@ def provenance() -> dict:
             'threads':{key:os.environ.get(key) for key in ('OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','NUMBA_NUM_THREADS')}}
 
 def effective_config(config: dict) -> dict:
-    unknown=set(config)-set(DEFAULTS)-{'experiment','steps'}
+    unknown=set(config)-set(DEFAULTS)-{'experiment','steps','lid_speed'}
     if unknown: raise ValueError(f'Unknown configuration keys: {sorted(unknown)}')
     cfg={**DEFAULTS,**config}
-    if cfg.get('experiment') not in ('stokes_mms','ns_mms','decay'): raise ValueError('Unknown experiment')
+    if cfg.get('experiment') not in ('stokes_mms','ns_mms','decay','cavity'): raise ValueError('Unknown experiment')
+    if cfg['experiment']=='cavity':
+        cfg['lid_speed']=config.get('lid_speed',1.)
+        if not np.isfinite(cfg['lid_speed']) or cfg['lid_speed']<=0: raise ValueError('Positive finite lid_speed required')
+        cfg['boundary']='moving_top_lid_stationary_other_walls'
+    elif 'lid_speed' in config: raise ValueError('lid_speed is only supported for cavity')
     if cfg['scheme'] not in ('sdirk2','sdirk2_mrsav'): raise ValueError('Unknown scheme')
     MACGrid(cfg['nx'],cfg['ny'],cfg['lx'],cfg['ly'])
     for key in ('nu','T'):
@@ -139,7 +144,8 @@ def run_experiment(config: dict, *, root: Path = PROJECT, rerun: bool = False) -
     write_json(directory/'manifest.json',manifest)
     grid=MACGrid(cfg['nx'],cfg['ny'],cfg['lx'],cfg['ly'])
     model=MACNavierStokes(grid,cfg['nu'],cache_size=cfg['cache_size'])
-    initial=model.state(0.,initial_velocity(grid,cfg['amplitude']))
+    velocity0=np.zeros(grid.size) if cfg['experiment']=='cavity' else initial_velocity(grid,cfg['amplitude'])
+    initial=model.state(0.,velocity0)
     result=Result(initial,[0.],[model.diagnostics(initial)])
     metrics: dict={}
     start=perf_counter()
@@ -160,11 +166,21 @@ def run_experiment(config: dict, *, root: Path = PROJECT, rerun: bool = False) -
             else:
                 if cfg['experiment']=='ns_mms':
                     model.force=lambda t: forcing(grid,cfg['nu'],cfg['amplitude'],t)
+                if cfg['experiment']=='cavity':
+                    from .cavity.model import lid_viscous_load
+                    boundary_load=lid_viscous_load(grid,cfg['nu'],cfg['lid_speed'])
+                    model.force=lambda t: boundary_load
                 scheme=SDIRK2() if cfg['scheme']=='sdirk2' else SDIRK2MRSAV(cfg['gamma'])
                 result=integrate(model,scheme,initial,cfg['actual_steps'],snapshots=cfg['snapshots'])
                 if cfg['experiment']=='ns_mms':
                     exact,_=exact_fields(grid,cfg['nu'],cfg['amplitude'],result.final.t)
                     metrics['velocity_l2_error']=grid.norm(model.vector(result.final)-exact)
+            if cfg['experiment']=='cavity' and result.status=='complete':
+                z=model.vector(result.final)
+                steady_rhs=model.force(result.final.t)-model.nu*(model.ops.K@z)-model.nonlinear(z)
+                projected=model.backend.solve(steady_rhs,mass=1.,viscosity=0.)
+                metrics['steady_rhs_l2']=grid.norm(projected.velocity)
+                metrics['reynolds']=cfg['lid_speed']*cfg['lx']/cfg['nu']
             metrics['integration_seconds']=result.seconds
             if isinstance(model.backend,DirectStokes):
                 metrics.update(factorizations=model.backend.factorizations,
