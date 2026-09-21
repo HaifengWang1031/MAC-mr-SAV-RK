@@ -50,14 +50,21 @@ class BlockPreconditioner:
 
 class ParallelStokes:
     def __init__(self, grid: MACGrid, *, comm: Any = MPI.COMM_WORLD,
-                 tolerance: float = 1e-10, max_iterations: int = 300, cache_size: int = 4) -> None:
+                 tolerance: float = 1e-10, max_iterations: int = 300, cache_size: int = 4,
+                 refinement_attempts: int = 3, refinement_factor: float = 0.01,
+                 tolerance_floor: float = 1e-14) -> None:
         if tolerance<=0 or not np.isfinite(tolerance) or max_iterations<1 or cache_size<1:
             raise ValueError('Invalid iteration controls')
+        if refinement_attempts<1 or not 0<refinement_factor<1 or tolerance_floor<=0:
+            raise ValueError('Invalid divergence-refinement controls')
         self.grid,self.comm,self.tolerance=grid,comm,tolerance
         self.max_iterations,self.cache_size=max_iterations,cache_size
+        self.refinement_attempts,self.refinement_factor=refinement_attempts,refinement_factor
+        self.tolerance_floor=tolerance_floor
         self.layout=SlabLayout(grid,comm)
         self.cache: OrderedDict = OrderedDict()
         self.setup_seconds=0.;self.solve_seconds=0.;self.iterations: list[int]=[]
+        self.attempts: list[int]=[]
         self.K,self.D,self.full_D,self.Q=self._assemble()
         self.G=self.D.copy();self.G.transpose();self.G.scale(-1.)
 
@@ -140,15 +147,34 @@ class ParallelStokes:
         u=self.layout.template.duplicate();p=self.layout.p_template.duplicate();zero=p.duplicate();zero.set(0)
         b=PETSc.Vec().createNest([rhs,zero],comm=self.comm)
         solution=PETSc.Vec().createNest([u,p],comm=self.comm)
-        start=perf_counter();ksp.solve(b,solution);self.solve_seconds+=perf_counter()-start
-        iterations=ksp.getIterationNumber();reason=ksp.getConvergedReason()
-        defect: Any=u.duplicate();L.mult(u,defect);gradient=self.gradient(p);defect.axpy(1.,gradient);defect.axpy(-1.,rhs)
-        residual=defect.norm(PETSc.NormType.NORM_INFINITY)/(1+rhs.norm(PETSc.NormType.NORM_INFINITY))
-        div=self.full_D.createVecLeft();self.full_D.mult(u,div);divergence=div.norm(PETSc.NormType.NORM_INFINITY)
+        defect: Any=u.duplicate();gradient=u.duplicate();div=self.full_D.createVecLeft()
+        # The nested KSP residual is a mixed norm in which the continuity rows (coefficients
+        # ~1/h) are far smaller than the momentum rows (~1/h^2), so a converged momentum
+        # residual does not by itself bound the divergence. Momentum and divergence are both
+        # required here: if only the momentum part is satisfied the tolerance is tightened and
+        # the solve is restarted from the current iterate, so the divergence participates in
+        # the stopping decision instead of only failing the gate afterwards.
+        gate=100*self.tolerance*(1+rhs.norm())
+        reason=0;iterations=0;attempts=0;rtol=self.tolerance
+        residual=divergence=float('inf')
+        while True:
+            attempts+=1
+            ksp.setTolerances(rtol=rtol,atol=rtol*1e-3,max_it=self.max_iterations)
+            start=perf_counter();ksp.solve(b,solution);self.solve_seconds+=perf_counter()-start
+            iterations+=ksp.getIterationNumber();reason=ksp.getConvergedReason()
+            L.mult(u,defect);self.G.mult(p,gradient);defect.axpy(1.,gradient);defect.axpy(-1.,rhs)
+            residual=defect.norm(PETSc.NormType.NORM_INFINITY)/(1+rhs.norm(PETSc.NormType.NORM_INFINITY))
+            self.full_D.mult(u,div);divergence=div.norm(PETSc.NormType.NORM_INFINITY)
+            if reason<=0 or max(residual,divergence)<=gate or attempts>=self.refinement_attempts:
+                break
+            rtol=max(rtol*self.refinement_factor,self.tolerance_floor)
+            ksp.setInitialGuessNonzero(True)
         for vec in (b,solution,zero,defect,gradient,div):vec.destroy()
-        self.iterations.append(iterations)
-        if reason<=0 or not np.isfinite([residual,divergence]).all() or max(residual,divergence)>100*self.tolerance*(1+rhs.norm()):
-            u.destroy();p.destroy();raise RuntimeError(f'FGMRES reason={reason}, residual={residual}, divergence={divergence}, iterations={iterations}')
+        self.iterations.append(iterations);self.attempts.append(attempts)
+        if reason<=0 or not np.isfinite([residual,divergence]).all() or max(residual,divergence)>gate:
+            u.destroy();p.destroy()
+            raise RuntimeError(f'FGMRES reason={reason}, residual={residual}, divergence={divergence}, '
+                               f'iterations={iterations}, attempts={attempts}')
         return ParallelSolution(u,p,float(residual),float(divergence),iterations)
 
     @staticmethod

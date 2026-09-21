@@ -123,6 +123,8 @@ def run_parallel(config: dict,*,root: Path=PROJECT,rerun: bool=False,comm: Any=M
              'pressure_precond_seconds':comm.allreduce(model.stokes.preconditioner_seconds[1],op=MPI.MAX),
              'max_iterations':max(model.stokes.iterations,default=0),
              'mean_iterations':float(np.mean(model.stokes.iterations)) if model.stokes.iterations else 0.,
+             'max_attempts':max(model.stokes.attempts,default=0),
+             'mean_attempts':float(np.mean(model.stokes.attempts)) if model.stokes.attempts else 0.,
              'linear_solves':len(model.stokes.iterations),
              'owned_velocity_dofs_per_rank':comm.allgather(local_storage),
              'global_velocity_dofs':grid.size}
