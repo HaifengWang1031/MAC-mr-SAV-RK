@@ -23,7 +23,7 @@ from .problems import initial_velocity, exact_fields, forcing
 
 PROJECT=Path(__file__).resolve().parents[1]
 DEFAULTS={'nx':32,'ny':32,'lx':1.,'ly':1.,'nu':.1,'amplitude':.1,
-          'T':.1,'dt':.001,'scheme':'sdirk2_mrsav','gamma':1.,'cache_size':4,'snapshots':[]}
+          'T':.1,'dt':.001,'scheme':'sdirk2_mrsav','gamma':1.,'cache_size':4,'snapshots':[],'log_every':1000}
 
 def write_json(path: Path, data: dict) -> None:
     temporary=path.with_suffix('.tmp')
@@ -51,12 +51,17 @@ def effective_config(config: dict) -> dict:
     unknown=set(config)-set(DEFAULTS)-{'experiment','steps','lid_speed'}
     if unknown: raise ValueError(f'Unknown configuration keys: {sorted(unknown)}')
     cfg={**DEFAULTS,**config}
-    if cfg.get('experiment') not in ('stokes_mms','ns_mms','decay','cavity'): raise ValueError('Unknown experiment')
+    if cfg.get('experiment') not in ('stokes_mms','ns_mms','decay','cavity','forced_ns','trig_ns'): raise ValueError('Unknown experiment')
     if cfg['experiment']=='cavity':
         cfg['lid_speed']=config.get('lid_speed',1.)
         if not np.isfinite(cfg['lid_speed']) or cfg['lid_speed']<=0: raise ValueError('Positive finite lid_speed required')
         cfg['boundary']='moving_top_lid_stationary_other_walls'
     elif 'lid_speed' in config: raise ValueError('lid_speed is only supported for cavity')
+    if cfg['experiment']=='forced_ns':
+        cfg.update(force='[0, amplitude*sin(x)]',initial_condition='zero',boundary='homogeneous_no_slip')
+    if cfg['experiment']=='trig_ns':
+        cfg.update(force='[amplitude*cos(x), 0]',initial_condition='weighted_trig_vorticity',boundary='homogeneous_no_slip')
+    if not isinstance(cfg['log_every'],int) or cfg['log_every']<1: raise ValueError('Invalid log_every')
     if cfg['scheme'] not in ('sdirk2','sdirk2_mrsav'): raise ValueError('Unknown scheme')
     MACGrid(cfg['nx'],cfg['ny'],cfg['lx'],cfg['ly'])
     for key in ('nu','T'):
@@ -142,9 +147,17 @@ def run_experiment(config: dict, *, root: Path = PROJECT, rerun: bool = False) -
     write_json(directory/'config.json',cfg)
     manifest['config_sha256']=digest(directory/'config.json')
     write_json(directory/'manifest.json',manifest)
+    if cfg['experiment']=='forced_ns':print(f'run_directory={directory}',flush=True)
+    if cfg['experiment']=='trig_ns':print(f'run_directory={directory}',flush=True)
     grid=MACGrid(cfg['nx'],cfg['ny'],cfg['lx'],cfg['ly'])
     model=MACNavierStokes(grid,cfg['nu'],cache_size=cfg['cache_size'])
-    velocity0=np.zeros(grid.size) if cfg['experiment']=='cavity' else initial_velocity(grid,cfg['amplitude'])
+    if cfg['experiment'] in ('cavity','forced_ns'):
+        velocity0=np.zeros(grid.size)
+    elif cfg['experiment']=='trig_ns':
+        from .forced_ns_convergence.model import initial_velocity_trig
+        velocity0=initial_velocity_trig(grid)
+    else:
+        velocity0=initial_velocity(grid,cfg['amplitude'])
     initial=model.state(0.,velocity0)
     result=Result(initial,[0.],[model.diagnostics(initial)])
     metrics: dict={}
@@ -170,8 +183,19 @@ def run_experiment(config: dict, *, root: Path = PROJECT, rerun: bool = False) -
                     from .cavity.model import lid_viscous_load
                     boundary_load=lid_viscous_load(grid,cfg['nu'],cfg['lid_speed'])
                     model.force=lambda t: boundary_load
+                if cfg['experiment']=='forced_ns':
+                    from .forced_ns_convergence.model import force_vector
+                    constant_force=force_vector(grid,cfg['amplitude'])
+                    model.force=lambda t: constant_force
+                if cfg['experiment']=='trig_ns':
+                    from .forced_ns_convergence.model import force_vector_cos
+                    constant_force=force_vector_cos(grid,cfg['amplitude'])
+                    model.force=lambda t: constant_force
                 scheme=SDIRK2() if cfg['scheme']=='sdirk2' else SDIRK2MRSAV(cfg['gamma'])
-                result=integrate(model,scheme,initial,cfg['actual_steps'],snapshots=cfg['snapshots'])
+                def progress(step: int, time: float, elapsed: float) -> None:
+                    if step%cfg['log_every']==0 or step==len(cfg['actual_steps']):
+                        log.write(f'accepted={step}/{len(cfg["actual_steps"])} t={time:.12g} elapsed={elapsed:.3f}s\n')
+                result=integrate(model,scheme,initial,cfg['actual_steps'],snapshots=cfg['snapshots'],progress=progress)
                 if cfg['experiment']=='ns_mms':
                     exact,_=exact_fields(grid,cfg['nu'],cfg['amplitude'],result.final.t)
                     metrics['velocity_l2_error']=grid.norm(model.vector(result.final)-exact)

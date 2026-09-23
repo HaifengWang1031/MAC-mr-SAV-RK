@@ -1,6 +1,7 @@
 """Common fixed/prescribed-step driver, bounded state storage and failure prefixes."""
 from dataclasses import dataclass, field
 from time import perf_counter
+from collections.abc import Callable
 import numpy as np
 from .core import State, Stage, Scheme, History
 from .mac.grid import Array
@@ -40,11 +41,14 @@ def step_sizes(T: float, *, dt: float | None = None, steps: list[float] | None =
     return np.r_[np.full(count,dt),T-count*dt]
 
 def integrate(model: MACNavierStokes, scheme: Scheme, initial: State, steps: list[float] | Array,
-              snapshots: list[float] | None = None) -> Result:
+              snapshots: list[float] | None = None,
+              progress: Callable[[int, float, float], None] | None = None) -> Result:
     sequence=np.asarray(steps,dtype=float)
     if sequence.ndim!=1 or sequence.size==0 or np.any(sequence<=0) or not np.isfinite(sequence).all():
         raise ValueError('Invalid step sequence')
-    nodes=np.r_[initial.t,initial.t+np.cumsum(sequence)]
+    # Avoid accumulated roundoff excluding T from very long fixed-step schedules.
+    nodes=(initial.t+np.arange(sequence.size+1)*sequence[0] if np.all(sequence==sequence[0])
+           else np.r_[initial.t,initial.t+np.cumsum(sequence)])
     requests=[] if snapshots is None else list(snapshots)
     if any(not np.isfinite(t) or t<initial.t or t>nodes[-1]+1e-12 for t in requests):
         raise ValueError('Snapshot time outside integration interval')
@@ -76,6 +80,7 @@ def integrate(model: MACNavierStokes, scheme: Scheme, initial: State, steps: lis
                                    'scalar_residual':s.scalar_residual,'divergence_inf':s.divergence_inf}
                                   for s in trial.stages])
             if k+1 in indices: kept[k+1]=trial.state
+            if progress is not None: progress(k+1,trial.state.t,perf_counter()-start)
         except Exception as error:
             result.status='failed'
             result.error=f'{type(error).__name__}: {error}'

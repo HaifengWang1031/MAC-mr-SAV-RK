@@ -24,7 +24,8 @@ uv run python experiments/decay/analyze.py --runs runs/decay/<运行编号>
 ```text
 solver/
   core.py                 State、History、Trial、Stage 与格式接口
-  mac_ns.py               速度形式 NS 模型
+  model.py                模型接缝：格式只通过它取算子、求解与诊断（15 个成员）
+  mac_ns.py               MAC 速度形式 NS 模型（接缝实现之一）
   integrate.py            固定/给定序列共同推进
   mac/
     grid.py               交错网格、打包与内积
@@ -36,10 +37,17 @@ solver/
     stokes.py             PETSc 分布式装配、FGMRES/BiCGStab 与块 AMG 预条件
     integrate.py          分布式状态与同一套 SDIRK2 / SDIRK2-mr-ccSAV 阶段公式
     serial_adapter.py     单 rank PETSc 适配串行 StokesBackend，与 SuperLU 交叉验证
+    failures.py           单个 rank 的失败经统一路径上报，避免死锁与静默退出
   schemes/
     sdirk2.py             普通 IMEX-SDIRK2
     sdirk2_mrsav.py        增量 SDIRK2-mr-ccSAV
     roots.py              全部数值实根及最小绝对值选择
+  spectral/               第三个离散：单元素 Dirichlet 组合 Legendre（无新依赖）
+    basis.py              1D 精确矩阵（质量、刚度、散度、投影）与基函数递推
+    assembly.py           Kronecker 张量积装配、Galerkin 载荷与求值
+    lifting.py            非齐次壁面（移动顶盖）作为已知场，载荷入右端、矩阵不变
+    stokes.py             移位 Stokes 鞍点求解与分解缓存
+    model.py              谱离散的接缝实现
   adaptivity/             仅预留接口说明
 experiments/              制造解、配置、计算与分析入口
 runs/                     配置、manifest、HDF5、日志与批次记录

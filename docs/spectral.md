@@ -187,50 +187,28 @@ this fail at every size rather than converge slowly.
 
 ### Two discretisations, one scheme, one benchmark
 
-> **Corrected 2026-09-21, twice over.** Nothing in this subsection is a current measurement.
-> The numbers predate (a) the SAV pairing with a fixed lifting, which changed the auxiliary
-> variable's start and added the lifting work scalar to the stage scalar equation, and (b) the
-> repair of the comparison metric itself. The yardstick was measured by striding face values,
-> which samples half a cell away, because the face offsets of two grids differ by
-> `(factor-1)/2`; that mixed interpolation error into the yardstick and made the sharp-lid
-> ratio look far better than it is. Under the cell-centred metric the sharp lid *fails* the
-> "closer than the coarse grid" criterion (ratio 3.4-3.9) while the regularised lid satisfies
-> it comfortably (0.674). `docs/validation.md`, section "尖锐顶盖判据的度量缺陷", carries the
-> derivation and the current measurements; the assertions in `tests/test_spectral.py` now use
-> the narrowed criteria recorded there.
+The earlier tables in this subsection are superseded by the 2026-09-22 metric review in
+[validation.md](validation.md) and [cavity_metric_validation.json](cavity_metric_validation.json).
+Face striding had a half-fine-cell offset. The first cell-centred replacement then used
+fine-cell area for coarse-grid differences, halving the MAC sensitivity norm. Each error
+now uses the area of its own sampling grid; fine MAC fields are block-averaged to coarse
+cell centres. The primary vortex uses a cell-centred Dirichlet Poisson solve with odd
+wall ghosts and DST-II, independently checked against a sparse solve and analytic flow.
 
-The lid is imposed completely differently on the two sides of the comparison: the MAC
-solver adds a ghost-point viscous load `2 nu U / hy^2` to the top row of u faces (a pure
-right-hand side term), while the spectral solve splits the wall value off as a lifting whose
-trace is the boundary condition. Both runs use SDIRK2-mr-ccSAV from rest, Re=100, unit
-cavity. The yardstick is the MAC solver's *own* grid sensitivity `|32^2 - 64^2|`, measured
-in the same way rather than assumed:
+At Re=100 the regularised lid (T=40, dt=0.08, N16) has spectral/MAC64 error 1.0050678e-3
+against MAC32/64 sensitivity 2.9812594e-3 (ratio 0.337129). For the sharp lid (T=10,
+dt=0.04), the sensitivity is 6.8577160e-3 and the N16/20/24 error ratios are
+1.958087/1.844374/1.674098. These resolutions fail the stronger L2 comparison; the retained
+regression checks the decreasing error and the primary vortex, whose N24 strength differs
+from MAC64 by 0.467372%, with the same sampled location (0.6171875,0.7421875).
+No threshold was relaxed in this correction.
 
-| lid | MAC 32^2 vs 64^2 | spectral 20 modes vs MAC 64^2 | spectral 28 modes vs MAC 64^2 |
-|---|---|---|---|
-| sharp | 0.009001 | 0.006722 | 0.003775 |
-| regularised | 0.006192 | 0.000838 | 0.000838 |
-
-Kinetic energy in that historical run: sharp 0.034008366 (MAC 64^2) against 0.034469608
-(20 modes) and 0.034456119 (28 modes); regularised 0.018663548 against 0.018824777 at both
-sizes. It was a T=40 steady state at dt=0.02 from rest, with MAC 32^2/64^2 and spectral 20/28
-modes, and all of it predates both corrections named above.
-
-What the corrected comparison says -- cell-centred velocity, with a finer reference
-restricted onto the coarser grid by `f x f` block averaging, and the derivation and
-measurements in `docs/validation.md`, section "尖锐顶盖判据的度量缺陷" -- is this. The
-regularised lid satisfies "spectral error <= MAC grid sensitivity": 1.005e-3 against
-1.491e-3, ratio 0.674, unchanged to three digits between dt=0.08 and dt=0.04, and the
-spectral error stops changing after 12 modes, so what is left is the MAC's own discretisation
-error. The sharp lid does *not* satisfy it and cannot: ratio 3.9 / 3.7 / 3.3 at 16 / 20 / 24
-modes. Its constant profile is not representable, so it arrives as a projection with Gibbs
-oscillations, adding modes reduces its error by only 14% from 16 to 24, and the pointwise
-divergence diagnostic sits at 52 (20 modes) and 70 (28 modes) in the corner layer against
-5e-13 for the MAC. That diagnostic is a corner layer, not a failed constraint: the constraint
-residual the schemes gate on is the weak one, which is machine zero, and the constant pressure
-row that would hold the cavity's net flux is the removed gauge. The sharp lid is therefore
-graded on convergence plus the primary vortex -- position equal at grid resolution, strength
-within 0.45% under one shared extraction -- rather than on an error race it cannot win.
+These are finite-resolution comparisons, not proof of an asymptotic error floor or of
+impossibility of further convergence. Gibbs oscillations do not imply persistent L2 error.
+MAC64 is not an exact reference. The MAC starts from zero interior velocity, whereas the
+spectral w0=0 state has physical velocity g; identical physical startup or fully converged
+steady state is not established here. Old negative-control percentages are historical and
+were not revalidated after changing the metric and extraction.
 
 ### Three places the seam had to be made consistent with a lifting
 

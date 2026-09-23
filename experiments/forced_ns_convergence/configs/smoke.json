@@ -1,0 +1,27 @@
+{
+  "base": {
+    "experiment": "forced_ns",
+    "nx": 8,
+    "ny": 8,
+    "lx": 1.0,
+    "ly": 1.0,
+    "nu": 0.01,
+    "amplitude": 1.0,
+    "gamma": 1.0,
+    "T": 0.1,
+    "snapshots": [
+      0.05,
+      0.1
+    ],
+    "log_every": 20
+  },
+  "tau_base": 0.1,
+  "k_levels": [
+    1,
+    2,
+    3
+  ],
+  "reference_k": 6,
+  "sensitivity_threshold": 0.05,
+  "max_reference_refinements": 1
+}

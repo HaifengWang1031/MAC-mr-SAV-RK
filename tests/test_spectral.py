@@ -9,7 +9,7 @@ any solver is involved.
 import numpy as np
 import pytest
 import sympy as sy
-from scipy.fft import dstn
+from scipy.fft import dstn, idstn
 from solver.spectral import basis
 from solver.spectral.assembly import Space, divergence_blocks, velocity_mass, velocity_stiffness
 from solver.spectral.lifting import LidLifting
@@ -451,21 +451,32 @@ def _spectral_cell_centres(space, lifting, state, n):
             space.evaluate(state.v, x, x) + lifting.velocity(x, x)[1])
 
 
-def _primary_vortex(u, v):
-    """Primary vortex strength and position, from one shared finite-difference extraction.
+def _cell_l2(u, v):
+    """Unit-square vector L2 quadrature, using the grid carrying these values."""
+    return float(np.sqrt(np.mean(u*u+v*v)))
 
-    Deliberately the same procedure on both sides: the exact spectral vorticity gives a
-    different value (about 2% at these resolutions), so only a matched extraction is
-    comparable across methods.
+
+def _streamfunction_from_vorticity(omega):
+    """Solve -Delta psi=omega at unit-square cell centres, psi=0 on walls.
+
+    Odd ghost values impose Dirichlet data at the wall half a cell away.
+    The 1D positive Laplacian has boundary diagonal 3/h^2 (interior 2/h^2).
+    Its orthonormal eigenvectors are DST-II modes; inverse is idstn(type=2).
     """
+    n = omega.shape[0]
+    k = np.arange(1, n+1)
+    one = 4*n*n*np.sin(np.pi*k/(2*n))**2
+    return idstn(dstn(omega, type=2, norm='ortho')/(one[:, None]+one[None, :]),
+                 type=2, norm='ortho')
+
+
+def _primary_vortex(u, v):
+    """Sampled vortex of the cell-centred streamfunction; position accuracy is grid-limited."""
     n = u.shape[0]
-    k = np.arange(1, n + 1)
-    eigenvalues = -(4 * n ** 2) * (np.sin(np.pi * k / (2 * (n + 1)))[:, None] ** 2
-                                   + np.sin(np.pi * k / (2 * (n + 1)))[None, :] ** 2)
-    omega = (np.gradient(v, axis=1) - np.gradient(u, axis=0)) * n
-    psi = dstn(-dstn(omega, type=1, norm='ortho') / eigenvalues, type=1, norm='ortho')
+    omega = (np.gradient(v, axis=1, edge_order=2)-np.gradient(u, axis=0, edge_order=2))*n
+    psi = _streamfunction_from_vorticity(omega)
     index = np.unravel_index(psi.argmin(), psi.shape)
-    return float(psi.min()), (index[1] + .5) / n, (index[0] + .5) / n
+    return float(psi.min()), (index[1]+.5)/n, (index[0]+.5)/n
 
 
 def _mac_cavity(n, nu, speed, profile, final_time, dt):
@@ -526,24 +537,18 @@ def test_spectral_cavity_is_within_the_mac_grid_sensitivity_for_the_regularised_
     nu, speed, final_time, dt, size = .01, 1., 40., .08, 16
     coarse_u, coarse_v = _mac_cavity(32, nu, speed, regularised_lid, final_time, dt)
     u, v = _mac_cavity(64, nu, speed, regularised_lid, final_time, dt)
-    area = (1 / 64) ** 2
-    yardstick = float(np.sqrt((np.sum((coarse_u - _block_average(u, 2)) ** 2)
-                               + np.sum((coarse_v - _block_average(v, 2)) ** 2)) * area))
+    yardstick = _cell_l2(coarse_u-_block_average(u, 2), coarse_v-_block_average(v, 2))
     space, lifting, state = _spectral_cavity(size, nu, regularised_lid, final_time, dt)
     spectral_u, spectral_v = _spectral_cell_centres(space, lifting, state, 64)
-    error = float(np.sqrt((np.sum((spectral_u - u) ** 2) + np.sum((spectral_v - v) ** 2)) * area))
+    error = _cell_l2(spectral_u-u, spectral_v-v)
     assert error <= yardstick, (error, yardstick)
 
 
 def test_spectral_sharp_lid_cavity_converges_and_locates_the_vortex():
-    """The sharp lid cannot be an error race, so it is graded on convergence and the vortex.
+    """Finite-resolution regression for sharp-lid error trend and primary vortex.
 
-    A constant wall profile is not representable in the velocity space, so it enters as a
-    projection with Gibbs oscillations at the corners and its share of the L2 error does not
-    vanish; the ratio against the MAC's grid sensitivity stays near 3.4-3.9 and no amount of
-    resolution fixes that (`docs/validation.md`, section on the metric defect). What must hold
-    is that adding modes reduces the error, and that the primary vortex -- strength and
-    position, from one shared extraction -- agrees with the MAC solution.
+    These modes do not establish an asymptotic error floor or convergence to the
+    exact cavity solution. The fixed MAC reference also has discretisation error.
     """
     nu, speed, final_time, dt = .01, 1., 10., .04
     u, v = _mac_cavity(64, nu, speed, None, final_time, dt)
@@ -558,11 +563,7 @@ def test_spectral_sharp_lid_cavity_converges_and_locates_the_vortex():
     strength, x, y = _primary_vortex(u, v)
     spectral_strength, spectral_x, spectral_y = _primary_vortex(*sampled)
     assert abs(spectral_strength - strength) < .01 * abs(strength), (spectral_strength, strength)
-    # A cell at 64^2 is 1/64 = 0.0156, so this tolerance is about two thirds of a cell: the
-    # matched case agrees to the grid exactly (difference 0), while one cell of drift fails.
-    # It started at 0.02, which the negative control showed cannot discriminate -- the two lid
-    # profiles place the vortex only 0.015-0.016 apart, so that tolerance passed even with the
-    # wrong profile on the spectral side (`docs/validation.md`, acceptance of this fix).
+    # Retain the existing 0.010 regression gate; do not infer subcell accuracy.
     assert abs(spectral_x - x) < .010 and abs(spectral_y - y) < .010, (spectral_x, spectral_y, x, y)
 
 
@@ -705,3 +706,33 @@ def test_dealiased_convection_matches_overintegrated_reference(size, with_liftin
     assert np.sqrt(model.inner(difference, difference)/model.inner(expected, expected)) < 1e-11
     assert abs(work-expected_work) < 1e-11*(1+abs(expected_work))
     assert abs(model.inner(got, velocity)+work) < 1e-11*(1+np.sqrt(model.inner(got, got)*model.inner(velocity, velocity)))
+
+
+@pytest.mark.parametrize('n', [16, 32, 64])
+def test_cell_l2_constant_field_has_grid_independent_norm(n):
+    assert _cell_l2(np.full((n,n),3.), np.full((n,n),4.)) == 5.
+
+
+def test_cell_centred_streamfunction_matches_independent_sparse_poisson():
+    from scipy.sparse import diags, eye, kron
+    from scipy.sparse.linalg import spsolve
+    n=9
+    diagonal=np.full(n,2.);diagonal[[0,-1]]=3.
+    one=diags([-np.ones(n-1),diagonal,-np.ones(n-1)],[-1,0,1])*n*n
+    matrix=kron(one,eye(n))+kron(eye(n),one)
+    omega=np.random.default_rng(7).standard_normal((n,n))
+    expected=spsolve(matrix.tocsc(),omega.ravel()).reshape(n,n)
+    np.testing.assert_allclose(_streamfunction_from_vorticity(omega),expected,rtol=1e-12,atol=1e-14)
+
+
+def test_vortex_extraction_converges_to_analytic_streamfunction():
+    errors=[]
+    for n in (16,32,64):
+        x,y=np.meshgrid((np.arange(n)+.5)/n,(np.arange(n)+.5)/n)
+        u=-np.pi*np.sin(np.pi*x)*np.cos(np.pi*y)
+        v=np.pi*np.cos(np.pi*x)*np.sin(np.pi*y)
+        strength,px,py=_primary_vortex(u,v)
+        errors.append(abs(strength+1.))
+        assert abs(px-.5)<=.5/n and abs(py-.5)<=.5/n
+    assert 3.5<errors[0]/errors[1]<4.5,errors
+    assert 3.5<errors[1]/errors[2]<4.5,errors

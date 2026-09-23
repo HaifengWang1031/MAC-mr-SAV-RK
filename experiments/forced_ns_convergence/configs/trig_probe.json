@@ -1,0 +1,22 @@
+{
+  "base": {
+    "experiment": "trig_ns",
+    "nx": 128,
+    "ny": 128,
+    "lx": 6.283185307179586,
+    "ly": 6.283185307179586,
+    "T": 1.0,
+    "snapshots": [
+      0.5,
+      1.0
+    ],
+    "log_every": 100
+  },
+  "tau_base": 0.1,
+  "k_levels": [
+    0
+  ],
+  "reference_k": 2,
+  "sensitivity_threshold": 0.05,
+  "max_reference_refinements": 0
+}
