@@ -35,13 +35,12 @@ def rigid_rotation(grid, omega):
 
 def test_angular_momentum_converges_to_its_quadrature_reference():
     # The cell-centred quadrature in `angular_momentum` is second order, so the discrete L of
-    # one fixed smooth field must approach an independent fine-grid quadrature of the same
+    # one fixed smooth field must approach an independent analytic integral of the same
     # integral; the taper keeps the field no-slip compatible, which is what `pack` assumes.
     omega=.7
-    fine=4096
-    x=(np.arange(fine)+.5)*(2*np.pi/fine); y=x
-    taper=(np.sin(x/2)**2)[None,:]*(np.sin(y/2)**2)[:,None]
-    reference=float(np.sum(omega*(((x-np.pi)**2)[None,:]+((y-np.pi)**2)[:,None])*taper)*(2*np.pi/fine)**2)
+    # Exact integral of omega*((x-pi)^2+(y-pi)^2)*sin(x/2)^2*sin(y/2)^2.
+    # Integral sin(x/2)^2 dx = pi, and its second central moment is pi^3/3-2*pi.
+    reference=omega*(2*np.pi**4/3-4*np.pi**2)
     errors=[]
     for n in (48,96):
         grid=MACGrid(n,n,2*np.pi,2*np.pi)
@@ -75,8 +74,6 @@ def test_reversal_detection_needs_threshold_and_duration():
     assert detect_reversals(times,jitter,threshold=.2,min_duration=1.)==[]
     # A spike with the other sign that decays back inside the band is rejected by the duration.
     spike=slow.copy(); spike[100:103]=-3.
-    assert len(detect_reversals(times,spike,threshold=.2,min_duration=1.))==1
-    # A sustained opposite sign after the spike is a second reversal, not a third.
     assert len(detect_reversals(times,spike,threshold=.2,min_duration=1.))==1
     with pytest.raises(ValueError):detect_reversals(times,slow,threshold=-1.,min_duration=1.)
 

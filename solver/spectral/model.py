@@ -150,6 +150,11 @@ class SpectralModel:
             constraint = constraint + self._lifting[2].reshape(-1)
         return constraint[1:]
 
+    def physical_divergence_inf(self, velocity: Array) -> float:
+        size = self.space.size
+        return self._total_divergence_inf(velocity[:self.modes].reshape(size, size),
+                                          velocity[self.modes:].reshape(size, size))
+
     def inner(self, left: Array, right: Array) -> float:
         modes = self.modes
         return float(left[:modes] @ (self.mass @ right[:modes])
@@ -276,9 +281,9 @@ class SpectralModel:
 
     def stage(self, pressure: Array, residual: float, divergence_inf: float, r: float = 0.,
               candidates: Sequence[float] = (), root_residuals: Sequence[float] = (),
-              scalar_residual: float = 0.) -> Stage:
+              scalar_residual: float = 0., *, continuity_residual: float = float("nan")) -> Stage:
         return Stage(np.asarray(pressure), residual, divergence_inf, r, list(candidates),
-                     list(root_residuals), scalar_residual)
+                     list(root_residuals), scalar_residual, continuity_residual)
 
     def diagnostics(self, state: State) -> dict[str, float]:
         """Physical diagnostics of the *total* field, integrated by Gauss quadrature.

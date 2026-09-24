@@ -53,6 +53,9 @@ class MACNavierStokes:
     def apply_D(self, velocity: Array) -> Array:
         return self.ops.D@velocity
 
+    def physical_divergence_inf(self, velocity: Array) -> float:
+        return self.max_abs(self.apply_D(velocity))
+
     def inner(self, left: Array, right: Array) -> float:
         return self.grid.inner(left,right)
 
@@ -71,8 +74,8 @@ class MACNavierStokes:
 
     def stage(self, pressure: Array, residual: float, divergence_inf: float, r: float = 0.,
               candidates: Sequence[float] = (), root_residuals: Sequence[float] = (),
-              scalar_residual: float = 0.) -> Stage:
-        return Stage(pressure,residual,divergence_inf,r,list(candidates),list(root_residuals),scalar_residual)
+              scalar_residual: float = 0., *, continuity_residual: float = float("nan")) -> Stage:
+        return Stage(pressure,residual,divergence_inf,r,list(candidates),list(root_residuals),scalar_residual,continuity_residual)
 
     def collocated_velocity(self, velocity: Array) -> tuple[Array, Array]:
         """Cell-centred `(u, v)`, the average of the two faces that bound each cell."""

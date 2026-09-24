@@ -49,8 +49,8 @@ class SDIRK2MRSAV:
             # All three are reported: the divergence is the one that fails whenever the linear
             # tolerance is loose, and omitting it made earlier failures look like residual ones.
             raise RuntimeError(f'SAV stage residuals {residual}, {scalar_residual}, divergence {divergence}')
-        return velocity,model.stage(pressure,residual,divergence,r,choice.candidates,
-                                    choice.residuals,scalar_residual)
+        return velocity,model.stage(pressure,residual,model.physical_divergence_inf(velocity),r,choice.candidates,
+                                    choice.residuals,scalar_residual,continuity_residual=divergence)
 
     def step(self, model: Model, state: Any, dt: float) -> Trial:
         if not np.isfinite(dt) or dt<=0: raise ValueError('Invalid step size')

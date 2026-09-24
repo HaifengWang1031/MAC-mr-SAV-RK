@@ -64,6 +64,9 @@ class Model(Protocol):
     def apply_D(self, velocity: Any) -> Any:
         """Discrete divergence: velocity to pressure. G = -D^T for this pair."""
 
+    def physical_divergence_inf(self, velocity: Any) -> float:
+        """Physical divergence diagnostic, including any boundary lifting."""
+
     def inner(self, left: Any, right: Any) -> float:
         """Velocity-space inner product, including the cell-area weight."""
 
@@ -83,7 +86,7 @@ class Model(Protocol):
 
     def stage(self, pressure: Any, residual: float, divergence_inf: float, r: float = 0.,
               candidates: Sequence[float] = (), root_residuals: Sequence[float] = (),
-              scalar_residual: float = 0.) -> Any:
+              scalar_residual: float = 0., *, continuity_residual: float = float("nan")) -> Any:
         """Build a stage record, taking ownership of any payload the model allocated."""
 
     def diagnostics(self, state: Any) -> dict[str, float]:

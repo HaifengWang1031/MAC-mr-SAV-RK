@@ -13,6 +13,8 @@ def test_save_reuse_rerun_and_analysis(tmp_path):
     assert manifest['status']=='complete'
     with h5py.File(first/'results.h5') as data:
         assert data['times'].shape==(3,)
+        assert data['stages/continuity_residual'].shape==(2,2)
+        assert (data['stages/continuity_residual'][:]==data['stages/divergence_inf'][:]).all()
         assert data['roots/candidates'].shape==(2,2,3)
         assert data['final/u'].shape==(6,9)
     report=analyze_runs([first],root=tmp_path)

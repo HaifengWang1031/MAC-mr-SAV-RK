@@ -31,6 +31,8 @@ class SDIRK2:
         second=model.solve(rhs,mass=1.,viscosity=viscosity)
         # The stage pressure is an increment: divided by dt. Expressed as a scaled copy
         # so the same line works on a vector type that has no division.
-        stages=[model.stage(model.combine((1./dt,s.pressure)),s.residual,s.divergence_inf)
+        stages=[model.stage(model.combine((1./dt,s.pressure)),s.residual,
+                            model.physical_divergence_inf(s.velocity),
+                            continuity_residual=model.max_abs(model.apply_D(s.velocity)))
                 for s in (first,second)]
         return Trial(model.state(state.t+dt,second.velocity),stages)

@@ -149,7 +149,7 @@ def save_result(path: Path, result: Result, metrics: dict) -> None:
                 candidates[n,i,:count]=stage['candidates']; residuals[n,i,:count]=stage['root_residuals']
         for key,value in [('candidates',candidates),('residuals',residuals),('count',counts),('selected',selected)]:
             data.create_dataset('roots/'+key,data=value)
-        for key in ('residual','scalar_residual','divergence_inf'):
+        for key in ('residual','scalar_residual','divergence_inf','continuity_residual'):
             data.create_dataset('stages/'+key,data=np.array([[s[key] for s in stages] for stages in result.stages]).reshape(-1,2))
     temporary.replace(path)
 

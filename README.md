@@ -71,3 +71,5 @@ uv run pytest
 ## 经典算例可视化
 
 [顶盖驱动方腔流 Re=100](experiments/cavity/README.md)：新增常速度移动顶盖边界载荷、网格对比与流线/涡量图。
+
+实验记录导航见 [现存实验盘点](docs/experiment-inventory.md)，测试保留原则见 [代表性测试](tests/README.md)。

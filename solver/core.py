@@ -20,6 +20,7 @@ class Stage:
     candidates: list[float] = field(default_factory=list)
     root_residuals: list[float] = field(default_factory=list)
     scalar_residual: float = 0.0
+    continuity_residual: float = float("nan")
 
 @dataclass
 class Trial:

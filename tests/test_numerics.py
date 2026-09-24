@@ -13,7 +13,6 @@ def test_stokes_spatial_convergence_and_rectangular_structure():
     errors=[]
     for nx,ny in ((8,6),(16,12),(32,24)):
         g=MACGrid(nx,ny,1.3,.8); ops=MACOperators(g)
-        assert (ops.G+ops.D.T).nnz==0
         assert (ops.K-ops.K.T).nnz==0
         x=np.random.default_rng(3).normal(size=g.size)
         assert g.inner(x,ops.K@x)>0

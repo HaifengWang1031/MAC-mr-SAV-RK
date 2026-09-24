@@ -77,7 +77,8 @@ def integrate(model: MACNavierStokes, scheme: Scheme, initial: State, steps: lis
             result.final_stages=trial.stages
             result.stages.append([{'r':s.r,'candidates':s.candidates,'root_residuals':s.root_residuals,
                                    'root_count':len(s.candidates),'residual':s.residual,
-                                   'scalar_residual':s.scalar_residual,'divergence_inf':s.divergence_inf}
+                                   'scalar_residual':s.scalar_residual,'divergence_inf':s.divergence_inf,
+                                   'continuity_residual':s.continuity_residual}
                                   for s in trial.stages])
             if k+1 in indices: kept[k+1]=trial.state
             if progress is not None: progress(k+1,trial.state.t,perf_counter()-start)
