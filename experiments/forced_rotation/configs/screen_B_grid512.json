@@ -1,0 +1,26 @@
+{
+  "base": {
+    "experiment": "rotation_ns",
+    "nx": 512,
+    "ny": 512,
+    "lx": 6.283185307179586,
+    "ly": 6.283185307179586,
+    "nu": 0.001,
+    "amplitude": 0.1,
+    "k_f": 5.0,
+    "gamma": 1.0,
+    "ic_kind": "zero",
+    "forcing_kind": "B",
+    "scheme": "sdirk2",
+    "T": 5.0,
+    "dt": 0.005,
+    "snapshots": [
+      5.0
+    ],
+    "log_every": 200,
+    "stokes_tolerance": 1e-07
+  },
+  "cases": [
+    {}
+  ]
+}

@@ -1,20 +1,20 @@
 """The seam a discretisation supplies so the two schemes are written once.
 
 `solver/schemes/` reach a model only through the members below, which is what lets
-the same `SDIRK2` and `SDIRK2MRSAV` code drive the serial MAC model
-(`solver/mac_ns.py`) and the distributed one (`solver/mac_parallel/`). Confirmed
+the same `SDIRK2` and `SDIRK2MRSAV` code drive the staggered MAC model
+(`solver/mac_ns.py`) and the spectral model (`solver/spectral/model.py`). Confirmed
 scope, migration slices and test seams: `docs/model-seam-spec.md`.
 
 Two deliberate typing choices:
 
 - Payloads that differ between realisations (the packed velocity, the pressure field,
-  the state, the trial and the stage) are typed `Any`. The serial model uses an
-  ndarray plus `core.State`; the distributed model uses PETSc vectors plus its own
-  state and stage types. The schemes treat them as opaque values passed back to the
-  model, so the seam stays honest instead of pretending one type serves both.
+  the state, the trial and the stage) are typed `Any`, because the MAC model carries
+  ndarrays plus `core.State` while the spectral model carries coefficient vectors with
+  its own lifting bookkeeping. The schemes treat them as opaque values passed back to
+  the model, so the seam stays honest instead of pretending one type serves both.
 - `force` is declared as a data member rather than a method, because the models store
-  it as a callable attribute (the cavity load and the manufactured forcing both
-  replace it at run time).
+  it as a callable attribute (the cavity load and the isotropic forcing both replace it
+  at run time).
 """
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, Protocol
@@ -96,6 +96,6 @@ if TYPE_CHECKING:
     # conformance assignment inside a test file would never be read. A missing or wrongly
     # typed member fails these two assignments.
     from .mac_ns import MACNavierStokes
-    from .mac_parallel.integrate import ParallelNS
-    _serial_realisation: type[Model] = MACNavierStokes
-    _distributed_realisation: type[Model] = ParallelNS
+    from .spectral.model import SpectralModel
+    _staggered_realisation: type[Model] = MACNavierStokes
+    _spectral_realisation: type[Model] = SpectralModel

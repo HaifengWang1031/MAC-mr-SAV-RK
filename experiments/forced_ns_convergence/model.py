@@ -3,10 +3,21 @@ import numpy as np
 from solver.mac.grid import MACGrid, Array
 
 
-def force_vector(grid: MACGrid, amplitude: float = 1.) -> Array:
+def force_vector(grid: MACGrid, amplitude: float = 1., m: int = 1) -> Array:
+    """Steady body force `f = (0, amplitude*sin(2*pi*m*x))`, sampled at the free v faces.
+
+    `m` counts full wavelengths across the unit domain, so `sin(2*pi*m*x)` vanishes at both
+    x walls, has zero x mean (a uniform y force is a pure pressure gradient in a closed
+    no-slip box and drives nothing) and sources interior vorticity `d_x f_y = 2*pi*m*F*cos(2*pi*m*x)`
+    with `2m` sign changes. The force is sampled only where the discrete momentum equation is
+    imposed, so it touches no wall constraint. Switch from the earlier `sin(x)` moves the
+    response by a factor of about 3.6 at m=1 and about 1/m^2 beyond it; `docs/validation.md`
+    records the measured amplitudes and the recalibration that carries.
+    """
+    if type(m) is not int or m < 1:
+        raise ValueError('Force wavenumber must be a positive integer')
     x, _ = grid.coordinates('v')
-    # Body force is sampled only at free faces; it has no velocity boundary constraint.
-    return np.concatenate([np.zeros(grid.nu), (amplitude*np.sin(x[1:-1,:])).ravel()])
+    return np.concatenate([np.zeros(grid.nu), (amplitude*np.sin(2.*np.pi*m*x[1:-1,:])).ravel()])
 
 
 def force_vector_cos(grid: MACGrid, amplitude: float = 1.) -> Array:

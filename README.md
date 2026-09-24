@@ -8,16 +8,19 @@
 
 ```sh
 uv sync --locked
-uv run python experiments/decay/run.py --config experiments/decay/configs/default.json
+uv run python experiments/cavity/run.py --config experiments/cavity/configs/re100.json
+uv run python experiments/forced_ns_convergence/run.py --config experiments/forced_ns_convergence/configs/smoke.json
 ```
 
 计算入口会打印结果目录。将其用于分析：
 
 ```sh
-uv run python experiments/decay/analyze.py --runs runs/decay/<运行编号>
+uv run python experiments/cavity/analyze.py --runs runs/cavity/<运行编号>
+uv run python experiments/forced_ns_convergence/analyze.py --batch /绝对路径/batch.json
+uv run python tools/plot_speed_snapshots.py --run runs/forced_ns/<运行编号>
 ```
 
-正式配置在 `experiments/<实验名>/configs/`。`stokes_mms`、`ns_mms`、`decay` 分别验证 Stokes 空间误差、NS 制造解和无外力衰减。`--rerun` 保留旧记录并新建一次计算；默认复用同配置、同代码、同环境且完整校验通过的结果。
+正式配置在 `experiments/<实验名>/configs/`。`cavity` 是移动顶盖方腔；`forced_ns` 是定常体力 `(0, amplitude*sin(2*pi*m*x))` 驱动的方腔（同一 runner 也跑 `trig_ns` 系列配置）；`forced_rotation` 是 `(0,2π)²` 上有净力矩/无净力矩两种定常外力 A/B 的长期旋转实验，见 [README](experiments/forced_rotation/README.md)。`--rerun` 保留旧记录并新建一次计算；默认复用同配置、同代码、同环境且完整校验通过的结果。
 
 ## 目录
 
@@ -32,29 +35,22 @@ solver/
     operators.py          D、G、K 的相容离散
     kernels.py            Numba 对流、散度、内积核
     stokes.py             耦合稀疏求解、LU 缓存、后端接口
-  mac_parallel/           MAC 离散的分布式实现（PETSc/MPI，可选 extra）
-    layout.py             沿 y 分条带、halo 交换与全局编号
-    stokes.py             PETSc 分布式装配、FGMRES/BiCGStab 与块 AMG 预条件
-    integrate.py          分布式状态与同一套 SDIRK2 / SDIRK2-mr-ccSAV 阶段公式
-    serial_adapter.py     单 rank PETSc 适配串行 StokesBackend，与 SuperLU 交叉验证
-    failures.py           单个 rank 的失败经统一路径上报，避免死锁与静默退出
   schemes/
     sdirk2.py             普通 IMEX-SDIRK2
     sdirk2_mrsav.py        增量 SDIRK2-mr-ccSAV
     roots.py              全部数值实根及最小绝对值选择
-  spectral/               第三个离散：单元素 Dirichlet 组合 Legendre（无新依赖）
+  spectral/               第二个离散：单元素 Dirichlet 组合 Legendre（无新依赖）
     basis.py              1D 精确矩阵（质量、刚度、散度、投影）与基函数递推
     assembly.py           Kronecker 张量积装配、Galerkin 载荷与求值
     lifting.py            非齐次壁面（移动顶盖）作为已知场，载荷入右端、矩阵不变
     stokes.py             移位 Stokes 鞍点求解与分解缓存
     model.py              谱离散的接缝实现
   adaptivity/             仅预留接口说明
-experiments/              制造解、配置、计算与分析入口
+experiments/              各实验的配置、计算与分析入口
 runs/                     配置、manifest、HDF5、日志与批次记录
 reports/                  分析来源、图、表和日志
 tests/                    数值和工作流回归检查
-tools/validate.py         有限规模验收计算
-docs/                     数学约定、架构、验证、审查记录
+tools/                    步长计时与快照绘图
 archive/                  旧程序来源索引
 ```
 
@@ -63,7 +59,6 @@ archive/                  旧程序来源索引
 ```sh
 uv run mypy
 uv run pytest
-uv run python tools/validate.py
 ```
 
 - [数学实现](docs/numerics.md)：MAC 边界处理、压力规范、阶段公式及三次方程。

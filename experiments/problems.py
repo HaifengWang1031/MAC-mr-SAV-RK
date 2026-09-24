@@ -1,4 +1,9 @@
-"""Smooth no-slip manufactured fields, kept outside the generic solver."""
+"""Smooth no-slip manufactured fields, used as an independent reference by the tests.
+
+No experiment kind drives these fields any more (the `stokes_mms`/`ns_mms`/`decay` entry
+points were removed 2026-09-23); `tests/test_numerics.py` and `tools/benchmark_steps.py`
+are the remaining callers, which is why they stay outside the generic solver.
+"""
 from functools import lru_cache
 import numpy as np
 import sympy as sy

@@ -6,26 +6,18 @@ from experiments.forced_ns_convergence.model import force_vector
 from experiments.forced_ns_convergence.run import run_campaign, validate
 from experiments.forced_ns_convergence.analyze import analyze_batch
 from solver.mac.grid import MACGrid
-from solver.mac_ns import MACNavierStokes
-from solver.integrate import integrate
 
 
 def test_force_samples_only_free_faces():
     grid=MACGrid(7,5,1.3,.8)
-    force=force_vector(grid)
-    assert np.all(force[:grid.nu]==0.)
-    expected=np.tile(np.sin((np.arange(grid.nx)+.5)*grid.hx),grid.ny-1)
-    np.testing.assert_allclose(force[grid.nu:],expected)
-
-
-def test_long_fixed_schedule_does_not_reject_final_snapshot():
-    class FailImmediately:
-        name='intentional'
-        def step(self,*args):raise RuntimeError('deliberate stop')
-    model=MACNavierStokes(MACGrid(3,3),.1)
-    result=integrate(model,FailImmediately(),model.state(0.,np.zeros(model.grid.size)),
-                     np.full(327680,.1*2**-14),snapshots=[2.])
-    assert result.status=='failed' and 'deliberate stop' in result.error
+    for m in (1,2,3):
+        force=force_vector(grid,1.,m)
+        assert np.all(force[:grid.nu]==0.)
+        expected=np.tile(np.sin(2.*np.pi*m*(np.arange(grid.nx)+.5)*grid.hx),grid.ny-1)
+        np.testing.assert_allclose(force[grid.nu:],expected)
+    # A non-integer wavenumber is rejected instead of being silently rounded.
+    with pytest.raises(ValueError):force_vector(grid,1.,1.5)
+    with pytest.raises(ValueError):force_vector(grid,1.,0)
 
 
 def test_campaign_reuse_and_explicit_analysis(tmp_path):

@@ -7,6 +7,8 @@
     "ly": 1.0,
     "nu": 0.01,
     "amplitude": 1.0,
+    "m": 2,
+    "ic_kind": "zero",
     "gamma": 1.0,
     "T": 2.0,
     "snapshots": [

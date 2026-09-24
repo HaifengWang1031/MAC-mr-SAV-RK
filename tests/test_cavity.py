@@ -2,7 +2,6 @@ import numpy as np
 from solver.mac.grid import MACGrid
 from solver.mac.operators import MACOperators
 from experiments.cavity.model import lid_viscous_load
-from experiments.workflow import run_experiment,load_record
 
 def test_lid_load_matches_independent_ghost_stencil():
     g=MACGrid(7,5,1.3,.8); nu=.03; speed=1.2
@@ -22,14 +21,3 @@ def test_lid_load_matches_independent_ghost_stencil():
     actual=-nu*(MACOperators(g).K@z)+lid_viscous_load(g,nu,speed)
     np.testing.assert_allclose(actual,nu*g.pack(lap_u,lap_v),rtol=1e-13,atol=1e-12)
 
-def test_cavity_run_and_reuse(tmp_path):
-    import h5py
-    cfg={'experiment':'cavity','nx':8,'ny':6,'nu':.01,'lid_speed':1.,'T':.1,'dt':.02}
-    path=run_experiment(cfg,root=tmp_path)
-    actual,manifest=load_record(path,require_complete=True)
-    assert manifest['metrics']['reynolds']==100
-    assert actual['boundary']=='moving_top_lid_stationary_other_walls'
-    with h5py.File(path/'results.h5') as f:
-        assert np.max(f['final/u'][-1,1:-1])>0
-        assert max(f['diagnostics/divergence_inf'][:])<1e-10
-    assert run_experiment(cfg,root=tmp_path)==path

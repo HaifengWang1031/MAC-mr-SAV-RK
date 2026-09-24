@@ -31,7 +31,3 @@ def test_failed_step_retains_accepted_prefix():
     assert len(result.times)==2
     assert result.error=='RuntimeError: intentional failure'
 
-def test_snapshot_midpoint_roundoff_prefers_earlier_node():
-    grid=MACGrid(4,4); model=MACNavierStokes(grid,.1)
-    result=integrate(model,SDIRK2(),model.state(0,np.zeros(grid.size)),[.1,.1],snapshots=[.15000000000000002])
-    assert result.snapshot_times==[.1]

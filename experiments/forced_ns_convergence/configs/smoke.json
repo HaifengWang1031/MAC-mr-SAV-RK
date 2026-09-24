@@ -1,12 +1,14 @@
 {
   "base": {
     "experiment": "forced_ns",
-    "nx": 8,
-    "ny": 8,
+    "nx": 16,
+    "ny": 16,
     "lx": 1.0,
     "ly": 1.0,
     "nu": 0.01,
     "amplitude": 1.0,
+    "m": 2,
+    "ic_kind": "zero",
     "gamma": 1.0,
     "T": 0.1,
     "snapshots": [

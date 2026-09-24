@@ -74,9 +74,25 @@ class MACNavierStokes:
               scalar_residual: float = 0.) -> Stage:
         return Stage(pressure,residual,divergence_inf,r,list(candidates),list(root_residuals),scalar_residual)
 
+    def collocated_velocity(self, velocity: Array) -> tuple[Array, Array]:
+        """Cell-centred `(u, v)`, the average of the two faces that bound each cell."""
+        u,v=self.grid.unpack(velocity)
+        return 0.5*(u[:,:-1]+u[:,1:]),0.5*(v[:-1,:]+v[1:,:])
+
+    def angular_momentum(self, velocity: Array) -> float:
+        """Angular momentum about the domain centre: `int (x-xc) v - (y-yc) u dA`."""
+        centre_u,centre_v=self.collocated_velocity(velocity)
+        x,y=self.grid.coordinates('p')
+        return float(self.grid.area*np.sum((x-0.5*self.grid.lx)*centre_v-(y-0.5*self.grid.ly)*centre_u))
+
     def diagnostics(self, state: State) -> dict[str,float]:
         velocity=self.vector(state)
         kinetic=.5*self.grid.inner(velocity,velocity)
+        # Power is the instantaneous work of the body force; dissipation is the viscous
+        # quadratic form, which `K` already expresses as the discrete gradient energy.
         return {'kinetic':kinetic,'modified_energy':kinetic+.5*(state.r-1)**2,
                 'divergence_inf':float(np.max(np.abs(self.ops.D@velocity))),
-                'h1_seminorm_squared':self.grid.inner(velocity,self.ops.K@velocity),'r':state.r}
+                'h1_seminorm_squared':self.grid.inner(velocity,self.ops.K@velocity),'r':state.r,
+                'angular_momentum':self.angular_momentum(velocity),
+                'power':self.grid.inner(self.force(state.t),velocity),
+                'dissipation':self.nu*self.grid.inner(velocity,self.ops.K@velocity)}

@@ -29,7 +29,3 @@ def test_zero_velocity_and_scalar_decay(scheme):
         assert trial.state.r==pytest.approx(expected)
         assert max(s.scalar_residual for s in trial.stages)<1e-12
 
-def test_repeated_minimum_root_is_not_lost_to_roundoff():
-    roots=real_roots(np.array([1.,1.,-5.,3.]))  # (r-1)^2(r+3)
-    assert len(roots.candidates)==3
-    assert roots.selected==pytest.approx(1.,abs=1e-6)

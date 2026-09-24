@@ -1,16 +1,16 @@
-"""Thin shared command-line entry points and explicit batch records."""
+"""Thin shared command-line entry point for the experiments that batch explicit cases."""
 import argparse
 from pathlib import Path
 from datetime import datetime,timezone
 from uuid import uuid4
 import json
-from .analysis import analyze_runs
-from .workflow import PROJECT,run_experiment,write_json,provenance
+from .workflow import PROJECT,effective_config,run_experiment,write_json,provenance
 
 def run_batch(batch: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
     base=batch['base']; experiment=base['experiment']
-    # Reject unknown base experiment before constructing an output path.
-    if experiment not in ('stokes_mms','ns_mms','decay','cavity'): raise ValueError('Unknown experiment')
+    # The workflow owns the experiment list, so an unknown base is rejected before any
+    # output path exists without keeping a second list in sync here.
+    effective_config(base)
     directory=root/'runs'/experiment/'batches'/(datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')+'-'+uuid4().hex[:8])
     directory.mkdir(parents=True)
     record: dict={'status':'running','config':batch,'source':provenance(),'members':[]}
@@ -47,17 +47,3 @@ def run_main(experiment: str) -> None:
         status=json.loads((directory/'manifest.json').read_text())['status']
     print(directory)
     if status!='complete': raise SystemExit(1)
-
-def analyze_main() -> None:
-    parser=argparse.ArgumentParser()
-    parser.add_argument('--runs',type=Path,nargs='+',required=True)
-    parser.add_argument('--root',type=Path,default=PROJECT)
-    parser.add_argument('--reference',type=Path)
-    parser.add_argument('--refined-reference',type=Path)
-    args=parser.parse_args()
-    if args.reference is not None:
-        if args.refined_reference is None: parser.error('--reference requires --refined-reference')
-        from .convergence import analyze_temporal
-        print(analyze_temporal(args.runs,args.reference,args.refined_reference,root=args.root))
-    elif args.refined_reference is not None: parser.error('--refined-reference requires --reference')
-    else: print(analyze_runs(args.runs,root=args.root))

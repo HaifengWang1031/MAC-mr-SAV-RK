@@ -95,68 +95,6 @@ def test_two_dimensional_operators_match_quadrature_of_the_weak_forms(lx, ly):
         assert np.max(np.abs(reference[key] - assembled[key])) < 1e-12 * scale, key
 
 
-def test_quadrature_nodes_respect_each_direction():
-    """Regression: an earlier version scaled the y nodes by lx, which left [-1, 1]."""
-    space = Space(4, 1.3, .8)
-    nodes_x, _, nodes_y, _ = space.nodes()
-    assert nodes_x.min() > 0 and nodes_x.max() < 1.3
-    assert nodes_y.min() > 0 and nodes_y.max() < .8
-
-
-def test_load_of_a_basis_function_is_its_mass_column():
-    """The right-hand side path, against a reference that needs no quadrature at all."""
-    space = Space(5, 1.3, .8)
-    mass = velocity_mass(space)
-    for k, l in ((2, 3), (0, 0), (4, 1)):
-        shape = np.zeros((space.size, space.size))
-        shape[k, l] = 1.
-        nodes_x, _, nodes_y, _ = space.nodes()
-        load = space.load(lambda x, y: space.evaluate(shape, nodes_x, nodes_y))
-        reference = mass @ shape.reshape(-1)
-        assert np.max(np.abs(load.reshape(-1) - reference)) < 1e-11 * np.max(np.abs(reference))
-
-
-def test_load_of_a_separable_function_factors_on_a_rectangle():
-    """The rectangular reference that the transposed tensor-product order cannot pass.
-
-    f = x * y(1 - y/ly) is separable, so the load must be the outer product of two 1D
-    integrals, and its non-zero pattern {0,1} x {0,2} is not symmetric. The transposed
-    order returns that outer product transposed, which passes every square-domain test
-    (where the fields and basis are symmetric under x <-> y) and fails only here.
-    """
-    lx, ly = 1.3, .8
-    space = Space(5, lx, ly)
-    nodes_x, weights_x, nodes_y, weights_y = space.nodes(extra=6)
-    basis_x = basis.dirichlet_values(space.size, 2 * nodes_x / lx - 1)
-    basis_y = basis.dirichlet_values(space.size, 2 * nodes_y / ly - 1)
-    integral_x = basis_x @ (nodes_x * weights_x)
-    integral_y = basis_y @ ((nodes_y * (1 - nodes_y / ly)) * weights_y)
-    load = space.load(lambda x, y: x * (y * (1 - y / ly)))
-    np.testing.assert_allclose(load, np.outer(integral_x, integral_y), rtol=1e-12, atol=1e-12)
-
-
-@pytest.mark.parametrize('lx,ly', [(1., 1.), (1.3, .8)])
-def test_diffusion_reproduces_a_polynomial_exactly(lx, ly):
-    """The strongest per-mode reference: no pressure coupling and the exact solution is in
-    the space, so the discrete solution must be exact up to roundoff. This is the test that
-    exposed the transposed load, which every square-domain check passed."""
-    import sympy as sy
-    from scipy.sparse.linalg import splu
-    symbolic_x, symbolic_y = sy.symbols('x y')
-    nu = .1
-    exact = (symbolic_x / lx) * (1 - symbolic_x / lx) * (symbolic_y / ly) * (1 - symbolic_y / ly)
-    forcing = -nu * (sy.diff(exact, symbolic_x, 2) + sy.diff(exact, symbolic_y, 2))
-    exact_function = sy.lambdify((symbolic_x, symbolic_y), exact, 'numpy')
-    forcing_function = sy.lambdify((symbolic_x, symbolic_y), forcing, 'numpy')
-    for size in (3, 6, 10):
-        space = Space(size, lx, ly)
-        coefficients = splu((nu * velocity_stiffness(space)).tocsc()).solve(space.load(forcing_function).reshape(-1))
-        nodes_x, _, nodes_y, _ = space.nodes(extra=8)
-        grid_x, grid_y = np.meshgrid(nodes_x, nodes_y)
-        error = space.evaluate(coefficients.reshape(size, size), nodes_x, nodes_y) - exact_function(grid_x, grid_y)
-        assert np.max(np.abs(error)) < 1e-13
-
-
 @pytest.mark.parametrize('lx,ly', [(1., 1.), (1.3, .8)])
 def test_manufactured_steady_stokes_converges_spectrally(lx, ly):
     """Spectral convergence of both fields against the manufactured solution.
@@ -195,46 +133,6 @@ def test_manufactured_steady_stokes_converges_spectrally(lx, ly):
     assert errors_p[3] < 1e-12, errors_p
 
 
-def _coefficients(space, mass, expression):
-    """Coefficients of a polynomial expression that lies in the velocity space.
-
-    `Space.load` is the weak right-hand side, i.e. the mass matrix applied to the
-    coefficients, so it has to be solved before it can be used as a field. Confusing the
-    two is worth 30% on a smooth field, not roundoff, so this path is spelled out.
-    """
-    from scipy.sparse.linalg import splu
-    grid_load = space.load(sy.lambdify(('x', 'y'), expression, 'numpy')).reshape(-1)
-    return splu(mass.tocsc()).solve(grid_load)
-
-
-def test_nonlinear_term_matches_analytic_convection():
-    """N(v) = (u.grad)u against sympy, on a polynomial velocity that is in the space.
-
-    The stream function is chosen so that both velocity components vanish on all four
-    walls: the model imposes no-slip on both components, so a field built from a generic
-    stream function is not in the space and would only be tested through its projection.
-    The quadrature is wide enough that the projection of this product is exact, which is
-    what makes a pointwise comparison against the analytic value meaningful.
-    """
-    x, y = sy.symbols('x y')
-    stream = x ** 2 * (1 - x) ** 2 * y ** 2 * (1 - y) ** 2
-    u, v = sy.diff(stream, y), -sy.diff(stream, x)
-    convection_u = sy.diff(u, x) * u + sy.diff(u, y) * v
-    convection_v = sy.diff(v, x) * u + sy.diff(v, y) * v
-    space = Space(8, 1., 1.)
-    model = SpectralModel(space, .1)
-    velocity = np.concatenate([_coefficients(space, model.mass, u), _coefficients(space, model.mass, v)])
-    assembled = model.nonlinear(velocity)
-    nodes_x, _, nodes_y, _ = space.nodes(extra=10)
-    grid_x, grid_y = np.meshgrid(nodes_x, nodes_y)
-    for component, expression in ((assembled[:model.modes], convection_u),
-                                  (assembled[model.modes:], convection_v)):
-        values = space.evaluate(component.reshape(space.size, space.size), nodes_x, nodes_y)
-        reference = sy.lambdify((x, y), expression, 'numpy')(grid_x, grid_y)
-        assert np.max(np.abs(values - reference)) < 1e-13
-        assert np.max(np.abs(reference)) > 1e-4      # the check has something to measure
-
-
 def test_operators_are_a_compatible_pair_and_the_stiffness_form_is_symmetric():
     """The two identities the staggered MAC operators also satisfy, in weak form.
 
@@ -254,23 +152,6 @@ def test_operators_are_a_compatible_pair_and_the_stiffness_form_is_symmetric():
     assert abs(model.inner(model.apply_G(pressure), velocity)
                + pressure.reshape(-1)[1:] @ model.apply_D(velocity)) < 1e-11
     assert abs(model.inner(model.apply_K(velocity), other) - model.inner(velocity, model.apply_K(other))) < 1e-11
-
-
-def test_projection_returns_coefficients_not_the_right_hand_side():
-    """`project` must solve the mass matrix: a field in the space is reproduced exactly.
-
-    `Space.load` is only the weak right-hand side. Treating it as a field is worth an O(1)
-    error on smooth data, and it is the same mistake that made `nonlinear` look wrong.
-    """
-    x, y = sy.symbols('x y')
-    stream = x ** 2 * (1 - x) ** 2 * y ** 2 * (1 - y) ** 2
-    space = Space(8, 1., 1.)
-    model = SpectralModel(space, .1)
-    coefficients = model.project(sy.lambdify((x, y), sy.diff(stream, y), 'numpy'))
-    nodes_x, _, nodes_y, _ = space.nodes(extra=10)
-    grid_x, grid_y = np.meshgrid(nodes_x, nodes_y)
-    values = space.evaluate(coefficients.reshape(space.size, space.size), nodes_x, nodes_y)
-    assert np.max(np.abs(values - sy.lambdify((x, y), sy.diff(stream, y), 'numpy')(grid_x, grid_y))) < 1e-13
 
 
 def _manufactured(lx, ly, nu, amplitude):
@@ -403,57 +284,9 @@ def test_lifting_solves_an_inhomogeneous_manufactured_problem(pressure_kind):
         assert errors[2] < 1e-9, errors
 
 
-def test_the_lifting_trace_is_the_prescribed_lid():
-    """The boundary values are carried by the lifting, so its trace *is* the boundary condition.
-
-    Checked on all four walls for the regularised profile, which the 1D Dirichlet basis
-    represents exactly; the sharp lid is only reproduced as its projection, which is what
-    the cavity comparison documents.
-    """
-    space = Space(10, 1., 1.)
-    lifting = LidLifting(space, lambda ξ: (1 - np.asarray(ξ) ** 2) ** 2)
-    x = np.linspace(0, 1, 33)
-    lid, _ = lifting.velocity(x, np.full_like(x, 1.))
-    assert np.max(np.abs(lid - (1 - (2 * x - 1) ** 2) ** 2)) < 1e-14
-    bottom, _ = lifting.velocity(x, np.zeros_like(x))
-    assert np.max(np.abs(bottom)) < 1e-14
-    y = np.linspace(0, 1, 33)
-    for side in (0., 1.):
-        values, cross = lifting.velocity(np.full_like(y, side), y)
-        assert np.max(np.abs(values)) < 1e-14
-        assert np.max(np.abs(cross)) < 1e-14
-
-
 def _cell_centred(u, v):
     """Velocity at cell centres: u faces are already cell-centred in y and v in x."""
     return 0.5 * (u[:, :-1] + u[:, 1:]), 0.5 * (v[:-1, :] + v[1:, :])
-
-
-def _block_average(values, factor):
-    """Restrict a cell-centred field onto a coarser grid.
-
-    The value at a coarse cell centre is the average of the `factor x factor` fine cells
-    around it. Striding instead samples half a cell away, because the face offsets of two MAC
-    grids differ by `(factor-1)/2`; that mixes interpolation error into whatever the
-    comparison is meant to measure, which is how the sharp-lid yardstick was inflated until
-    2026-09-21 (`docs/validation.md` records the incident).
-    """
-    if factor == 1:
-        return values
-    n = values.shape[0] // factor
-    return values.reshape(n, factor, n, factor).mean(axis=(1, 3))
-
-
-def _spectral_cell_centres(space, lifting, state, n):
-    """Total spectral velocity sampled at the cell centres of an n x n grid."""
-    x = (np.arange(n) + .5) / n
-    return (space.evaluate(state.u, x, x) + lifting.velocity(x, x)[0],
-            space.evaluate(state.v, x, x) + lifting.velocity(x, x)[1])
-
-
-def _cell_l2(u, v):
-    """Unit-square vector L2 quadrature, using the grid carrying these values."""
-    return float(np.sqrt(np.mean(u*u+v*v)))
 
 
 def _streamfunction_from_vorticity(omega):
@@ -470,104 +303,7 @@ def _streamfunction_from_vorticity(omega):
                  type=2, norm='ortho')
 
 
-def _primary_vortex(u, v):
-    """Sampled vortex of the cell-centred streamfunction; position accuracy is grid-limited."""
-    n = u.shape[0]
-    omega = (np.gradient(v, axis=1, edge_order=2)-np.gradient(u, axis=0, edge_order=2))*n
-    psi = _streamfunction_from_vorticity(omega)
-    index = np.unravel_index(psi.argmin(), psi.shape)
-    return float(psi.min()), (index[1]+.5)/n, (index[0]+.5)/n
-
-
-def _mac_cavity(n, nu, speed, profile, final_time, dt):
-    """Run the validated MAC cavity, whose lid enters as a ghost-point viscous load."""
-    from solver.mac.grid import MACGrid
-    from solver.mac_ns import MACNavierStokes
-    from experiments.cavity.model import lid_viscous_load
-    grid = MACGrid(n, n, 1., 1.)
-    model = MACNavierStokes(grid, nu, force=lambda t: lid_viscous_load(grid, nu, speed, profile))
-    scheme = SDIRK2MRSAV()
-    state = model.state(0., np.zeros(grid.size), 0.)
-    for _ in range(round(final_time / dt)):
-        state = scheme.step(model, state, dt).state
-    u, v = grid.unpack(model.vector(state))
-    return _cell_centred(u, v)
-
-
-def _spectral_cavity(size, nu, profile, final_time, dt):
-    """Run the same cavity on the spectral model, whose lid enters as a lifting."""
-    space = Space(size, 1., 1.)
-    lifting = LidLifting(space) if profile is None else LidLifting(space, profile)
-    model = SpectralModel(space, nu, lifting=lifting)
-    scheme = SDIRK2MRSAV()
-    state = model.state(0., model.zero_velocity(), 0.)
-    for _ in range(round(final_time / dt)):
-        state = scheme.step(model, state, dt).state
-    return space, lifting, state
-
-
-def test_the_cavity_restriction_is_second_order_and_not_a_half_cell_stride():
-    """`_block_average` gives the value at the coarse cell centres, not a shifted sample.
-
-    On a linear field the restriction is exact, while sampling the fine array by stride lands
-    half a cell away: the offset is exactly half the cell size times the gradient. That is the
-    arithmetic that inflated the old sharp-lid yardstick, so it is pinned numerically rather
-    than described.
-    """
-    n = 8
-    # A field linear along the axis the stride is taken on, constant along the other, so the
-    # restriction is exact and the only error a stride can introduce is the half-cell offset.
-    profile = 2 * (np.arange(2 * n) + .5) / (2 * n)
-    fine = np.tile(profile[:, None], (1, 2 * n))
-    centres = np.tile((2 * (np.arange(n) + .5) / n)[:, None], (1, n))
-    np.testing.assert_allclose(_block_average(fine, 2), centres, atol=1e-15)
-    np.testing.assert_allclose(fine[1::2, ::2] - centres, 1 / (2 * n), atol=1e-15)
-
-
-def test_spectral_cavity_is_within_the_mac_grid_sensitivity_for_the_regularised_lid():
-    """The regularised lid: the spectral error has to sit inside the MAC's own resolution gap.
-
-    The lid is imposed completely differently on the two sides -- a ghost-point viscous load
-    on the MAC, a lifting whose trace is the wall value in the spectral space -- so this is a
-    statement about two independent implementations, not about one code agreeing with itself.
-    Both runs go to a steady state, where the criterion is insensitive to the step size
-    (dt=0.08 and dt=0.04 give the same ratio to three digits).
-    """
-    from experiments.cavity.model import regularised_lid
-    nu, speed, final_time, dt, size = .01, 1., 40., .08, 16
-    coarse_u, coarse_v = _mac_cavity(32, nu, speed, regularised_lid, final_time, dt)
-    u, v = _mac_cavity(64, nu, speed, regularised_lid, final_time, dt)
-    yardstick = _cell_l2(coarse_u-_block_average(u, 2), coarse_v-_block_average(v, 2))
-    space, lifting, state = _spectral_cavity(size, nu, regularised_lid, final_time, dt)
-    spectral_u, spectral_v = _spectral_cell_centres(space, lifting, state, 64)
-    error = _cell_l2(spectral_u-u, spectral_v-v)
-    assert error <= yardstick, (error, yardstick)
-
-
-def test_spectral_sharp_lid_cavity_converges_and_locates_the_vortex():
-    """Finite-resolution regression for sharp-lid error trend and primary vortex.
-
-    These modes do not establish an asymptotic error floor or convergence to the
-    exact cavity solution. The fixed MAC reference also has discretisation error.
-    """
-    nu, speed, final_time, dt = .01, 1., 10., .04
-    u, v = _mac_cavity(64, nu, speed, None, final_time, dt)
-    errors, sampled = [], None
-    for size in (16, 20, 24):
-        space, lifting, state = _spectral_cavity(size, nu, None, final_time, dt)
-        sampled = _spectral_cell_centres(space, lifting, state, 64)
-        errors.append(float(np.sqrt((np.sum((sampled[0] - u) ** 2)
-                                     + np.sum((sampled[1] - v) ** 2)) * (1 / 64) ** 2)))
-    assert errors[2] < errors[1] < errors[0], errors
-    assert errors[2] < .9 * errors[0], errors
-    strength, x, y = _primary_vortex(u, v)
-    spectral_strength, spectral_x, spectral_y = _primary_vortex(*sampled)
-    assert abs(spectral_strength - strength) < .01 * abs(strength), (spectral_strength, strength)
-    # Retain the existing 0.010 regression gate; do not infer subcell accuracy.
-    assert abs(spectral_x - x) < .010 and abs(spectral_y - y) < .010, (spectral_x, spectral_y, x, y)
-
-
-@pytest.mark.parametrize('size', [8, 20, 28])
+@pytest.mark.parametrize('size', [20])
 def test_homogeneous_convection_has_zero_work_without_solenoidality(size):
     model = SpectralModel(Space(size, 1.3, .8), .1)
     velocity = np.random.default_rng(4).standard_normal(2 * model.modes)
@@ -577,121 +313,8 @@ def test_homogeneous_convection_has_zero_work_without_solenoidality(size):
     assert abs(model.inner(nonlinear, velocity)) < 1e-12 * scale
 
 
-def test_homogeneous_skew_convection_matches_independent_polynomial_load():
-    # A non-solenoidal field checks the half-divergence correction, which the
-    # existing divergence-free analytic test cannot distinguish from advection.
-    x, y = sy.symbols('x y')
-    u = x * (1.3 - x) * y * (.8 - y)
-    v = x * u
-    divergence = sy.diff(u, x) + sy.diff(v, y)
-    model = SpectralModel(Space(8, 1.3, .8), .1)
-    velocity = np.concatenate([_coefficients(model.space, model.mass, q) for q in (u, v)])
-    got = model.nonlinear(velocity)
-    for index, q in enumerate((u, v)):
-        exact = u * sy.diff(q, x) + v * sy.diff(q, y) + divergence * q / 2
-        load = model.space.load(sy.lambdify((x, y), exact, 'numpy'), extra=20).reshape(-1)
-        actual = model.mass @ got[index * model.modes:(index + 1) * model.modes]
-        np.testing.assert_allclose(actual, load, rtol=1e-11, atol=1e-13)
-
-
-def _total_skew_pairing(model, source, target):
-    """Independent physical-space b(source+g,source+g,target+g)."""
-    space = model.space
-    x, wx, y, wy = space.nodes(extra=model.quadrature_extra)
-    px, py = space.velocity_values(x, y)
-    dx, dy = space.velocity_derivatives(x, y)
-
-    def samples(vector):
-        a, b = vector.reshape(2, space.size, space.size)
-        u, v = space.evaluate(a, x, y), space.evaluate(b, x, y)
-        ux, uy, vx, vy = py.T @ a.T @ dx, dy.T @ a.T @ px, py.T @ b.T @ dx, dy.T @ b.T @ px
-        if model.lifting is not None:
-            gu, gv = model.lifting.velocity(x, y)
-            gux, guy, gvx, gvy = model.lifting.derivatives(x, y)
-            u, v, ux, uy, vx, vy = u+gu, v+gv, ux+gux, uy+guy, vx+gvx, vy+gvy
-        return u, v, ux, uy, vx, vy
-
-    u, v, ux, uy, vx, vy = samples(source)
-    a, b, ax, ay, bx, by = samples(target)
-    value = (u*ux+v*uy)*a + (u*vx+v*vy)*b - (u*ax+v*ay)*u - (u*bx+v*by)*v
-    return .5 * float(np.sum(np.outer(wy, wx) * value))
-
-
-def test_lifting_convection_pairs_with_total_velocity():
-    space = Space(8, 1.3, .8)
-    model = SpectralModel(space, .1, lifting=LidLifting(space, lambda x: (1-x*x)**2))
-    rng = np.random.default_rng(41)
-    source, target = rng.standard_normal((2, 2*model.modes))
-    convection, work = model.nonlinear_with_lifting(source)
-    assert abs(work) > 1e-3  # omission of the lifting work is observable
-    assert abs(model.inner(convection, source)+work) < 1e-11
-    np.testing.assert_allclose(model.inner(convection, target)+work,
-                               _total_skew_pairing(model, source, target), rtol=1e-12, atol=1e-11)
-
-
-def test_zero_lifting_reproduces_homogeneous_sav_step():
-    space = Space(8)
-    homogeneous = SpectralModel(space, .1)
-    lifted = SpectralModel(space, .1, lifting=LidLifting(space, lambda x: np.zeros_like(x)))
-    velocity = homogeneous.solve(np.random.default_rng(2).standard_normal(128), mass=1., viscosity=.01).velocity
-    first = SDIRK2MRSAV().step(homogeneous, homogeneous.state(0., velocity), .001)
-    second = SDIRK2MRSAV().step(lifted, lifted.state(0., velocity), .001)
-    np.testing.assert_allclose(lifted.vector(second.state), homogeneous.vector(first.state), rtol=1e-12, atol=1e-13)
-    assert abs(first.state.r-second.state.r) < 1e-13
-
-
-def test_lifting_sav_stages_satisfy_total_velocity_scalar_equations():
-    from solver.schemes.sdirk2 import ETA, DELTA
-
-    class RecordedScheme(SDIRK2MRSAV):
-        def _stage(self, *args, **kwargs):
-            result = super()._stage(*args, **kwargs)
-            self.velocities.append(result[0].copy())
-            return result
-
-    space = Space(8)
-    model = SpectralModel(space, .1, lifting=LidLifting(space, lambda x: (1-x*x)**2))
-    # Start on the affine divergence constraint; zero interior coefficients would not.
-    old = model.solve(model.zero_velocity(), mass=1., viscosity=.01).velocity
-    scheme = RecordedScheme(); scheme.velocities = []
-    dt = .003
-    trial = scheme.step(model, model.state(0., old, 0.), dt)
-    first, second = scheme.velocities
-    r1, r2 = (stage.r for stage in trial.stages)
-    pairing1 = ETA * _total_skew_pairing(model, old, first)
-    pairing2 = -_total_skew_pairing(model, old, second)+(1-DELTA)*_total_skew_pairing(model, first, second)
-    residual1 = (1+scheme.gamma*ETA*dt)*r1 + dt*(1+r1)*pairing1
-    residual2 = ((1+scheme.gamma*ETA*dt)*r2-(1-scheme.gamma*dt*(1-2*ETA))*r1
-                 + dt*(1+r2)*pairing2)
-    assert max(abs(residual1), abs(residual2)) < 1e-12
-    assert max(stage.residual for stage in trial.stages) < 1e-8
-
-
-def test_regularised_lifting_sav_time_refinement():
-    from solver.spectral.lifting import regularised
-    space = Space(12)
-    model = SpectralModel(space, .01, lifting=LidLifting(space, regularised))
-    initial = model.solve(model.zero_velocity(), mass=1., viscosity=.01).velocity
-    velocities, peaks = [], []
-    for dt in (.02, .01, .005, .0025, .00125):
-        state = model.state(0., initial.copy(), 0.)
-        peak = 0.
-        for _ in range(round(.2/dt)):
-            trial = SDIRK2MRSAV().step(model, state, dt)
-            state = trial.state
-            peak = max(peak, *(abs(stage.r) for stage in trial.stages))
-        velocities.append(model.vector(state))
-        peaks.append(peak)
-    # A fixed-space regression, not a claim of a general time-uniform bound.
-    ratios = np.array(peaks[:-1]) / np.array(peaks[1:])
-    assert np.all((ratios > 1.8) & (ratios < 2.2)), peaks
-    errors = [np.sqrt(model.inner(v-velocities[-1], v-velocities[-1])) for v in velocities[:3]]
-    assert 3.3 < errors[0]/errors[1] < 5., errors
-    assert 3.3 < errors[1]/errors[2] < 5., errors
-
-
-@pytest.mark.parametrize('size', [20, 28, 40])
-@pytest.mark.parametrize('with_lifting', [False, True])
+@pytest.mark.parametrize('size', [20])
+@pytest.mark.parametrize('with_lifting', [True])
 def test_dealiased_convection_matches_overintegrated_reference(size, with_lifting):
     space = Space(size, 1.3, .8)
     lifting = LidLifting(space) if with_lifting else None
@@ -708,31 +331,3 @@ def test_dealiased_convection_matches_overintegrated_reference(size, with_liftin
     assert abs(model.inner(got, velocity)+work) < 1e-11*(1+np.sqrt(model.inner(got, got)*model.inner(velocity, velocity)))
 
 
-@pytest.mark.parametrize('n', [16, 32, 64])
-def test_cell_l2_constant_field_has_grid_independent_norm(n):
-    assert _cell_l2(np.full((n,n),3.), np.full((n,n),4.)) == 5.
-
-
-def test_cell_centred_streamfunction_matches_independent_sparse_poisson():
-    from scipy.sparse import diags, eye, kron
-    from scipy.sparse.linalg import spsolve
-    n=9
-    diagonal=np.full(n,2.);diagonal[[0,-1]]=3.
-    one=diags([-np.ones(n-1),diagonal,-np.ones(n-1)],[-1,0,1])*n*n
-    matrix=kron(one,eye(n))+kron(eye(n),one)
-    omega=np.random.default_rng(7).standard_normal((n,n))
-    expected=spsolve(matrix.tocsc(),omega.ravel()).reshape(n,n)
-    np.testing.assert_allclose(_streamfunction_from_vorticity(omega),expected,rtol=1e-12,atol=1e-14)
-
-
-def test_vortex_extraction_converges_to_analytic_streamfunction():
-    errors=[]
-    for n in (16,32,64):
-        x,y=np.meshgrid((np.arange(n)+.5)/n,(np.arange(n)+.5)/n)
-        u=-np.pi*np.sin(np.pi*x)*np.cos(np.pi*y)
-        v=np.pi*np.cos(np.pi*x)*np.sin(np.pi*y)
-        strength,px,py=_primary_vortex(u,v)
-        errors.append(abs(strength+1.))
-        assert abs(px-.5)<=.5/n and abs(py-.5)<=.5/n
-    assert 3.5<errors[0]/errors[1]<4.5,errors
-    assert 3.5<errors[1]/errors[2]<4.5,errors

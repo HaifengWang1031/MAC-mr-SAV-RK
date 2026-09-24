@@ -14,16 +14,21 @@ import numpy as np
 import h5py
 from solver.mac.grid import MACGrid
 from solver.mac.kernels import warmup
+from solver.mac.operators import MACOperators
 from solver.mac.stokes import DirectStokes
 from solver.mac_ns import MACNavierStokes
 from solver.schemes.sdirk2 import SDIRK2
 from solver.schemes.sdirk2_mrsav import SDIRK2MRSAV
 from solver.integrate import Result, integrate, step_sizes
-from .problems import initial_velocity, exact_fields, forcing
+from .forced_ns_convergence.isotropic import TARGETS
+from .forced_rotation.model import KINDS
 
 PROJECT=Path(__file__).resolve().parents[1]
 DEFAULTS={'nx':32,'ny':32,'lx':1.,'ly':1.,'nu':.1,'amplitude':.1,
-          'T':.1,'dt':.001,'scheme':'sdirk2_mrsav','gamma':1.,'cache_size':4,'snapshots':[],'log_every':1000}
+          'T':.1,'dt':.001,'scheme':'sdirk2_mrsav','gamma':1.,'cache_size':4,'stokes_tolerance':1e-9,'snapshots':[],'snapshot_every':None,'log_every':1000,
+          'm':1,'forcing_kind':'A','k_f':5.,
+          'ic_kind':'zero','ic_k_lo':4.,'ic_k_hi':12.,'ic_alpha':5./3.,'ic_seed':0,
+          'ic_target':'max','ic_value':1.,'ic_symmetric':False,'ic_project':True}
 
 def write_json(path: Path, data: dict) -> None:
     temporary=path.with_suffix('.tmp')
@@ -51,14 +56,41 @@ def effective_config(config: dict) -> dict:
     unknown=set(config)-set(DEFAULTS)-{'experiment','steps','lid_speed'}
     if unknown: raise ValueError(f'Unknown configuration keys: {sorted(unknown)}')
     cfg={**DEFAULTS,**config}
-    if cfg.get('experiment') not in ('stokes_mms','ns_mms','decay','cavity','forced_ns','trig_ns'): raise ValueError('Unknown experiment')
+    if cfg.get('experiment') not in ('cavity','forced_ns','trig_ns','rotation_ns'): raise ValueError('Unknown experiment')
     if cfg['experiment']=='cavity':
         cfg['lid_speed']=config.get('lid_speed',1.)
         if not np.isfinite(cfg['lid_speed']) or cfg['lid_speed']<=0: raise ValueError('Positive finite lid_speed required')
         cfg['boundary']='moving_top_lid_stationary_other_walls'
     elif 'lid_speed' in config: raise ValueError('lid_speed is only supported for cavity')
     if cfg['experiment']=='forced_ns':
-        cfg.update(force='[0, amplitude*sin(x)]',initial_condition='zero',boundary='homogeneous_no_slip')
+        if type(cfg['m']) is not int or cfg['m']<1: raise ValueError('Force wavenumber m must be a positive integer')
+        if cfg['ic_kind'] not in ('zero','isotropic_beams'): raise ValueError('Unknown ic_kind')
+        if cfg['ic_kind']=='isotropic_beams':
+            if cfg['ic_target'] not in TARGETS: raise ValueError('Unknown ic_target')
+            if not np.isfinite([cfg['ic_k_lo'],cfg['ic_k_hi'],cfg['ic_alpha'],cfg['ic_value']]).all() \
+                    or not 0.<cfg['ic_k_lo']<cfg['ic_k_hi'] or cfg['ic_value']<=0 or cfg['ic_alpha']<0:
+                raise ValueError('Invalid isotropic band, slope or amplitude')
+            if cfg['ic_k_hi']>min(cfg['nx'],cfg['ny'])/8.:
+                raise ValueError('Isotropic band exceeds the wavenumbers this grid can resolve')
+            if not isinstance(cfg['ic_symmetric'],bool) or not isinstance(cfg['ic_project'],bool):
+                raise ValueError('Invalid ic_symmetric or ic_project')
+            initial=f'isotropic_beams(k_lo={cfg["ic_k_lo"]},k_hi={cfg["ic_k_hi"]},'
+            initial+=f'alpha={cfg["ic_alpha"]},seed={cfg["ic_seed"]},target={cfg["ic_target"]},'
+            initial+=f'value={cfg["ic_value"]},symmetric={cfg["ic_symmetric"]},project={cfg["ic_project"]})'
+        else:
+            initial='zero'
+        if type(cfg['ic_seed']) is not int or cfg['ic_seed']<0: raise ValueError('Invalid ic_seed')
+        cfg.update(force='[0, amplitude*sin(2*pi*m*x)]',initial_condition=initial,boundary='homogeneous_no_slip')
+    elif 'm' in config: raise ValueError('m is only supported for forced_ns')
+    if cfg['experiment']=='rotation_ns':
+        if cfg['forcing_kind'] not in KINDS: raise ValueError('Unknown forcing_kind')
+        if not np.isfinite(cfg['k_f']) or cfg['k_f']<=0: raise ValueError('Invalid forcing wavenumber k_f')
+        if cfg['forcing_kind']=='A':
+            components=f'(sin({cfg["k_f"]}*y), -sin({cfg["k_f"]}*x))'
+        else:
+            components=f'(cos({cfg["k_f"]}*y), -cos({cfg["k_f"]}*x))'
+        cfg.update(force=f'amplitude*{components}',initial_condition='zero',boundary='homogeneous_no_slip')
+    elif 'k_f' in config or 'forcing_kind' in config: raise ValueError('k_f is only supported for rotation_ns')
     if cfg['experiment']=='trig_ns':
         cfg.update(force='[amplitude*cos(x), 0]',initial_condition='weighted_trig_vorticity',boundary='homogeneous_no_slip')
     if not isinstance(cfg['log_every'],int) or cfg['log_every']<1: raise ValueError('Invalid log_every')
@@ -69,9 +101,17 @@ def effective_config(config: dict) -> dict:
     if not np.isfinite(cfg['amplitude']) or not np.isfinite(cfg['gamma']) or cfg['gamma']<0:
         raise ValueError('Invalid amplitude or gamma')
     if not isinstance(cfg['cache_size'],int) or cfg['cache_size']<1: raise ValueError('Invalid cache size')
+    if not np.isfinite(cfg['stokes_tolerance']) or cfg['stokes_tolerance']<=0:
+        raise ValueError('Invalid stokes_tolerance')
     if 'steps' in config:
         if 'dt' in config: raise ValueError('Use dt or steps, not both')
         cfg.pop('dt')
+    if cfg['snapshot_every'] is not None:
+        if config.get('snapshots'): raise ValueError('Use snapshots or snapshot_every, not both')
+        if not np.isfinite(cfg['snapshot_every']) or cfg['snapshot_every']<=0:
+            raise ValueError('Invalid snapshot_every')
+        count=int(np.floor(cfg['T']/cfg['snapshot_every']))
+        cfg['snapshots']=[cfg['snapshot_every']*(index+1) for index in range(count)]
     schedule=step_sizes(cfg['T'],dt=cfg.get('dt'),steps=cfg.get('steps'))
     if any(not np.isfinite(t) or t<0 or t>cfg['T'] for t in cfg['snapshots']):
         raise ValueError('Invalid snapshot times')
@@ -147,17 +187,32 @@ def run_experiment(config: dict, *, root: Path = PROJECT, rerun: bool = False) -
     write_json(directory/'config.json',cfg)
     manifest['config_sha256']=digest(directory/'config.json')
     write_json(directory/'manifest.json',manifest)
-    if cfg['experiment']=='forced_ns':print(f'run_directory={directory}',flush=True)
+    if cfg['experiment'] in ('forced_ns','rotation_ns'):print(f'run_directory={directory}',flush=True)
     if cfg['experiment']=='trig_ns':print(f'run_directory={directory}',flush=True)
     grid=MACGrid(cfg['nx'],cfg['ny'],cfg['lx'],cfg['ly'])
-    model=MACNavierStokes(grid,cfg['nu'],cache_size=cfg['cache_size'])
-    if cfg['experiment'] in ('cavity','forced_ns'):
+    # The direct solver's residual gate is a numerical parameter of the run, so it is part of
+    # the effective config: a larger grid can need a looser gate for the same problem.
+    backend=DirectStokes(MACOperators(grid),cache_size=cfg['cache_size'],tolerance=cfg['stokes_tolerance'])
+    model=MACNavierStokes(grid,cfg['nu'],backend=backend)
+    if cfg['experiment']=='cavity':
         velocity0=np.zeros(grid.size)
+    elif cfg['experiment'] in ('forced_ns','rotation_ns'):
+        if cfg['ic_kind']=='zero':
+            velocity0=np.zeros(grid.size)
+        else:
+            from .forced_ns_convergence.isotropic import build_isotropic
+            velocity0=build_isotropic(grid,k_lo=cfg['ic_k_lo'],k_hi=cfg['ic_k_hi'],alpha=cfg['ic_alpha'],
+                                      seed=cfg['ic_seed'],target=cfg['ic_target'],value=cfg['ic_value'],
+                                      symmetric=cfg['ic_symmetric'])
+            if cfg['ic_project']:
+                # One discrete Leray projection removes the O(h^2) sampling divergence of the
+                # stream-function field, so the recorded initial state is discretely solenoidal.
+                velocity0=model.backend.solve(velocity0,mass=1.,viscosity=0.).velocity
     elif cfg['experiment']=='trig_ns':
         from .forced_ns_convergence.model import initial_velocity_trig
         velocity0=initial_velocity_trig(grid)
     else:
-        velocity0=initial_velocity(grid,cfg['amplitude'])
+        raise ValueError(f'No initial condition for {cfg["experiment"]}')
     initial=model.state(0.,velocity0)
     result=Result(initial,[0.],[model.diagnostics(initial)])
     metrics: dict={}
@@ -166,39 +221,27 @@ def run_experiment(config: dict, *, root: Path = PROJECT, rerun: bool = False) -
         log.write(f'run_id={run_id}\nidentity={identity}\n')
         try:
             metrics['jit_warmup_seconds']=warmup()
-            if cfg['experiment']=='stokes_mms':
-                solved=model.backend.solve(forcing(grid,cfg['nu'],cfg['amplitude'],0.,False),mass=0.,viscosity=cfg['nu'])
-                result.final=model.state(0.,solved.velocity)
-                result.diagnostics=[model.diagnostics(result.final)]
-                exact,pressure=exact_fields(grid,cfg['nu'],cfg['amplitude'],0.)
-                metrics.update(velocity_l2_error=grid.norm(solved.velocity-exact),
-                               pressure_l2_error=float(np.sqrt(grid.area*np.sum((solved.pressure-pressure)**2))),
-                               stokes_residual=solved.residual)
-                from solver.core import Stage
-                result.final_stages=[Stage(solved.pressure,solved.residual,solved.divergence_inf)]
-            else:
-                if cfg['experiment']=='ns_mms':
-                    model.force=lambda t: forcing(grid,cfg['nu'],cfg['amplitude'],t)
-                if cfg['experiment']=='cavity':
-                    from .cavity.model import lid_viscous_load
-                    boundary_load=lid_viscous_load(grid,cfg['nu'],cfg['lid_speed'])
-                    model.force=lambda t: boundary_load
-                if cfg['experiment']=='forced_ns':
-                    from .forced_ns_convergence.model import force_vector
-                    constant_force=force_vector(grid,cfg['amplitude'])
-                    model.force=lambda t: constant_force
-                if cfg['experiment']=='trig_ns':
-                    from .forced_ns_convergence.model import force_vector_cos
-                    constant_force=force_vector_cos(grid,cfg['amplitude'])
-                    model.force=lambda t: constant_force
-                scheme=SDIRK2() if cfg['scheme']=='sdirk2' else SDIRK2MRSAV(cfg['gamma'])
-                def progress(step: int, time: float, elapsed: float) -> None:
-                    if step%cfg['log_every']==0 or step==len(cfg['actual_steps']):
-                        log.write(f'accepted={step}/{len(cfg["actual_steps"])} t={time:.12g} elapsed={elapsed:.3f}s\n')
-                result=integrate(model,scheme,initial,cfg['actual_steps'],snapshots=cfg['snapshots'],progress=progress)
-                if cfg['experiment']=='ns_mms':
-                    exact,_=exact_fields(grid,cfg['nu'],cfg['amplitude'],result.final.t)
-                    metrics['velocity_l2_error']=grid.norm(model.vector(result.final)-exact)
+            if cfg['experiment']=='cavity':
+                from .cavity.model import lid_viscous_load
+                boundary_load=lid_viscous_load(grid,cfg['nu'],cfg['lid_speed'])
+                model.force=lambda t: boundary_load
+            if cfg['experiment']=='forced_ns':
+                from .forced_ns_convergence.model import force_vector
+                constant_force=force_vector(grid,cfg['amplitude'],cfg['m'])
+                model.force=lambda t: constant_force
+            if cfg['experiment']=='rotation_ns':
+                from .forced_rotation.model import force_ab
+                constant_force=force_ab(grid,cfg['forcing_kind'],cfg['amplitude'],cfg['k_f'])
+                model.force=lambda t: constant_force
+            if cfg['experiment']=='trig_ns':
+                from .forced_ns_convergence.model import force_vector_cos
+                constant_force=force_vector_cos(grid,cfg['amplitude'])
+                model.force=lambda t: constant_force
+            scheme=SDIRK2() if cfg['scheme']=='sdirk2' else SDIRK2MRSAV(cfg['gamma'])
+            def progress(step: int, time: float, elapsed: float) -> None:
+                if step%cfg['log_every']==0 or step==len(cfg['actual_steps']):
+                    log.write(f'accepted={step}/{len(cfg["actual_steps"])} t={time:.12g} elapsed={elapsed:.3f}s\n')
+            result=integrate(model,scheme,initial,cfg['actual_steps'],snapshots=cfg['snapshots'],progress=progress)
             if cfg['experiment']=='cavity' and result.status=='complete':
                 z=model.vector(result.final)
                 steady_rhs=model.force(result.final.t)-model.nu*(model.ops.K@z)-model.nonlinear(z)

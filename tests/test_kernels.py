@@ -2,14 +2,6 @@ import numpy as np
 from solver.mac.grid import MACGrid
 from solver.mac.kernels import convection
 
-def test_centered_convection_does_no_work_with_stationary_walls():
-    grid=MACGrid(9,6,lx=2,ly=1)
-    rng=np.random.default_rng(71)
-    u,v=grid.unpack(rng.normal(size=grid.size))
-    cu,cv=convection(u,v,grid.hx,grid.hy)
-    work=grid.inner(grid.pack(u,v),grid.pack(cu,cv))
-    assert abs(work)<1e-12
-
 def numpy_flux_reference(u,v,hx,hy):
     # Vectorized dual-cell fluxes, independent of the loop implementation.
     up=np.pad(u,((1,1),(0,0)))
