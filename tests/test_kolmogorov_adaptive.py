@@ -78,6 +78,12 @@ def test_combined_smoke_report_contains_fixed_controls(tmp_path):
             assert np.isfinite(result['attempt_cpu']).all()
     report = analyze_batch(batch_path,root=tmp_path)
     assert (report/'figures/adaptive_fixed_comparison.pdf').stat().st_size > 1000
+    reused_path = run_campaign(config, root=tmp_path, reuse_batch=batch_path)
+    reused = json.loads(reused_path.read_text())
+    assert reused['status'] == 'complete'
+    assert [item['path'] for item in reused['members']] == [
+        item['path'] for item in batch['members']]
+    assert reused['reference'] == batch['reference']
     from experiments.kolmogorov_adaptive.run_fixed_controls import run_fixed_controls
     from experiments.kolmogorov_adaptive.analyze_separate import analyze_separate
     comparison = run_fixed_controls(batch_path, root=tmp_path)

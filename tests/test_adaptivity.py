@@ -51,6 +51,20 @@ def test_rejected_trial_does_not_advance_state_on_failure():
     assert all(not item['accepted'] for item in result.attempts)
 
 
+def test_strict_snapshot_allows_short_alignment_step():
+    from solver.schemes.sdirk2 import SDIRK2
+    model = ODEModel()
+    initial = State(0., model.exact(0.))
+    result = integrate_adaptive(
+        model, SDIRK2(), initial, .02, .01,
+        controller=IController(atol=1., rtol=0., min_step=.005,
+                               max_step=.01, estimator_order=2),
+        snapshots=[0., .011, .02], strict_snapshots=True)
+    assert result.status == 'complete', result.error
+    np.testing.assert_allclose(result.snapshot_times, [0., .011, .02], atol=1e-14)
+    assert any(item['step'] < .005 for item in result.attempts)
+
+
 def test_sdirk2_embedded_pair_uses_order_two_controller():
     from solver.schemes.sdirk2 import SDIRK2
     from solver.schemes.sdirk2_mrsav import SDIRK2MRSAV

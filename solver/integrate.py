@@ -40,15 +40,28 @@ def step_sizes(T: float, *, dt: float | None = None, steps: list[float] | None =
     count=int(np.floor(ratio))
     return np.r_[np.full(count,dt),T-count*dt]
 
+
+def _schedule_nodes(initial_time: float, sequence: Array) -> Array:
+    """Accumulate long prescribed schedules without losing their endpoint."""
+    nodes = np.empty(sequence.size+1, dtype=float)
+    nodes[0] = initial_time
+    total = float(initial_time)
+    correction = 0.
+    for index, step in enumerate(sequence, start=1):
+        increment = float(step)-correction
+        updated = total+increment
+        correction = (updated-total)-increment
+        total = updated
+        nodes[index] = total
+    return nodes
+
 def integrate(model: MACNavierStokes, scheme: Scheme, initial: State, steps: list[float] | Array,
               snapshots: list[float] | None = None,
               progress: Callable[[int, float, float], None] | None = None) -> Result:
     sequence=np.asarray(steps,dtype=float)
     if sequence.ndim!=1 or sequence.size==0 or np.any(sequence<=0) or not np.isfinite(sequence).all():
         raise ValueError('Invalid step sequence')
-    # Avoid accumulated roundoff excluding T from very long fixed-step schedules.
-    nodes=(initial.t+np.arange(sequence.size+1)*sequence[0] if np.all(sequence==sequence[0])
-           else np.r_[initial.t,initial.t+np.cumsum(sequence)])
+    nodes = _schedule_nodes(initial.t, sequence)
     requests=[] if snapshots is None else list(snapshots)
     if any(not np.isfinite(t) or t<initial.t or t>nodes[-1]+1e-12 for t in requests):
         raise ValueError('Snapshot time outside integration interval')

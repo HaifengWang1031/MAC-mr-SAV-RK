@@ -128,10 +128,16 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
         remaining = end-result.final.t
         if remaining <= 8*np.finfo(float).eps*max(abs(end), abs(result.final.t), 1.):
             break
-        step = min(step, remaining)
+        proposed_step = min(step, remaining)
+        step = proposed_step
+        alignment_sliver = False
         if strict_snapshots and output_index < len(requests):
-            step = min(step, requests[output_index]-result.final.t)
-        if step < controller.min_step and remaining > controller.min_step:
+            distance_to_output = requests[output_index]-result.final.t
+            step = min(step, distance_to_output)
+            alignment_sliver = (0 < distance_to_output < controller.min_step
+                                and proposed_step >= controller.min_step)
+        if step < controller.min_step and remaining > controller.min_step \
+                and not alignment_sliver:
             result.status, result.error = 'failed', 'Step below min_step'
             break
         reason = ''
@@ -201,7 +207,8 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
                 best[index] = (distance, trial.state)
         if progress is not None:
             progress(len(result.times)-1, trial.state.t, perf_counter()-start)
-        step = min(step*factor, controller.max_step)
+        step = min((proposed_step if alignment_sliver else step)*factor,
+                   controller.max_step)
     for request, (_, state) in zip(requests, best):
         result.snapshot_requests.append(request)
         result.snapshot_times.append(state.t)

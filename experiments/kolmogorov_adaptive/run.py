@@ -127,15 +127,35 @@ def save_member(directory: Path, config: dict, scheme_name: str, controller_name
     write_json(directory/'manifest.json',manifest)
 
 
-def run_campaign(config: dict, *, root: Path = PROJECT) -> Path:
+def run_campaign(config: dict, *, root: Path = PROJECT,
+                 reuse_batch: Path | None = None) -> Path:
     config_check(config)
+    previous = None if reuse_batch is None else json.loads(reuse_batch.read_text())
+    if previous is not None and previous['config'] != config:
+        raise ValueError('Reuse batch has a different effective configuration')
+    reusable = {}
+    if previous is not None:
+        for item in previous['members'] + previous['fixed_members']:
+            if item['status'] != 'complete':
+                continue
+            directory = Path(item['path'])
+            actual = json.loads((directory/'config.json').read_text())
+            manifest = json.loads((directory/'manifest.json').read_text())
+            if manifest['status'] != 'complete' or any(
+                    actual[key] != value for key, value in config.items()):
+                raise ValueError(f'Incompatible reused member: {directory}')
+            if hashlib.sha256((directory/'results.npz').read_bytes()).hexdigest() != \
+                    manifest['result_sha256']:
+                raise ValueError(f'Checksum mismatch in reused member: {directory}')
+            reusable[item['scheme'], item['controller']] = item
     identity = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')+'-'+uuid4().hex[:8]
     batch_dir = root/'runs/kolmogorov_adaptive/batches'/identity
     batch_dir.mkdir(parents=True)
     batch_path = batch_dir/'batch.json'
     source = provenance()
     batch: dict = {'status':'running','config':config,'source':source,
-                   'members':[],'fixed_members':[],'reference':None}
+                   'members':[],'fixed_members':[],'reference':None,
+                   'reuse_batch':None if reuse_batch is None else str(reuse_batch.resolve())}
     write_json(batch_path,batch)
     outputs = output_times(config)
     with (batch_dir/'run.log').open('w',buffering=1) as log:
@@ -151,6 +171,12 @@ def run_campaign(config: dict, *, root: Path = PROJECT) -> Path:
         try:
             for scheme_name in SCHEMES:
                 for name, cls in [('I',IController),('PI',PIController)]:
+                    old = reusable.get((scheme_name, name))
+                    if old is not None:
+                        batch['members'].append(old)
+                        write_json(batch_path,batch)
+                        message(f'reused scheme={scheme_name} controller={name} path={old["path"]}')
+                        continue
                     model,initial = model_and_initial(config)
                     controller = cls(atol=config['atol_velocity'],rtol=config['rtol_velocity'],
                                      safety=config['safety'],min_step=config['min_step'],
@@ -169,6 +195,13 @@ def run_campaign(config: dict, *, root: Path = PROJECT) -> Path:
                     write_json(batch_path,batch)
                     message(f'{result.status} accepted={len(result.times)-1} rejected={len(result.attempts)-len(result.times)+1} path={member}')
             for scheme_name in SCHEMES:
+                old = reusable.get((scheme_name, 'fixed'))
+                if old is not None:
+                    batch['fixed_members'].append(old)
+                    write_json(batch_path,batch)
+                    message(f'reused scheme={scheme_name} fixed_step={config["fixed_step"]} '
+                            f'path={old["path"]}')
+                    continue
                 model,initial = model_and_initial(config)
                 cpu_start = process_time()
                 cpu_history: list[float] = []
@@ -186,21 +219,34 @@ def run_campaign(config: dict, *, root: Path = PROJECT) -> Path:
                                                'path':str(member.resolve()),'status':fixed_result.status})
                 write_json(batch_path,batch)
                 message(f'{fixed_result.status} fixed_steps={len(fixed_result.times)-1} path={member}')
-            model,initial = model_and_initial(config)
-            message('start reference scheme=sdirk3')
-            reference = integrate(model,SDIRK3(),initial,reference_schedule(outputs,config['reference_step']),
-                                  snapshots=outputs,
-                                  progress=lambda count, time, elapsed: progress(
-                                      'reference', count, time, elapsed,
-                                      config.get('reference_progress_every', 10000)))
-            ref_dir = root/'runs/kolmogorov_adaptive'/f'{identity}-reference'
-            save_member(ref_dir,config,'sdirk3','fixed',reference,source,reference=True)
-            batch['reference'] = str(ref_dir.resolve())
-            batch['status'] = ('complete' if reference.status == 'complete' and
+            old_reference = None if previous is None else previous['reference']
+            if old_reference is not None:
+                ref_dir = Path(old_reference)
+                ref_config = json.loads((ref_dir/'config.json').read_text())
+                ref_manifest = json.loads((ref_dir/'manifest.json').read_text())
+                if ref_manifest['status'] == 'complete' and all(
+                        ref_config[key] == value for key, value in config.items()) and \
+                        hashlib.sha256((ref_dir/'results.npz').read_bytes()).hexdigest() == \
+                        ref_manifest['result_sha256']:
+                    batch['reference'] = str(ref_dir.resolve())
+                    message(f'reused reference path={ref_dir}')
+            if batch['reference'] is None:
+                model,initial = model_and_initial(config)
+                message('start reference scheme=sdirk3')
+                reference = integrate(model,SDIRK3(),initial,reference_schedule(outputs,config['reference_step']),
+                                      snapshots=outputs,
+                                      progress=lambda count, time, elapsed: progress(
+                                          'reference', count, time, elapsed,
+                                          config.get('reference_progress_every', 10000)))
+                ref_dir = root/'runs/kolmogorov_adaptive'/f'{identity}-reference'
+                save_member(ref_dir,config,'sdirk3','fixed',reference,source,reference=True)
+                batch['reference'] = str(ref_dir.resolve())
+                message(f'reference={reference.status} path={ref_dir}')
+            reference_complete = json.loads((Path(batch['reference'])/'manifest.json').read_text())['status'] == 'complete'
+            batch['status'] = ('complete' if reference_complete and
                                all(m['status']=='complete' for m in batch['members']+batch['fixed_members']) else
                                'complete_with_failures')
             write_json(batch_path,batch)
-            message(f'reference={reference.status} path={ref_dir}')
         except Exception as exc:
             batch.update(status='failed',error=f'{type(exc).__name__}: {exc}')
             write_json(batch_path,batch)
@@ -215,5 +261,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config',type=Path,required=True)
     parser.add_argument('--root',type=Path,default=PROJECT)
+    parser.add_argument('--reuse-batch',type=Path)
     args = parser.parse_args()
-    print(run_campaign(json.loads(args.config.read_text()),root=args.root))
+    print(run_campaign(json.loads(args.config.read_text()),root=args.root,
+                       reuse_batch=args.reuse_batch))

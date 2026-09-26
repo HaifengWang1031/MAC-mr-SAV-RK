@@ -36,7 +36,11 @@ The complete production workflow can be launched with
 `uv run python -m experiments.kolmogorov_adaptive.production --config
 experiments/kolmogorov_adaptive/configs/production.json`. It runs the adaptive
 batch, the three fixed-step controls per scheme, and eight separate figures in
-that order; each phase saves its own batch and log.
+that order; each phase saves its own batch and log. After an interrupted or
+failed batch, pass `--reuse-batch /absolute/path/to/batch.json` to this command.
+Completed members with matching configurations and result checksums are reused;
+failed members and a missing reference are recomputed in a new batch. The
+source of each reused run remains in its original manifest.
 
 ```sh
 uv run python experiments/kolmogorov_adaptive/run.py \

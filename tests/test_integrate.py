@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from solver.integrate import integrate, step_sizes
+from solver.integrate import _schedule_nodes, integrate, step_sizes
 from solver.mac.grid import MACGrid
 from solver.mac_ns import MACNavierStokes
 from solver.schemes.sdirk2 import SDIRK2
@@ -31,3 +31,10 @@ def test_failed_step_retains_accepted_prefix():
     assert len(result.times)==2
     assert result.error=='RuntimeError: intentional failure'
 
+
+def test_long_nearly_uniform_schedule_keeps_endpoint():
+    steps = np.full(300000, 1e-4)
+    steps[1000::1000] = np.nextafter(steps[1000::1000], np.inf)
+    nodes = _schedule_nodes(0., steps)
+    assert abs(nodes[-1]-30.) < 1e-12
+    assert np.all(np.diff(nodes) > 0)
