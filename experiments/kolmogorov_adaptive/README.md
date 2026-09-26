@@ -32,6 +32,11 @@ factorization almost every step, and the fixed reference alone needs about
 fixed-step tests.
 The production log records progress every 1,000 accepted comparison steps and
 every 10,000 reference steps; these intervals are set in `production.json`.
+The complete production workflow can be launched with
+`uv run python -m experiments.kolmogorov_adaptive.production --config
+experiments/kolmogorov_adaptive/configs/production.json`. It runs the adaptive
+batch, the three fixed-step controls per scheme, and eight separate figures in
+that order; each phase saves its own batch and log.
 
 ```sh
 uv run python experiments/kolmogorov_adaptive/run.py \

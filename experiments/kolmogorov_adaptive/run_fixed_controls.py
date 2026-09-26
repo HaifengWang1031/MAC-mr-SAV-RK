@@ -50,11 +50,18 @@ def run_fixed_controls(base_batch_path: Path, *, steps: tuple[float, ...] = FIXE
                     model, initial = model_and_initial(config)
                     cpu_start = process_time()
                     cpu_history: list[float] = []
+                    def fixed_progress(count: int, time: float, elapsed: float) -> None:
+                        cpu_history.append(process_time()-cpu_start)
+                        if count == 1 or count % config.get('progress_every', 1000) == 0:
+                            update = (f'progress {scheme_name} fixed={step:g} '
+                                      f'steps={count} t={time:.6g}/{config["T"]:g} '
+                                      f'elapsed_s={elapsed:.1f}')
+                            print(update, flush=True)
+                            log.write(update+'\n')
                     result = integrate(
                         model, make_scheme(scheme_name, config['gamma']), initial,
                         reference_schedule(outputs, step), snapshots=outputs,
-                        progress=lambda count, time, wall: cpu_history.append(
-                            process_time()-cpu_start))
+                        progress=fixed_progress)
                     member = root/'runs/kolmogorov_adaptive'/f'{identity}-{scheme_name}-fixed-{step:g}'
                     save_member(member, {**config, 'fixed_step': step}, scheme_name,
                                 'fixed', result, source, cpu_history=cpu_history)
@@ -68,8 +75,15 @@ def run_fixed_controls(base_batch_path: Path, *, steps: tuple[float, ...] = FIXE
             if config['reference_step'] >= min(steps):
                 reference_step = batch['comparison_reference_step']
                 model, initial = model_and_initial(config)
+                def reference_progress(count: int, time: float, elapsed: float) -> None:
+                    if count == 1 or count % config.get('reference_progress_every', 10000) == 0:
+                        update = (f'progress reference steps={count} '
+                                  f't={time:.6g}/{config["T"]:g} elapsed_s={elapsed:.1f}')
+                        print(update, flush=True)
+                        log.write(update+'\n')
                 result = integrate(model, SDIRK3(), initial,
-                                   reference_schedule(outputs, reference_step), snapshots=outputs)
+                                   reference_schedule(outputs, reference_step), snapshots=outputs,
+                                   progress=reference_progress)
                 member = root/'runs/kolmogorov_adaptive'/f'{identity}-reference'
                 save_member(member, {**config, 'reference_step': reference_step},
                             'sdirk3', 'fixed', result, source, reference=True)
