@@ -47,6 +47,9 @@ def config_check(config: dict) -> None:
         raise ValueError('Reference step must be finer than max_step')
     if config['fixed_step'] <= 0 or config['fixed_step'] > config['max_step']:
         raise ValueError('fixed_step must be positive and no larger than max_step')
+    if config.get('progress_every', 1000) <= 0 or \
+            config.get('reference_progress_every', 10000) <= 0:
+        raise ValueError('Progress intervals must be positive')
 
 
 def model_and_initial(config: dict) -> tuple[MACNavierStokes, State]:
@@ -139,6 +142,11 @@ def run_campaign(config: dict, *, root: Path = PROJECT) -> Path:
         def message(value: str) -> None:
             print(value,flush=True)
             log.write(value+'\n')
+        def progress(label: str, count: int, time: float, elapsed: float,
+                     interval: int) -> None:
+            if count == 1 or count % interval == 0:
+                message(f'progress {label} steps={count} t={time:.6g}/{config["T"]:g} '
+                        f'elapsed_s={elapsed:.1f}')
         message(f'batch={batch_path.resolve()}')
         try:
             for scheme_name in SCHEMES:
@@ -150,7 +158,10 @@ def run_campaign(config: dict, *, root: Path = PROJECT) -> Path:
                     message(f'start scheme={scheme_name} controller={name}')
                     result = integrate_adaptive(model,make_scheme(scheme_name,config['gamma']),initial,
                                                 config['T'],config['initial_step'],controller=controller,
-                                                snapshots=outputs,strict_snapshots=True)
+                                                snapshots=outputs,strict_snapshots=True,
+                                                progress=lambda count, time, elapsed: progress(
+                                                    f'{scheme_name}-{name}', count, time, elapsed,
+                                                    config.get('progress_every', 1000)))
                     member = root/'runs/kolmogorov_adaptive'/f'{identity}-{scheme_name}-{name}'
                     save_member(member,config,scheme_name,name,result,source)
                     batch['members'].append({'scheme':scheme_name,'controller':name,'path':str(member.resolve()),
@@ -161,10 +172,14 @@ def run_campaign(config: dict, *, root: Path = PROJECT) -> Path:
                 model,initial = model_and_initial(config)
                 cpu_start = process_time()
                 cpu_history: list[float] = []
+                def fixed_progress(count: int, time: float, elapsed: float) -> None:
+                    cpu_history.append(process_time()-cpu_start)
+                    progress(f'{scheme_name}-fixed', count, time, elapsed,
+                             config.get('progress_every', 1000))
                 message(f'start scheme={scheme_name} fixed_step={config["fixed_step"]}')
                 fixed_result = integrate(model,make_scheme(scheme_name,config['gamma']),initial,
                                          reference_schedule(outputs,config['fixed_step']),snapshots=outputs,
-                                         progress=lambda count,time,wall: cpu_history.append(process_time()-cpu_start))
+                                         progress=fixed_progress)
                 member = root/'runs/kolmogorov_adaptive'/f'{identity}-{scheme_name}-fixed'
                 save_member(member,config,scheme_name,'fixed',fixed_result,source,cpu_history=cpu_history)
                 batch['fixed_members'].append({'scheme':scheme_name,'controller':'fixed',
@@ -174,7 +189,10 @@ def run_campaign(config: dict, *, root: Path = PROJECT) -> Path:
             model,initial = model_and_initial(config)
             message('start reference scheme=sdirk3')
             reference = integrate(model,SDIRK3(),initial,reference_schedule(outputs,config['reference_step']),
-                                  snapshots=outputs)
+                                  snapshots=outputs,
+                                  progress=lambda count, time, elapsed: progress(
+                                      'reference', count, time, elapsed,
+                                      config.get('reference_progress_every', 10000)))
             ref_dir = root/'runs/kolmogorov_adaptive'/f'{identity}-reference'
             save_member(ref_dir,config,'sdirk3','fixed',reference,source,reference=True)
             batch['reference'] = str(ref_dir.resolve())

@@ -30,6 +30,8 @@ production proposal: adaptive direct Stokes solves can require a new sparse
 factorization almost every step, and the fixed reference alone needs about
 300,000 steps. Benchmark cost before launching it; do not infer 256² cost from
 fixed-step tests.
+The production log records progress every 1,000 accepted comparison steps and
+every 10,000 reference steps; these intervals are set in `production.json`.
 
 ```sh
 uv run python experiments/kolmogorov_adaptive/run.py \
