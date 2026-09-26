@@ -1,0 +1,30 @@
+{
+  "base": {
+    "experiment": "forced_ns",
+    "nx": 128,
+    "ny": 128,
+    "lx": 1.0,
+    "ly": 1.0,
+    "nu": 0.001,
+    "amplitude": 1.0,
+    "m": 1,
+    "ic_kind": "isotropic_beams",
+    "ic_k_lo": 2.0,
+    "ic_k_hi": 6.0,
+    "ic_alpha": 1.6666666666666667,
+    "ic_seed": 7,
+    "ic_target": "max",
+    "ic_value": 1.0,
+    "ic_symmetric": false,
+    "ic_project": true,
+    "gamma": 1.0,
+    "T": 4.0,
+    "snapshots": [0.5, 1.0, 2.0, 4.0],
+    "log_every": 1000,
+    "stokes_tolerance": 1e-9
+  },
+  "tau_base": 0.1,
+  "k_levels": [0, 1, 2, 2.2, 2.4, 2.6, 2.8, 3, 4, 5, 6, 7],
+  "reference_k": 10,
+  "sensitivity_threshold": 0.05
+}

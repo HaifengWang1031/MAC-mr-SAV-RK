@@ -18,3 +18,5 @@ Stage pressure is an incremental multiplier, not a demonstrated second-order phy
 2026-09-23 参数组确认：受迫方腔算例取 Omega=(0,1)^2、四周齐次无滑移、u0=0（ic_kind="zero"）、nu=0.01、F=1、m=2（f=(0,sin(4*pi*x))）、r0=0、gamma=1、MAC 128^2；production.json 与 smoke.json 已按此重写。初值两种：ic_kind ∈ {zero, isotropic_beams}，默认 zero。实测该参数组在 T≲3 即定常，故收敛实验的观测窗口 [1,1.5,2] 落在定常段，测的是定常残差而不是瞬态误差；要测瞬态需把窗口移到 T≲1，此项尚未改。
 
 2026-09-23 A/B 旋转实验：新增 experiments/forced_rotation（experiment kind `rotation_ns`），外力 f_A=0.1(sin5y,-sin5x)（净力矩 2f0/k=0.04）与 f_B=0.1(cos5y,-cos5x)（零净力矩），域 (0,2π)²、零初值、r0=0。模型诊断新增 angular_momentum（域心、格心二阶求积）、power=(f,u)、dissipation=ν|∇u|²；配置新增 snapshot_every 输出节奏；cli.run_batch 不再维护自己的实验白名单，改由 workflow 校验。首轮探索参数 ν=1e-3、256²，长期配置 T=3000（τ=0.005，256² 约 21 h/次，无断点续算）。
+
+2026-09-26 三阶格式扩展：依据 Obsidian `数值分析/SDIRK3-mr-ccSAV 无滑移NS/02,03,04,15`，solver/schemes 新增四阶段普通 SDIRK3 和增量 SDIRK3-mr-ccSAV。普通格式令 G=1，mrSAV 采用 G=1-r³、Q=1+r+r²、五次实根选择；r0=0。两者支持 MAC 与 spectral model seam、固定步长和给定序列。workflow 支持 scheme=sdirk3/sdirk3_mrsav，HDF5 对三阶格式存四阶段及每阶段最多五个候选实根。受迫收敛 campaign 可通过 schemes=["sdirk3","sdirk3_mrsav"] 选择第三阶对照组，默认二阶组不变。这里实现的是笔记增量格式；三阶 PDE 收敛取决于笔记所列附加正则性条件，ODE 验证不能替代该证明。

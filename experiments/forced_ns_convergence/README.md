@@ -31,3 +31,11 @@ uv run --locked --extra mpi python experiments/forced_ns_convergence/analyze.py 
 ```
 
 `reports/forced_ns_convergence/<analysis-id>/` 中包含analysis.json、analysis.log、误差CSV、L2.tex、H1.tex和误差/成本/r图。表格按T分组，每组两种格式各Error/Rate，k只取整数。Rate仅从相邻k的有限正误差计算，否则为--；缺失误差写NaN。H1半范数采用差值的离散黏性二次型，不等同于压力或涡量误差。成本含预热、分解和推进，不能直接当作纯时间推进加速比。LaTeX使用booktabs与graphicx。
+
+## 三阶对照组
+
+`configs/sdirk3_smoke.json` 把 `schemes` 设为 `["sdirk3", "sdirk3_mrsav"]`。省略该键时保留原 SDIRK2 对照。三阶组共用较小步长的 **SDIRK3** 参考解，表格和斜率导线标为三阶。正式三阶实验需另建/编辑配置并明确选择时间窗口、网格与参考细化级别；本配置仅作工作流检查，不是三阶 PDE 收敛结论。
+
+```sh
+uv run --locked python experiments/forced_ns_convergence/run.py --config experiments/forced_ns_convergence/configs/sdirk3_smoke.json
+```

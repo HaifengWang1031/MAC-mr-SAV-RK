@@ -1,6 +1,6 @@
 # MAC-mr-SAV-RK
 
-二维不可压 Navier–Stokes 方程的无滑移 MAC 求解器。实现普通 IMEX-SDIRK2 与笔记中的增量 SDIRK2-mr-ccSAV，支持固定步长及给定步长序列。阶段速度和压力通过耦合 Stokes 系统一起求解，没有压力分裂子步。
+二维不可压 Navier–Stokes 方程的无滑移 MAC 求解器。实现普通 IMEX-SDIRK2/3 与笔记中的增量 SDIRK2/3-mr-ccSAV，支持固定步长及给定步长序列。阶段速度和压力通过耦合 Stokes 系统一起求解，没有压力分裂子步。
 
 ## 环境与首个计算
 
@@ -38,6 +38,8 @@ solver/
   schemes/
     sdirk2.py             普通 IMEX-SDIRK2
     sdirk2_mrsav.py        增量 SDIRK2-mr-ccSAV
+    sdirk3.py             普通四阶段 IMEX-SDIRK3
+    sdirk3_mrsav.py       四阶段 SDIRK3-mr-ccSAV
     roots.py              全部数值实根及最小绝对值选择
   spectral/               第二个离散：单元素 Dirichlet 组合 Legendre（无新依赖）
     basis.py              1D 精确矩阵（质量、刚度、散度、投影）与基函数递推
@@ -73,3 +75,5 @@ uv run pytest
 [顶盖驱动方腔流 Re=100](experiments/cavity/README.md)：新增常速度移动顶盖边界载荷、网格对比与流线/涡量图。
 
 实验记录导航见 [现存实验盘点](docs/experiment-inventory.md)，测试保留原则见 [代表性测试](tests/README.md)。
+
+四种格式的制造解时间收敛实验见 [实验说明](experiments/manufactured_convergence/README.md)。

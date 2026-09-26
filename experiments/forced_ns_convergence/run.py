@@ -13,6 +13,9 @@ from experiments.forced_ns_convergence.analyze import analyze_batch
 
 def validate(config: dict) -> None:
     levels=config['k_levels'];base=config['base']
+    schemes=config.get('schemes',['sdirk2','sdirk2_mrsav'])
+    if schemes not in (['sdirk2','sdirk2_mrsav'],['sdirk3','sdirk3_mrsav']):
+        raise ValueError('schemes must be an SDIRK2 or SDIRK3 comparison pair')
     if not levels or any(type(k) is not int or k<0 for k in levels) or sorted(set(levels))!=levels:
         raise ValueError('k_levels must be increasing distinct nonnegative integers')
     if type(config['reference_k']) is not int or config['reference_k']<=max(levels):raise ValueError('Reference must be finer')
@@ -42,12 +45,13 @@ def run_campaign(config: dict, *, root: Path=PROJECT, rerun: bool=False) -> Path
             message(f'{state} {path}')
             return path.resolve()
         try:
+            pair=config.get('schemes',['sdirk2','sdirk2_mrsav'])
             for k in config['k_levels']:
-                for scheme in ('sdirk2','sdirk2_mrsav'):
+                for scheme in pair:
                     path=compute(scheme,k);batch['trials'].append({'k':k,'scheme':scheme,'path':str(path)});write_json(manifest,batch)
-            ref_k=config['reference_k'];reference=compute('sdirk2',ref_k)
+            ref_k=config['reference_k'];reference=compute(pair[0],ref_k)
             for attempt in range(config['max_reference_refinements']+1):
-                refined=compute('sdirk2',ref_k+1)
+                refined=compute(pair[0],ref_k+1)
                 batch['references']={'reference':str(reference),'refined':str(refined),'reference_k':ref_k}
                 write_json(manifest,batch)
                 report=analyze_batch(manifest,root=root);batch['reports'].append(str(report.resolve()))

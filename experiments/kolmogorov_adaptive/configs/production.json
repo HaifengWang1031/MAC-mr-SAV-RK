@@ -1,0 +1,21 @@
+{
+  "nx": 128,
+  "ny": 128,
+  "nu": 0.02,
+  "m": 4,
+  "epsilon": 4.0,
+  "initial_modes": 10,
+  "gamma": 1000.0,
+  "T": 30.0,
+  "output_every": 0.1,
+  "initial_step": 1e-5,
+  "min_step": 1e-5,
+  "max_step": 0.01,
+  "fixed_step": 0.01,
+  "atol_velocity": 1e-8,
+  "rtol_velocity": 5e-5,
+  "safety": 0.9,
+  "reference_step": 0.0001,
+  "cache_size": 4,
+  "stokes_tolerance": 1e-9
+}

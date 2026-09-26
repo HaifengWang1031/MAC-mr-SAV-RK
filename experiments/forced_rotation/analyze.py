@@ -30,7 +30,7 @@ def load_run(path: Path) -> dict:
     _, grid, times, fields, history = read_run_fields(path)
     with h5py.File(path/'results.h5') as stored:
         selected = stored['roots/selected'][:] if 'roots/selected' in stored else np.zeros((0,2))
-        candidates = stored['roots/candidates'][:] if 'roots/candidates' in stored else np.zeros((0,2,3))
+        candidates = stored['roots/candidates'][:] if 'roots/candidates' in stored else np.zeros((0,0,0))
         stage_residual = stored['stages/residual'][:] if 'stages/residual' in stored else np.zeros((0,2))
         stage_divergence = stored['stages/divergence_inf'][:] if 'stages/divergence_inf' in stored else np.zeros((0,2))
     return {'path':path,'config':cfg,'manifest':manifest,'grid':grid,'times':times,'fields':fields,

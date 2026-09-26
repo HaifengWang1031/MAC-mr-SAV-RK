@@ -1,0 +1,17 @@
+{
+  "base": {
+    "experiment": "manufactured_ns",
+    "nx": 12,
+    "ny": 12,
+    "lx": 1.0,
+    "ly": 1.0,
+    "nu": 0.01,
+    "amplitude": 0.05,
+    "gamma": 1.0,
+    "T": 0.4,
+    "snapshots": [0.4],
+    "log_every": 100
+  },
+  "tau_base": 0.1,
+  "k_levels": [-1, 0, 1]
+}

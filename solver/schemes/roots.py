@@ -34,6 +34,11 @@ def real_roots(coefficients: Array, tolerance: float = 1e-10) -> RootChoice:
             if abs(np.polyval(c,new))<=abs(np.polyval(c,r)): r=new
         denominator=float(np.polyval(np.abs(c),abs(r)))
         residual=abs(float(np.polyval(c,r)))/max(denominator,np.finfo(float).tiny)
+        # A nearly real complex pair can have a tiny real-axis residual without any
+        # real zero (notably near a double-root collision). Only admit its real
+        # part when that residual is at coefficient-roundoff level.
+        if root.imag != 0 and residual > 64*np.finfo(float).eps:
+            continue
         if np.isfinite(r) and np.isfinite(residual) and residual<=tolerance:
             accepted.append((r,residual))
     if not accepted: raise RuntimeError('No residual-validated numerical real root')

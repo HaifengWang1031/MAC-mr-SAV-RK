@@ -35,20 +35,23 @@ def number(value: float) -> str:
     return rf'${mantissa}\times10^{{{int(power)}}}$'
 
 
-def latex_table(rows: list[dict], times: list[float], norm: str, reference_dt: float) -> str:
+def latex_table(rows: list[dict], times: list[float], norm: str, reference_dt: float,
+                schemes: list[str], tau_base: float) -> str:
     norm_label={'L2':r'$L^2$','H1':r'$H^1$ seminorm'}[norm]
+    labels={'sdirk2':'SDIRK2','sdirk2_mrsav':'SDIRK2-mrSAV',
+            'sdirk3':'SDIRK3','sdirk3_mrsav':'SDIRK3-mrSAV'}
     lines=[r'\begin{table}',r'\centering',
-           rf'\caption{{Velocity {norm_label} errors and observed rates for $\tau=0.1\,2^{{-k}}$ with integer $k$; common SDIRK2 reference with $\tau_{{\rm ref}}={reference_dt:.12g}$.}}',
+           rf'\caption{{Velocity {norm_label} errors and observed rates for $\tau={tau_base:g}\,2^{{-k}}$ with integer $k$; common {labels[schemes[0]]} reference with $\tau_{{\rm ref}}={reference_dt:.12g}$.}}',
            r'\setlength{\tabcolsep}{4pt}',r'\resizebox{\textwidth}{!}{',
            r'\begin{tabular}{l '+ ' '.join(['cc cc']*len(times))+'}',r'\toprule',
            '& '+' & '.join(rf'\multicolumn{{4}}{{c}}{{$T={t:g}$}}' for t in times)+r'\\',
            ' '.join(rf'\cmidrule(lr){{{2+4*j}-{5+4*j}}}' for j in range(len(times))),
-           '& '+' & '.join([r'\multicolumn{2}{c}{SDIRK2} & \multicolumn{2}{c}{SDIRK2-mrSAV}']*len(times))+r'\\',
+           '& '+' & '.join([' & '.join(rf'\multicolumn{{2}}{{c}}{{{labels[scheme]}}}' for scheme in schemes)]*len(times))+r'\\',
            '$k$ & '+' & '.join(['Error & Rate & Error & Rate']*len(times))+r'\\',r'\midrule']
     for k in sorted({r['k'] for r in rows}):
         cells=[str(k)]
         for t in times:
-            for scheme in ('sdirk2','sdirk2_mrsav'):
+            for scheme in schemes:
                 row=next(r for r in rows if r['k']==k and r['time']==t and r['scheme']==scheme)
                 rate=row[norm+'_rate']
                 cells.extend([number(row[norm]), '--' if not np.isfinite(rate) else f'{rate:.2f}'])
@@ -58,11 +61,14 @@ def latex_table(rows: list[dict], times: list[float], norm: str, reference_dt: f
 
 def analyze_batch(batch_path: Path, *, root: Path=PROJECT) -> Path:
     batch=json.loads(batch_path.read_text()); params=batch['config']
+    schemes=params.get('schemes',['sdirk2','sdirk2_mrsav'])
+    if schemes not in (['sdirk2','sdirk2_mrsav'],['sdirk3','sdirk3_mrsav']):
+        raise ValueError('Invalid comparison schemes')
     refs=[read_run(Path(batch['references'][key])) for key in ('reference','refined')]
-    if any(r['manifest']['status']!='complete' or r['config']['scheme']!='sdirk2' for r in refs):
-        raise ValueError('Both reference runs must be completed SDIRK2 runs')
+    if any(r['manifest']['status']!='complete' or r['config']['scheme']!=schemes[0] for r in refs):
+        raise ValueError('Both reference runs must use the selected comparator')
     members={(m['k'],m['scheme']) for m in batch['trials']}
-    expected={(k,s) for k in params['k_levels'] for s in ('sdirk2','sdirk2_mrsav')}
+    expected={(k,s) for k in params['k_levels'] for s in schemes}
     if members!=expected or len(members)!=len(batch['trials']):raise ValueError('Incomplete or duplicate trial members')
     trials=[(m,read_run(Path(m['path']))) for m in batch['trials']]
     cfg=refs[0]['config']; times=cfg['snapshots']
@@ -110,26 +116,26 @@ def analyze_batch(batch_path: Path, *, root: Path=PROJECT) -> Path:
         with (report/'tables/errors.csv').open('w') as f:
             writer=csv.DictWriter(f,fieldnames=list(rows[0]));writer.writeheader();writer.writerows(rows)
         for norm in ('L2','H1'):
-            (report/f'tables/{norm}.tex').write_text(latex_table(rows,times,norm,cfg['dt']))
+            (report/f'tables/{norm}.tex').write_text(latex_table(rows,times,norm,cfg['dt'],schemes,params['tau_base']))
         import matplotlib
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
         for norm in ('L2','H1'):
             fig,axes=plt.subplots(1,len(times),figsize=(5*len(times),4),squeeze=False)
             for ax,t in zip(axes[0],times):
-                for scheme in ('sdirk2','sdirk2_mrsav'):
+                for scheme in schemes:
                     plot_rows=sorted((r for r in rows if r['time']==t and r['scheme']==scheme and np.isfinite(r[norm]) and r[norm]>0),key=lambda r:r['dt'])
                     if plot_rows:ax.loglog([r['dt'] for r in plot_rows],[r[norm] for r in plot_rows],'o-',label=scheme)
                 if plot_rows:
                     steps=np.array([r['dt'] for r in plot_rows]);anchor=plot_rows[0][norm]
-                    ax.loglog(steps,anchor*(steps/steps[0])**2,'k--',alpha=.5,label='order 2')
+                    ax.loglog(steps,anchor*(steps/steps[0])**(3 if schemes[0]=='sdirk3' else 2),'k--',alpha=.5,label=f'order {3 if schemes[0]=="sdirk3" else 2}')
                 ax.set(title=f'T={t:g}',xlabel='dt',ylabel=f'velocity {norm} error');ax.legend();ax.grid(True,which='both',alpha=.3)
             fig.tight_layout();fig.savefig(report/f'figures/{norm}.png',dpi=160);plt.close(fig)
         fig,axes=plt.subplots(1,2,figsize=(10,4))
-        for scheme in ('sdirk2','sdirk2_mrsav'):
+        for scheme in schemes:
             plot_rows=sorted((r for r in rows if r['time']==times[-1] and r['scheme']==scheme and np.isfinite(r['L2']) and r['L2']>0),key=lambda r:r['dt'])
             if plot_rows:axes[0].loglog([r['seconds'] for r in plot_rows],[r['L2'] for r in plot_rows],'o-',label=scheme)
-            if scheme=='sdirk2_mrsav' and plot_rows:
+            if scheme==schemes[1] and plot_rows:
                 axes[1].loglog([r['dt'] for r in plot_rows],[r['max_stage_abs_r'] for r in plot_rows],'o-')
         axes[0].set(xlabel='total seconds (including warmup/setup)',ylabel='final velocity L2 error');axes[0].legend()
         axes[1].set(xlabel='dt',ylabel='max stage |r|')

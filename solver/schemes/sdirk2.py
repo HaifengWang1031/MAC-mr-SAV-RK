@@ -35,4 +35,5 @@ class SDIRK2:
                             model.physical_divergence_inf(s.velocity),
                             continuity_residual=model.max_abs(model.apply_D(s.velocity)))
                 for s in (first,second)]
-        return Trial(model.state(state.t+dt,second.velocity),stages)
+        embedded=model.combine((1.-1./ETA,old),(1./ETA,first.velocity))
+        return Trial(model.state(state.t+dt,second.velocity),stages,embedded)

@@ -17,8 +17,11 @@ from solver.mac.kernels import warmup
 from solver.mac.operators import MACOperators
 from solver.mac.stokes import DirectStokes
 from solver.mac_ns import MACNavierStokes
+from solver.core import Scheme
 from solver.schemes.sdirk2 import SDIRK2
 from solver.schemes.sdirk2_mrsav import SDIRK2MRSAV
+from solver.schemes.sdirk3 import SDIRK3
+from solver.schemes.sdirk3_mrsav import SDIRK3MRSAV
 from solver.integrate import Result, integrate, step_sizes
 from .forced_ns_convergence.isotropic import TARGETS
 from .forced_rotation.model import KINDS
@@ -56,7 +59,7 @@ def effective_config(config: dict) -> dict:
     unknown=set(config)-set(DEFAULTS)-{'experiment','steps','lid_speed'}
     if unknown: raise ValueError(f'Unknown configuration keys: {sorted(unknown)}')
     cfg={**DEFAULTS,**config}
-    if cfg.get('experiment') not in ('cavity','forced_ns','trig_ns','rotation_ns'): raise ValueError('Unknown experiment')
+    if cfg.get('experiment') not in ('cavity','forced_ns','trig_ns','rotation_ns','manufactured_ns'): raise ValueError('Unknown experiment')
     if cfg['experiment']=='cavity':
         cfg['lid_speed']=config.get('lid_speed',1.)
         if not np.isfinite(cfg['lid_speed']) or cfg['lid_speed']<=0: raise ValueError('Positive finite lid_speed required')
@@ -91,10 +94,15 @@ def effective_config(config: dict) -> dict:
             components=f'(cos({cfg["k_f"]}*y), -cos({cfg["k_f"]}*x))'
         cfg.update(force=f'amplitude*{components}',initial_condition='zero',boundary='homogeneous_no_slip')
     elif 'k_f' in config or 'forcing_kind' in config: raise ValueError('k_f is only supported for rotation_ns')
+    if cfg['experiment']=='manufactured_ns':
+        cfg.update(force='discrete MMS from sin²(pi*x) sin²(2*pi*y)',
+                   initial_condition='a(0)*discrete_curl(streamfunction)',boundary='homogeneous_no_slip')
+        if cfg['lx']!=1. or cfg['ly']!=1. or cfg['amplitude']<=0:
+            raise ValueError('Manufactured case requires the unit square and positive amplitude')
     if cfg['experiment']=='trig_ns':
         cfg.update(force='[amplitude*cos(x), 0]',initial_condition='weighted_trig_vorticity',boundary='homogeneous_no_slip')
     if not isinstance(cfg['log_every'],int) or cfg['log_every']<1: raise ValueError('Invalid log_every')
-    if cfg['scheme'] not in ('sdirk2','sdirk2_mrsav'): raise ValueError('Unknown scheme')
+    if cfg['scheme'] not in ('sdirk2','sdirk2_mrsav','sdirk3','sdirk3_mrsav'): raise ValueError('Unknown scheme')
     MACGrid(cfg['nx'],cfg['ny'],cfg['lx'],cfg['ly'])
     for key in ('nu','T'):
         if not np.isfinite(cfg[key]) or cfg[key]<=0: raise ValueError(f'Invalid {key}')
@@ -119,7 +127,7 @@ def effective_config(config: dict) -> dict:
     cfg['actual_steps']=schedule.tolist()
     return cfg
 
-def save_result(path: Path, result: Result, metrics: dict) -> None:
+def save_result(path: Path, result: Result, metrics: dict, n_stages: int = 2) -> None:
     temporary=path.with_suffix('.tmp')
     with h5py.File(temporary,'w') as data:
         data.attrs['schema_version']=1
@@ -139,9 +147,10 @@ def save_result(path: Path, result: Result, metrics: dict) -> None:
             data.create_dataset('snapshots/u',data=np.stack([s.u for s in result.snapshots]),compression='gzip')
             data.create_dataset('snapshots/v',data=np.stack([s.v for s in result.snapshots]),compression='gzip')
             data.create_dataset('snapshots/r',data=[s.r for s in result.snapshots])
-        candidates=np.full((len(result.stages),2,3),np.nan)
+        n_roots=5 if n_stages==4 else 3
+        candidates=np.full((len(result.stages),n_stages,n_roots),np.nan)
         residuals=candidates.copy()
-        counts=np.zeros((len(result.stages),2),dtype=int)
+        counts=np.zeros((len(result.stages),n_stages),dtype=int)
         selected=np.zeros_like(counts,dtype=float)
         for n,stages in enumerate(result.stages):
             for i,stage in enumerate(stages):
@@ -150,7 +159,7 @@ def save_result(path: Path, result: Result, metrics: dict) -> None:
         for key,value in [('candidates',candidates),('residuals',residuals),('count',counts),('selected',selected)]:
             data.create_dataset('roots/'+key,data=value)
         for key in ('residual','scalar_residual','divergence_inf','continuity_residual'):
-            data.create_dataset('stages/'+key,data=np.array([[s[key] for s in stages] for stages in result.stages]).reshape(-1,2))
+            data.create_dataset('stages/'+key,data=np.array([[s[key] for s in stages] for stages in result.stages]).reshape(-1,n_stages))
     temporary.replace(path)
 
 def load_record(directory: Path, *, require_complete: bool = False) -> tuple[dict,dict]:
@@ -187,7 +196,7 @@ def run_experiment(config: dict, *, root: Path = PROJECT, rerun: bool = False) -
     write_json(directory/'config.json',cfg)
     manifest['config_sha256']=digest(directory/'config.json')
     write_json(directory/'manifest.json',manifest)
-    if cfg['experiment'] in ('forced_ns','rotation_ns'):print(f'run_directory={directory}',flush=True)
+    if cfg['experiment'] in ('forced_ns','rotation_ns','manufactured_ns'):print(f'run_directory={directory}',flush=True)
     if cfg['experiment']=='trig_ns':print(f'run_directory={directory}',flush=True)
     grid=MACGrid(cfg['nx'],cfg['ny'],cfg['lx'],cfg['ly'])
     # The direct solver's residual gate is a numerical parameter of the run, so it is part of
@@ -208,6 +217,9 @@ def run_experiment(config: dict, *, root: Path = PROJECT, rerun: bool = False) -
                 # One discrete Leray projection removes the O(h^2) sampling divergence of the
                 # stream-function field, so the recorded initial state is discretely solenoidal.
                 velocity0=model.backend.solve(velocity0,mass=1.,viscosity=0.).velocity
+    elif cfg['experiment']=='manufactured_ns':
+        from .manufactured_convergence.model import spatial_velocity, amplitude
+        velocity0=amplitude(0.,cfg['amplitude'])*spatial_velocity(grid)
     elif cfg['experiment']=='trig_ns':
         from .forced_ns_convergence.model import initial_velocity_trig
         velocity0=initial_velocity_trig(grid)
@@ -233,11 +245,18 @@ def run_experiment(config: dict, *, root: Path = PROJECT, rerun: bool = False) -
                 from .forced_rotation.model import force_ab
                 constant_force=force_ab(grid,cfg['forcing_kind'],cfg['amplitude'],cfg['k_f'])
                 model.force=lambda t: constant_force
+            if cfg['experiment']=='manufactured_ns':
+                from .manufactured_convergence.model import configure
+                configure(model,cfg['amplitude'])
             if cfg['experiment']=='trig_ns':
                 from .forced_ns_convergence.model import force_vector_cos
                 constant_force=force_vector_cos(grid,cfg['amplitude'])
                 model.force=lambda t: constant_force
-            scheme=SDIRK2() if cfg['scheme']=='sdirk2' else SDIRK2MRSAV(cfg['gamma'])
+            scheme: Scheme
+            if cfg['scheme']=='sdirk2': scheme=SDIRK2()
+            elif cfg['scheme']=='sdirk2_mrsav': scheme=SDIRK2MRSAV(cfg['gamma'])
+            elif cfg['scheme']=='sdirk3': scheme=SDIRK3()
+            else: scheme=SDIRK3MRSAV(cfg['gamma'])
             def progress(step: int, time: float, elapsed: float) -> None:
                 if step%cfg['log_every']==0 or step==len(cfg['actual_steps']):
                     log.write(f'accepted={step}/{len(cfg["actual_steps"])} t={time:.12g} elapsed={elapsed:.3f}s\n')
@@ -257,7 +276,7 @@ def run_experiment(config: dict, *, root: Path = PROJECT, rerun: bool = False) -
             result.status='failed'; result.error=f'{type(error).__name__}: {error}'
             log.write(traceback.format_exc())
         metrics['total_seconds']=perf_counter()-start
-        save_result(directory/'results.h5',result,metrics)
+        save_result(directory/'results.h5',result,metrics,4 if cfg['scheme'].startswith('sdirk3') else 2)
         manifest.update(status=result.status,error=result.error,accepted_steps=len(result.times)-1,
                         final_time=result.final.t,metrics=metrics,results_sha256=digest(directory/'results.h5'),
                         finished_utc=datetime.now(timezone.utc).isoformat())

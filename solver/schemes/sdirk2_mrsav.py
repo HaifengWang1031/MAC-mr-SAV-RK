@@ -64,4 +64,5 @@ class SDIRK2MRSAV:
         second,s2=self._stage(model,rhs,(1-self.gamma*dt*(1-2*ETA))*s1.r,
                               model.combine((-1.,nonlinear_old),(1-DELTA,n1)),dt,
                               -lifting_old+(1-DELTA)*lifting_first)
-        return Trial(model.state(state.t+dt,second,s2.r),[s1,s2])
+        embedded=model.combine((1.-1./ETA,old),(1./ETA,first))
+        return Trial(model.state(state.t+dt,second,s2.r),[s1,s2],embedded)

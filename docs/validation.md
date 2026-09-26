@@ -319,3 +319,33 @@ T=10 与 T=20 的快照：max|u|=1.714/2.049、u_rms=0.984/1.168、max|omega|=41
 两种格式的 Stage.divergence_inf 统一为物理空间散度诊断，新增 continuity_residual 表示 apply_D 对总速度施加的离散约束残差。MAC 两者相同；谱方法前者为 Gauss 点采样最大值，后者为受约束压力模态上的弱残差，不能互相替代。SAV 的阶段准入仍使用弱约束，所有容差保持不变。HDF5 新增 stages/continuity_residual；旧记录不重写，旧谱 SAV 阶段 divergence_inf 仍需按旧语义解释。
 
 回归用例采用低阶谱空间及固定随机外力，物理散度约 0.368、弱残差接近机器零，确保两种格式不会再混淆这两个量；现有工作流测试同时检查新字段落盘。
+
+## 四阶段 SDIRK3 与 mr-ccSAV 初步验证（2026-09-26）
+
+系数直接取 Obsidian `SDIRK3-mr-ccSAV 无滑移NS` 02、03、04、15 篇的增量矩阵。普通格式 G=1；SAV 格式 G=1-r³、Q=1+r+r²，标量五次式按两个共矩阵 Stokes 解恢复。针对 02 篇节点，测试核对每行增量和；针对 15 篇二维非线性 ODE 的制造解，分别以三组折半步长检查末端三阶；另检查 MAC 定常速度与 r=0 保持、谱方法移动顶盖 lifting 的四阶段可运行性、给定序列、四阶段 HDF5 保存及显式的三阶共参考解 campaign。全套 52 项测试通过，mypy 检查 42 个源文件通过；这里仅确认本地实现已接通。
+
+验证边界：本轮没有高分辨率 NS 空间/时间收敛研究，也没有证明低正则无滑移 PDE 的无条件三阶精度。谱方法的弱散度与物理空间散度仍按 2026-09-24 的区分解释。求根器新增近实轴复根过滤回归，但重根附近的全部五次实根枚举仍是浮点数值问题；生产计算应检查根候选和残差记录。
+
+## 制造解四格式试算（2026-09-26）
+
+新增基于顶点流函数离散旋度的 MAC 制造解：精确离散速度 `a(t)W_h`，外力由同一离散 K 与 N 构造。12×10 独立检查验证离散散度与半离散方程残差均小于 1e-12。12² 短批次完成四格式/三个步长及 PDF 编译。指定 128²、T=2、tau=0.2 的四格式试算均完成，L² 末端误差分别约为 SDIRK2 7.654e-5、SDIRK2-mrSAV 7.654e-5、SDIRK3 1.801e-6、SDIRK3-mrSAV 1.801e-6。这是单个粗步长，不能据此判断阶数或长时间稳健性；尚未观察到用户提出的普通 SDIRK NaN 与 mrSAV 稳定分离。
+# 2026-09-26 IMEX-SDIRK3(2) I 型自适应控制器
+
+`solver/adaptivity/controller.py` 使用第 17 篇笔记的二阶阶段组合，接受三阶主解；普通 SDIRK3 与 SDIRK3-mr-ccSAV 均共用该控制器。`tests/test_adaptivity.py` 检查嵌入差的三次局部缩放、误差拒绝与回退、SAV 主标量提交、失败前缀及小 MAC 网格的散度。运行 `uv run pytest -q tests/test_adaptivity.py tests/test_sdirk3.py`：12 passed；`uv run mypy solver`：通过。尚未对变步长 mr-ccSAV 做容差收敛或长期稳定性验证；此控制器暂为 solver API，未接入实验 HDF5 workflow。
+
+## 2026-09-26 PI 控制器扩展
+
+PI 控制器只读取上一接受步的归一化误差，首个接受步使用 I 更新；拒绝步使用当前误差的 I 缩步并保持 PI 历史不变。试算记录新增控制器类型、历史误差及实际因子。验证覆盖更新公式、零误差、拒步历史及两种三阶格式的小 MAC 网格；此处不宣称 PI 相对 I 的效率优势，也未做长期稳定性验证。
+## 2026-09-26 无滑移 Kolmogorov 自适应 smoke
+
+新增 `experiments/kolmogorov_adaptive/`：壁面夹持的多模态流函数、旋度等于 `4 cos(4y)` 的速度外力、四格式各配 I/PI 控制器、严格物理输出节点、试算与失败记录，以及只读生成八幅 PDF 的分析入口。SDIRK2/SDIRK2-mrSAV 的嵌入速度用第一阶段外推，误差尺度为二次；SDIRK3 对继续使用三次尺度。控制量是内部 MAC 顶点离散涡量 L²，不含辅助变量标量容差；`|r|` 单独记录。
+
+24²、T=0.04、初值三模态的 smoke 批次 `runs/kolmogorov_adaptive/batches/20260926T122103-6c28fb55/batch.json`：8/8 自适应运行和固定 SDIRK3 参考运行均完成，输出时刻均为 `[0,0.01,0.02,0.03,0.04]`；SDIRK2 两格式 I/PI 各接受 28/44 步，SDIRK3 两格式各接受 8 步。`reports/kolmogorov_adaptive/20260926T122214-e2c4d2db/figures/` 生成八个单页 PDF。该短程小网格结果仅验证工作流，不能推断 T=30 的稳定性、控制器效率或参考精度；生产配置尚未运行。
+
+### 速度 L² 控制口径替换
+
+依照用户后续选择，控制误差与参考误差均改为 MAC 速度离散 L² 范数；配置键改为 `atol_velocity`、`rtol_velocity`，分析拒绝旧的涡量控制批次。新 smoke 批次 `runs/kolmogorov_adaptive/batches/20260926T122650-bab1abae/batch.json`：8/8 自适应运行及固定 SDIRK3 参考均完成；八幅速度口径图在 `reports/kolmogorov_adaptive/20260926T122654-a2081aca/figures/`。SDIRK2 两格式 I/PI 各接受 20/34 步，SDIRK3 两格式 I/PI 各接受 15/8 步。`tests/test_kolmogorov_adaptive.py` 核对试算的归一化误差与手算 MAC L² 定义；相关测试 24 项通过，mypy 27 文件通过。旧批次数字保留其历史涡量口径，不能和新结果直接比较。该 smoke 不验证 T=30 精度或效率。
+
+### 合图与固定步长对照
+
+按用户提供的参考图式，八项诊断合成一张 4×2 面板图，四种格式各加入 `fixed_step=0.01` 对照；细步长 SDIRK3 仍独立作为参考解。固定对照的逐步进程 CPU 由求解回调实测，拒绝试算不进入接受节点连线，其耗时仍累计到随后接受节点。批次 `runs/kolmogorov_adaptive/batches/20260926T123637-a527073b/batch.json` 中 8/8 自适应、4/4 固定对照与 1/1 参考均完成；每个固定对照在 `T=0.04` 恰为 4 步。最终合图位于 `reports/kolmogorov_adaptive/20260926T123732-b9f45acd/figures/adaptive_fixed_comparison.pdf`（另有 PNG）。`tests/test_kolmogorov_adaptive.py` 的临时目录工作流回归覆盖 12 个成员、固定步长记录与合图生成。此小网格 smoke 的首次运行可能包含 JIT/分解启动成本，不用于控制器效率排序。

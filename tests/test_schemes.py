@@ -29,3 +29,10 @@ def test_zero_velocity_and_scalar_decay(scheme):
         assert trial.state.r==pytest.approx(expected)
         assert max(s.scalar_residual for s in trial.stages)<1e-12
 
+
+
+def test_near_real_complex_pair_is_not_selected_as_a_real_root():
+    # (r+3)*((r-1)**2+1e-12) has only the real root -3.
+    roots=real_roots(np.array([1.,1.,-5.+1e-12,3.+3e-12]))
+    assert roots.selected==pytest.approx(-3.)
+    assert len(roots.candidates)==1

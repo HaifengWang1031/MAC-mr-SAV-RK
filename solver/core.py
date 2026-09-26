@@ -26,6 +26,7 @@ class Stage:
 class Trial:
     state: State
     stages: list[Stage]
+    embedded_velocity: Any | None = None
 
 @dataclass
 class History:
