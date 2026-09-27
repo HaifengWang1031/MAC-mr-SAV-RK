@@ -19,6 +19,16 @@ Two deliberate typing choices:
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, Protocol
 
+
+def stage_divergences(model: Any, velocity: Any) -> tuple[float, float]:
+    combined = getattr(model, "stage_divergences", None)
+    if combined is not None:
+        return combined(velocity)
+    return (
+        model.physical_divergence_inf(velocity),
+        model.max_abs(model.apply_D(velocity)),
+    )
+
 class SolveResult(Protocol):
     """What a shifted Stokes solve returns: a velocity, a pressure and its own checks."""
     velocity: Any
@@ -66,6 +76,9 @@ class Model(Protocol):
 
     def physical_divergence_inf(self, velocity: Any) -> float:
         """Physical divergence diagnostic, including any boundary lifting."""
+
+    def stage_divergences(self, velocity: Any) -> tuple[float, float]:
+        """Physical divergence and algebraic continuity residual for one stage."""
 
     def inner(self, left: Any, right: Any) -> float:
         """Velocity-space inner product, including the cell-area weight."""

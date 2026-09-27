@@ -56,6 +56,10 @@ class MACNavierStokes:
     def physical_divergence_inf(self, velocity: Array) -> float:
         return self.max_abs(self.apply_D(velocity))
 
+    def stage_divergences(self, velocity: Array) -> tuple[float, float]:
+        divergence = self.max_abs(self.apply_D(velocity))
+        return divergence, divergence
+
     def inner(self, left: Array, right: Array) -> float:
         return self.grid.inner(left,right)
 
@@ -91,11 +95,13 @@ class MACNavierStokes:
     def diagnostics(self, state: State) -> dict[str,float]:
         velocity=self.vector(state)
         kinetic=.5*self.grid.inner(velocity,velocity)
+        linear_velocity=self.ops.K@velocity
+        h1_seminorm_squared=self.grid.inner(velocity,linear_velocity)
         # Power is the instantaneous work of the body force; dissipation is the viscous
         # quadratic form, which `K` already expresses as the discrete gradient energy.
         return {'kinetic':kinetic,'modified_energy':kinetic+.5*(state.r-1)**2,
                 'divergence_inf':float(np.max(np.abs(self.ops.D@velocity))),
-                'h1_seminorm_squared':self.grid.inner(velocity,self.ops.K@velocity),'r':state.r,
+                'h1_seminorm_squared':h1_seminorm_squared,'r':state.r,
                 'angular_momentum':self.angular_momentum(velocity),
                 'power':self.grid.inner(self.force(state.t),velocity),
-                'dissipation':self.nu*self.grid.inner(velocity,self.ops.K@velocity)}
+                'dissipation':self.nu*h1_seminorm_squared}

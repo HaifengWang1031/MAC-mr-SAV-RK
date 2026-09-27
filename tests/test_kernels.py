@@ -1,6 +1,12 @@
 import numpy as np
 from solver.mac.grid import MACGrid
-from solver.mac.kernels import convection
+from solver.mac.kernels import (
+    convection,
+    packed_divergence,
+    packed_divergence_transpose,
+    packed_divergence_transpose_vector,
+    packed_divergence_vector,
+)
 
 def numpy_flux_reference(u,v,hx,hy):
     # Vectorized dual-cell fluxes, independent of the loop implementation.
@@ -35,3 +41,41 @@ def test_numba_matches_independent_numpy_reference():
     for a,b in zip(actual,expected): np.testing.assert_allclose(a,b,rtol=1e-13,atol=1e-13)
     np.testing.assert_allclose(divergence(u,v,grid.hx,grid.hy).ravel(),MACOperators(grid).D@x,atol=1e-13)
     assert abs(inner_faces(u,v,u,v,grid.area)-grid.inner(x,x))<1e-12
+
+
+def test_packed_numba_divergence_and_transpose_match_sparse_operators():
+    from solver.mac.operators import MACOperators
+
+    grid = MACGrid(11, 7, 2.0, 0.7)
+    operators = MACOperators(grid)
+    rng = np.random.default_rng(79)
+    velocity = rng.normal(size=(grid.size, 2))
+    pressure = rng.normal(size=(grid.np, 2))
+
+    actual_divergence = packed_divergence(
+        velocity, grid.nx, grid.ny, grid.hx, grid.hy
+    )
+    actual_transpose = packed_divergence_transpose(
+        pressure, grid.nx, grid.ny, grid.hx, grid.hy
+    )
+
+    np.testing.assert_allclose(actual_divergence, operators.D @ velocity, atol=1e-13)
+    np.testing.assert_allclose(actual_transpose, operators.D.T @ pressure, atol=1e-13)
+    np.testing.assert_allclose(
+        packed_divergence_vector(
+            velocity[:, 0], grid.nx, grid.ny, grid.hx, grid.hy
+        ),
+        operators.D @ velocity[:, 0],
+        atol=1e-13,
+    )
+    np.testing.assert_allclose(
+        packed_divergence_transpose_vector(
+            pressure[:, 0], grid.nx, grid.ny, grid.hx, grid.hy
+        ),
+        operators.D.T @ pressure[:, 0],
+        atol=1e-13,
+    )
+    for column in range(pressure.shape[1]):
+        left = np.dot(actual_divergence[:, column], pressure[:, column])
+        right = np.dot(velocity[:, column], actual_transpose[:, column])
+        assert abs(left - right) < 2e-12 * max(1.0, abs(left), abs(right))

@@ -44,6 +44,94 @@ def divergence(u: Array,v: Array,hx: float,hy: float) -> Array:
     return result
 
 @njit(cache=True)
+def packed_divergence(
+    velocity: Array, nx: int, ny: int, hx: float, hy: float
+) -> Array:
+    columns = velocity.shape[1]
+    nu = ny * (nx - 1)
+    result = np.empty((nx * ny, columns))
+    for j in range(ny):
+        for i in range(nx):
+            pressure_index = j * nx + i
+            for column in range(columns):
+                value = 0.0
+                if i < nx - 1:
+                    value += velocity[j * (nx - 1) + i, column] / hx
+                if i > 0:
+                    value -= velocity[j * (nx - 1) + i - 1, column] / hx
+                if j < ny - 1:
+                    value += velocity[nu + j * nx + i, column] / hy
+                if j > 0:
+                    value -= velocity[nu + (j - 1) * nx + i, column] / hy
+                result[pressure_index, column] = value
+    return result
+
+@njit(cache=True)
+def packed_divergence_vector(
+    velocity: Array, nx: int, ny: int, hx: float, hy: float
+) -> Array:
+    nu = ny * (nx - 1)
+    result = np.empty(nx * ny)
+    for j in range(ny):
+        for i in range(nx):
+            value = 0.0
+            if i < nx - 1:
+                value += velocity[j * (nx - 1) + i] / hx
+            if i > 0:
+                value -= velocity[j * (nx - 1) + i - 1] / hx
+            if j < ny - 1:
+                value += velocity[nu + j * nx + i] / hy
+            if j > 0:
+                value -= velocity[nu + (j - 1) * nx + i] / hy
+            result[j * nx + i] = value
+    return result
+
+@njit(cache=True)
+def packed_divergence_transpose(
+    pressure: Array, nx: int, ny: int, hx: float, hy: float
+) -> Array:
+    columns = pressure.shape[1]
+    nu = ny * (nx - 1)
+    result = np.empty((nu + nx * (ny - 1), columns))
+    for j in range(ny):
+        for i in range(nx - 1):
+            velocity_index = j * (nx - 1) + i
+            left = j * nx + i
+            for column in range(columns):
+                result[velocity_index, column] = (
+                    pressure[left, column] - pressure[left + 1, column]
+                ) / hx
+    for j in range(ny - 1):
+        for i in range(nx):
+            velocity_index = nu + j * nx + i
+            lower = j * nx + i
+            for column in range(columns):
+                result[velocity_index, column] = (
+                    pressure[lower, column] - pressure[lower + nx, column]
+                ) / hy
+    return result
+
+@njit(cache=True)
+def packed_divergence_transpose_vector(
+    pressure: Array, nx: int, ny: int, hx: float, hy: float
+) -> Array:
+    nu = ny * (nx - 1)
+    result = np.empty(nu + nx * (ny - 1))
+    for j in range(ny):
+        for i in range(nx - 1):
+            left = j * nx + i
+            result[j * (nx - 1) + i] = (
+                pressure[left] - pressure[left + 1]
+            ) / hx
+    for j in range(ny - 1):
+        for i in range(nx):
+            lower = j * nx + i
+            result[nu + j * nx + i] = (
+                pressure[lower] - pressure[lower + nx]
+            ) / hy
+    return result
+
+@njit(cache=True)
 def inner_faces(u: Array,v: Array,a: Array,b: Array,cell_area: float) -> float:
     total=0.0
     for j in range(u.shape[0]):
@@ -59,5 +147,9 @@ def warmup() -> float:
     u=np.zeros((3,4));v=np.zeros((4,3))
     convection(u,v,1.0,1.0)
     divergence(u,v,1.0,1.0)
+    packed_divergence(np.zeros((12, 2)), 3, 3, 1.0, 1.0)
+    packed_divergence_vector(np.zeros(12), 3, 3, 1.0, 1.0)
+    packed_divergence_transpose(np.zeros((9, 2)), 3, 3, 1.0, 1.0)
+    packed_divergence_transpose_vector(np.zeros(9), 3, 3, 1.0, 1.0)
     inner_faces(u,v,u,v,1.0)
     return perf_counter()-start

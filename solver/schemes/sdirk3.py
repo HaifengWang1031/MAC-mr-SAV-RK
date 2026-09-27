@@ -2,7 +2,7 @@
 from typing import Any
 import numpy as np
 from ..core import Trial
-from ..model import Model
+from ..model import Model, stage_divergences
 
 D = np.array([[1/4, 0, 0, 0], [3/10, 1/4, 0, 0],
               [-31/220, 1/11, 1/4, 0], [31/198, 5/132, -4/9, 1/4]])
@@ -33,19 +33,23 @@ class SDIRK3:
     def step(self, model: Model, state: Any, dt: float) -> Trial:
         if not np.isfinite(dt) or dt <= 0: raise ValueError('Invalid step size')
         velocities = [model.vector(state)]
+        linear: list[Any] = []
         stages = []
         nonlinear = [model.nonlinear_with_lifting(velocities[0])]
         forces = [model.force(state.t+C[j]*dt) for j in range(4)]
         for i in range(4):
             convection, force, _ = known_terms(model, nonlinear, forces, i)
             rhs = model.combine((1., velocities[-1]), (dt, force), (-dt, convection),
-                                *[(-model.nu*dt*D[i,j], model.apply_K(velocities[j+1]))
+                                *[(-model.nu*dt*D[i,j], linear[j])
                                   for j in range(i)])
             solved = model.solve(rhs, mass=1., viscosity=model.nu*dt*D[i,i])
             velocities.append(solved.velocity)
-            if i < 3: nonlinear.append(model.nonlinear_with_lifting(solved.velocity))
+            if i < 3:
+                linear.append(model.apply_K(solved.velocity))
+                nonlinear.append(model.nonlinear_with_lifting(solved.velocity))
+            physical_divergence,continuity=stage_divergences(model,solved.velocity)
             stages.append(model.stage(model.combine((1/dt, solved.pressure)), solved.residual,
-                                      model.physical_divergence_inf(solved.velocity),
-                                      continuity_residual=model.max_abs(model.apply_D(solved.velocity))))
+                                      physical_divergence,
+                                      continuity_residual=continuity))
         return Trial(model.state(state.t+dt, velocities[-1]), stages,
                      embedded_velocity(model, velocities))

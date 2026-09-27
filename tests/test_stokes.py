@@ -66,3 +66,49 @@ def test_tensor_stokes_reuses_setup_across_shifted_gradient_solves():
     assert solver.setup_seconds == setup_seconds
     assert solver.solves == 3
     assert solver.total_iterations > 0
+
+
+def test_matrix_free_tensor_stokes_matches_sparse_operator_path():
+    grid = MACGrid(11, 7, lx=2.0, ly=1.0)
+    ops = MACOperators(grid)
+    rhs = np.random.default_rng(37).normal(size=(grid.size, 2))
+    matrix_free = TensorStokes(
+        ops, tolerance=1e-10, matrix_free_operators=True
+    )
+    sparse = TensorStokes(ops, tolerance=1e-10, matrix_free_operators=False)
+
+    for mass, viscosity in ((1.0, 0.03), (0.7, 0.09), (0.0, 0.05)):
+        actual = matrix_free.solve(rhs, mass=mass, viscosity=viscosity)
+        expected = sparse.solve(rhs, mass=mass, viscosity=viscosity)
+        np.testing.assert_allclose(actual.velocity, expected.velocity, atol=2e-11)
+        np.testing.assert_allclose(actual.pressure, expected.pressure, atol=2e-11)
+        assert matrix_free.last_iterations == sparse.last_iterations
+        assert actual.residual < 1e-10
+        assert actual.divergence_inf < 1e-10
+
+
+def test_reused_transform_buffers_preserve_rhs_and_solution():
+    grid = MACGrid(11, 7, lx=2.0, ly=1.0)
+    ops = MACOperators(grid)
+    rhs = np.random.default_rng(43).normal(size=(grid.size, 2))
+    original = rhs.copy()
+    reused = TensorStokes(
+        ops,
+        tolerance=1e-10,
+        matrix_free_operators=True,
+        reuse_transform_buffers=True,
+    )
+    baseline = TensorStokes(
+        ops,
+        tolerance=1e-10,
+        matrix_free_operators=True,
+        reuse_transform_buffers=False,
+    )
+
+    actual = reused.solve(rhs, mass=1.0, viscosity=0.05)
+    expected = baseline.solve(rhs, mass=1.0, viscosity=0.05)
+
+    np.testing.assert_array_equal(rhs, original)
+    np.testing.assert_allclose(actual.velocity, expected.velocity, atol=2e-11)
+    np.testing.assert_allclose(actual.pressure, expected.pressure, atol=2e-11)
+    assert reused.last_iterations == baseline.last_iterations

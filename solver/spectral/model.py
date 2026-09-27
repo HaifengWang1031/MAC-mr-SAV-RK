@@ -155,6 +155,9 @@ class SpectralModel:
         return self._total_divergence_inf(velocity[:self.modes].reshape(size, size),
                                           velocity[self.modes:].reshape(size, size))
 
+    def stage_divergences(self, velocity: Array) -> tuple[float, float]:
+        return self.physical_divergence_inf(velocity), self.max_abs(self.apply_D(velocity))
+
     def inner(self, left: Array, right: Array) -> float:
         modes = self.modes
         return float(left[:modes] @ (self.mass @ right[:modes])

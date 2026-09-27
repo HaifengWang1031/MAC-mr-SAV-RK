@@ -8,7 +8,7 @@ discretisation that supplies the seam instead of being re-implemented per backen
 from typing import Any
 import numpy as np
 from ..core import Trial
-from ..model import Model
+from ..model import Model, stage_divergences
 
 ETA=1-1/np.sqrt(2.)
 DELTA=-1/np.sqrt(2.)
@@ -31,9 +31,11 @@ class SDIRK2:
         second=model.solve(rhs,mass=1.,viscosity=viscosity)
         # The stage pressure is an increment: divided by dt. Expressed as a scaled copy
         # so the same line works on a vector type that has no division.
-        stages=[model.stage(model.combine((1./dt,s.pressure)),s.residual,
-                            model.physical_divergence_inf(s.velocity),
-                            continuity_residual=model.max_abs(model.apply_D(s.velocity)))
-                for s in (first,second)]
+        stages=[]
+        for solved in (first,second):
+            physical_divergence,continuity=stage_divergences(model,solved.velocity)
+            stages.append(model.stage(model.combine((1./dt,solved.pressure)),solved.residual,
+                                      physical_divergence,
+                                      continuity_residual=continuity))
         embedded=model.combine((1.-1./ETA,old),(1./ETA,first.velocity))
         return Trial(model.state(state.t+dt,second.velocity),stages,embedded)
