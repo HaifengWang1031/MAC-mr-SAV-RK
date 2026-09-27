@@ -19,5 +19,8 @@
   "progress_every": 1000,
   "reference_progress_every": 10000,
   "cache_size": 4,
-  "stokes_tolerance": 1e-9
+  "stokes_tolerance": 1e-9,
+  "stokes_backend": "tensor",
+  "stokes_krylov_tolerance": 1e-12,
+  "stokes_max_iterations": 100
 }

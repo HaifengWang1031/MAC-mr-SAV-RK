@@ -20,8 +20,8 @@ from solver.adaptivity import IController, PIController, integrate_adaptive
 from solver.core import Scheme, State
 from solver.integrate import integrate
 from solver.mac.grid import MACGrid
-from solver.mac.operators import MACOperators
 from solver.mac.stokes import DirectStokes
+from solver.mac.tensor_stokes import TensorStokes
 from solver.mac_ns import MACNavierStokes
 from solver.schemes.sdirk2 import SDIRK2
 from solver.schemes.sdirk2_mrsav import SDIRK2MRSAV
@@ -50,13 +50,28 @@ def config_check(config: dict) -> None:
     if config.get('progress_every', 1000) <= 0 or \
             config.get('reference_progress_every', 10000) <= 0:
         raise ValueError('Progress intervals must be positive')
+    if config.get('stokes_backend', 'direct') not in ('direct', 'tensor'):
+        raise ValueError('Unknown Stokes backend')
+    krylov_tolerance = config.get('stokes_krylov_tolerance', 1e-12)
+    max_iterations = config.get('stokes_max_iterations', 100)
+    if not np.isfinite(krylov_tolerance) or krylov_tolerance <= 0 or \
+            type(max_iterations) is not int or max_iterations < 1:
+        raise ValueError('Invalid tensor Stokes controls')
 
 
 def model_and_initial(config: dict) -> tuple[MACNavierStokes, State]:
     grid = MACGrid(config['nx'],config['ny'],2*np.pi,2*np.pi)
-    backend = DirectStokes(MACOperators(grid),cache_size=config['cache_size'],
-                           tolerance=config['stokes_tolerance'])
-    model = MACNavierStokes(grid,config['nu'],backend=backend)
+    model = MACNavierStokes(grid,config['nu'],cache_size=config['cache_size'])
+    if config.get('stokes_backend', 'direct') == 'tensor':
+        model.backend = TensorStokes(
+            model.ops,
+            tolerance=config['stokes_tolerance'],
+            krylov_tolerance=config.get('stokes_krylov_tolerance', 1e-12),
+            max_iterations=config.get('stokes_max_iterations', 100),
+        )
+    else:
+        model.backend = DirectStokes(model.ops,cache_size=config['cache_size'],
+                                     tolerance=config['stokes_tolerance'])
     load = force(grid,config['m'])
     model.force = lambda t: load
     velocity = initial_velocity(grid,config['epsilon'],config['initial_modes'])
@@ -168,6 +183,7 @@ def run_campaign(config: dict, *, root: Path = PROJECT,
                 message(f'progress {label} steps={count} t={time:.6g}/{config["T"]:g} '
                         f'elapsed_s={elapsed:.1f}')
         message(f'batch={batch_path.resolve()}')
+        message(f'stokes_backend={config.get("stokes_backend", "direct")}')
         try:
             for scheme_name in SCHEMES:
                 for name, cls in [('I',IController),('PI',PIController)]:
