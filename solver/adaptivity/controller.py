@@ -74,6 +74,8 @@ class PIController(IController):
 class AdaptiveResult(Result):
     """Result plus one record per trial, including rejected trials."""
     attempts: list[dict[str, float | bool | str]] = field(default_factory=list)
+    observer_cpu_seconds: float = 0.
+    observer_wall_seconds: float = 0.
 
 
 def _error(model: Model, old: Any, high: Any, low: Any, controller: IController,
@@ -95,7 +97,8 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
                        snapshots: list[float] | None = None,
                        error_norm: Callable[[Any], float] | None = None,
                        strict_snapshots: bool = False,
-                       progress: Callable[[int, float, float], None] | None = None) -> AdaptiveResult:
+                       progress: Callable[[int, float, float], None] | None = None,
+                       on_accept: Callable[[Any], None] | None = None) -> AdaptiveResult:
     """Advance the order-three state; rejected trials never change the accepted state.
 
     T is a duration from initial.t. Snapshot requests are absolute physical times
@@ -117,6 +120,8 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
     rejections = 0
     previous_error: float | None = None
     output_index = 0
+    boundary_step: float | None = None
+    boundary_steps_remaining = 0
     if strict_snapshots and requests and requests[0] == initial.t:
         output_index = 1
     start = perf_counter()
@@ -126,18 +131,45 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
             result.status, result.error = 'failed', 'Maximum accepted steps exceeded'
             break
         remaining = end-result.final.t
-        if remaining <= 8*np.finfo(float).eps*max(abs(end), abs(result.final.t), 1.):
+        time_tolerance = 8*np.finfo(float).eps*max(abs(end), abs(result.final.t), 1.)
+        if remaining <= time_tolerance:
             break
         proposed_step = min(step, remaining)
         step = proposed_step
-        alignment_sliver = False
+        boundary_partition = False
+        output_truncated = False
         if strict_snapshots and output_index < len(requests):
             distance_to_output = requests[output_index]-result.final.t
-            step = min(step, distance_to_output)
-            alignment_sliver = (0 < distance_to_output < controller.min_step
-                                and proposed_step >= controller.min_step)
-        if step < controller.min_step and remaining > controller.min_step \
-                and not alignment_sliver:
+            if abs(distance_to_output) <= time_tolerance:
+                output_index += 1
+                continue
+            if distance_to_output < 0:
+                result.status, result.error = 'failed', 'Strict snapshot time was crossed'
+                break
+            if boundary_steps_remaining:
+                assert boundary_step is not None
+                step = min(boundary_step, distance_to_output)
+                boundary_partition = True
+            else:
+                output_truncated = proposed_step >= distance_to_output
+                remainder = distance_to_output-proposed_step
+                if 0 < remainder < controller.min_step and \
+                    distance_to_output/4 >= controller.min_step:
+                    boundary_step = distance_to_output/4
+                    boundary_steps_remaining = 4
+                    step = boundary_step
+                    boundary_partition = True
+                elif 0 < remainder < 0.5*proposed_step and \
+                    distance_to_output/2 >= controller.min_step:
+                    # Split the last two steps evenly instead of creating a tiny
+                    # exact-output-alignment step after an ordinary accepted step.
+                    boundary_step = distance_to_output/2
+                    boundary_steps_remaining = 2
+                    step = boundary_step
+                    boundary_partition = True
+                else:
+                    step = min(proposed_step, distance_to_output)
+        if step < controller.min_step:
             result.status, result.error = 'failed', 'Step below min_step'
             break
         reason = ''
@@ -172,12 +204,17 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
         result.attempts.append({'t': float(result.final.t), 'step': float(step),
                                 'error': float(error), 'accepted': not bool(reason),
                                 'reason': reason, 'factor': float(factor),
+                                'boundary_partition': boundary_partition,
+                                'output_truncated': output_truncated,
                                 'previous_accepted_error': (float('nan') if previous_error is None
                                                             else previous_error),
                                 'controller': type(controller).__name__,
-                                'elapsed_seconds': perf_counter()-start,
-                                'cpu_seconds': process_time()-cpu_start})
+                                'elapsed_seconds': perf_counter()-start-result.observer_wall_seconds,
+                                'cpu_seconds': process_time()-cpu_start-result.observer_cpu_seconds})
         if reason:
+            if boundary_partition:
+                boundary_step = None
+                boundary_steps_remaining = 0
             rejections += 1
             if rejections > controller.max_rejections or step*factor < controller.min_step:
                 result.status, result.error = 'failed', reason or 'Maximum rejections exceeded'
@@ -201,17 +238,38 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
                                'divergence_inf': s.divergence_inf,
                                'continuity_residual': s.continuity_residual}
                               for s in trial.stages])
+        if on_accept is not None:
+            observer_wall_start = perf_counter()
+            observer_cpu_start = process_time()
+            try:
+                on_accept(trial.state)
+            except Exception as exc:
+                result.status = 'failed'
+                result.error = f'Accepted-state observer failed: {type(exc).__name__}: {exc}'
+                break
+            finally:
+                result.observer_cpu_seconds += process_time()-observer_cpu_start
+                result.observer_wall_seconds += perf_counter()-observer_wall_start
         for index, request in enumerate(requests):
             distance = abs(request-trial.state.t)
             if distance < best[index][0]:
                 best[index] = (distance, trial.state)
         if progress is not None:
-            progress(len(result.times)-1, trial.state.t, perf_counter()-start)
-        step = min((proposed_step if alignment_sliver else step)*factor,
-                   controller.max_step)
+            progress(len(result.times)-1, trial.state.t,
+                     perf_counter()-start-result.observer_wall_seconds)
+        if boundary_partition:
+            boundary_steps_remaining -= 1
+            if boundary_steps_remaining:
+                assert boundary_step is not None
+                step = boundary_step
+            else:
+                boundary_step = None
+                step = min(step*factor, controller.max_step)
+        else:
+            step = min(step*factor, controller.max_step)
     for request, (_, state) in zip(requests, best):
         result.snapshot_requests.append(request)
         result.snapshot_times.append(state.t)
         result.snapshots.append(state)
-    result.seconds = perf_counter()-start
+    result.seconds = perf_counter()-start-result.observer_wall_seconds
     return result

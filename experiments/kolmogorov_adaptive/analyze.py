@@ -1,4 +1,4 @@
-"""Read-only six-panel I/PI/fixed comparison for the no-slip Kolmogorov case."""
+"""Read-only six-panel I/PI comparison for the no-slip Kolmogorov case."""
 import argparse
 import csv
 import hashlib
@@ -35,31 +35,41 @@ def read_member(path: Path) -> tuple[dict, dict, dict]:
     return config, manifest, values
 
 
+def aligned_output_times(config: dict, data: dict, label: str) -> np.ndarray:
+    count = round(config['T']/config['output_every'])
+    expected = config['output_every']*np.arange(count+1)
+    actual = data['output_times']
+    if actual.shape != expected.shape or not np.allclose(
+            actual, expected, atol=1e-8, rtol=0):
+        raise ValueError(f'Output times are incompatible: {label}')
+    return expected
+
+
 def analyze_batch(batch_path: Path, *, root: Path = PROJECT) -> Path:
     batch = json.loads(batch_path.read_text())
     adaptive = batch['members']
-    fixed = batch.get('fixed_members', [])
-    if len(adaptive) != 8 or len(fixed) != 4 or not batch['reference']:
-        raise ValueError('Eight adaptive, four fixed and one reference run are required')
+    if len(adaptive) != 8 or batch.get('fixed_members') or not batch['reference']:
+        raise ValueError('Eight adaptive runs and one reference run are required')
     if {(item['scheme'], item['controller']) for item in adaptive} != {
             (scheme, controller) for scheme in SCHEMES for controller in ('I', 'PI')}:
         raise ValueError('Incomplete adaptive comparison')
-    if {(item['scheme'], item['controller']) for item in fixed} != {
-            (scheme, 'fixed') for scheme in SCHEMES}:
-        raise ValueError('Incomplete fixed-step comparison')
     config = batch['config']
     if 'atol_velocity' not in config or 'rtol_velocity' not in config:
         raise ValueError('This analysis requires velocity-controlled runs')
     grid = MACGrid(config['nx'], config['ny'], 2*np.pi, 2*np.pi)
     records = []
-    for item in adaptive + fixed:
+    source_hash = batch['source']['code_sha256']
+    for item in adaptive:
         actual, manifest, data = read_member(Path(item['path']))
-        if any(actual[key] != config[key] for key in config):
-            raise ValueError('Mixed physical configurations')
+        if manifest['status'] != 'complete' or manifest['source']['code_sha256'] != source_hash \
+                or any(actual[key] != config[key] for key in config):
+            raise ValueError('Mixed, failed, or stale adaptive member')
         records.append((item, manifest, data))
-    _, reference_manifest, reference = read_member(Path(batch['reference']))
-    if reference_manifest['status'] != 'complete':
-        raise ValueError('Reference did not complete')
+    reference_config, reference_manifest, reference = read_member(Path(batch['reference']))
+    if reference_manifest['status'] != 'complete' or \
+            reference_manifest['source']['code_sha256'] != source_hash or any(
+                reference_config[key] != config[key] for key in config):
+        raise ValueError('Reference is failed, stale, or incompatible')
     folder = root/'reports/kolmogorov_adaptive'/(
         datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')+'-'+uuid4().hex[:8])
     (folder/'figures').mkdir(parents=True)
@@ -70,10 +80,9 @@ def analyze_batch(batch_path: Path, *, root: Path = PROJECT) -> Path:
                       'reference': batch['reference']}
     write_json(folder/'analysis.json', analysis)
     try:
-        ref_velocity = {}
-        for index, time in enumerate(reference['output_times']):
-            ref_velocity[round(float(time), 12)] = grid.pack(
-                reference['output_u'][index], reference['output_v'][index])
+        nominal_outputs = aligned_output_times(config, reference, 'reference')
+        ref_velocity = [grid.pack(u, v) for u, v in zip(
+            reference['output_u'], reference['output_v'], strict=True)]
         plt.rcParams.update({'font.family': 'serif', 'mathtext.fontset': 'cm',
                              'font.size': 12})
         fig, panels = plt.subplots(2, 3, figsize=(18, 10), constrained_layout=False)
@@ -107,18 +116,14 @@ def analyze_batch(batch_path: Path, *, root: Path = PROJECT) -> Path:
                 rejected_valid = valid & ~accepted
                 axes[4].scatter((t+h)[rejected_valid],data['attempt_error'][rejected_valid],
                                 marker='x',s=20,color=color,zorder=5)
-            errors, times = [], []
-            for index, time in enumerate(data['output_times']):
+            times = aligned_output_times(config, data, item['path'])
+            errors = []
+            for index in range(len(times)):
                 velocity = grid.pack(data['output_u'][index], data['output_v'][index])
-                key = round(float(time), 12)
-                if key in ref_velocity:
-                    denominator = max(grid.norm(ref_velocity[key]), 1e-14)
-                    errors.append(grid.norm(velocity-ref_velocity[key])/denominator)
-                else:
-                    errors.append(float('nan'))
-                times.append(float(time))
+                denominator = max(grid.norm(ref_velocity[index]), 1e-14)
+                errors.append(grid.norm(velocity-ref_velocity[index])/denominator)
             axes[5].semilogy(times, errors, **line)
-            final_error = errors[-1] if times and abs(times[-1]-config['T']) < 1e-10 else float('nan')
+            final_error = errors[-1] if len(times) and abs(times[-1]-config['T']) < 1e-10 else float('nan')
             cpu_seconds = float(cpu[-1]) if cpu.size else float('nan')
             summary.append({'scheme': scheme, 'controller': controller,
                             'status': manifest['status'], 'accepted': manifest['accepted_steps'],
@@ -143,8 +148,8 @@ def analyze_batch(batch_path: Path, *, root: Path = PROJECT) -> Path:
                    bbox_to_anchor=(.5, .005))
         fig.subplots_adjust(left=.06, right=.95, bottom=.20, top=.98,
                             wspace=.38, hspace=.62)
-        fig.savefig(folder/'figures/adaptive_fixed_comparison.pdf', bbox_inches='tight')
-        fig.savefig(folder/'figures/adaptive_fixed_comparison.png', dpi=180, bbox_inches='tight')
+        fig.savefig(folder/'figures/adaptive_comparison.pdf', bbox_inches='tight')
+        fig.savefig(folder/'figures/adaptive_comparison.png', dpi=180, bbox_inches='tight')
         plt.close(fig)
         with (folder/'tables/summary.csv').open('w') as stream:
             writer = csv.DictWriter(stream, fieldnames=list(summary[0]))

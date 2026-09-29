@@ -11,7 +11,6 @@
   "initial_step": 1e-5,
   "min_step": 1e-5,
   "max_step": 0.01,
-  "fixed_step": 0.01,
   "atol_velocity": 1e-8,
   "rtol_velocity": 5e-5,
   "safety": 0.9,

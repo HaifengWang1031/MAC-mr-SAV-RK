@@ -51,18 +51,41 @@ def test_rejected_trial_does_not_advance_state_on_failure():
     assert all(not item['accepted'] for item in result.attempts)
 
 
-def test_strict_snapshot_allows_short_alignment_step():
+def test_strict_snapshot_partitions_before_a_short_alignment_remainder():
     from solver.schemes.sdirk2 import SDIRK2
     model = ODEModel()
     initial = State(0., model.exact(0.))
     result = integrate_adaptive(
-        model, SDIRK2(), initial, .02, .01,
-        controller=IController(atol=1., rtol=0., min_step=.005,
+        model, SDIRK2(), initial, .03, .01,
+        controller=IController(atol=1., rtol=0., min_step=.001,
                                max_step=.01, estimator_order=2),
-        snapshots=[0., .011, .02], strict_snapshots=True)
+        snapshots=[0., .010001, .03], strict_snapshots=True)
     assert result.status == 'complete', result.error
-    np.testing.assert_allclose(result.snapshot_times, [0., .011, .02], atol=1e-14)
-    assert any(item['step'] < .005 for item in result.attempts)
+    np.testing.assert_allclose(result.snapshot_times, [0., .010001, .03], atol=1e-14)
+    first_interval = [item for item in result.attempts if item['t'] < .010001]
+    assert sum(item['boundary_partition'] for item in first_interval) == 4
+    partition_steps = [item['step'] for item in first_interval
+                       if item['boundary_partition']]
+    np.testing.assert_allclose(partition_steps, [.010001/4]*4)
+    assert min(item['step'] for item in result.attempts) >= .001
+
+
+
+def test_strict_snapshot_splits_near_boundary_instead_of_tiny_step():
+    from solver.schemes.sdirk2 import SDIRK2
+    model = ODEModel()
+    initial = State(0., model.exact(0.))
+    result = integrate_adaptive(
+        model, SDIRK2(), initial, .03, .01,
+        controller=IController(atol=1., rtol=0., min_step=1e-5,
+                               max_step=.01, estimator_order=2),
+        snapshots=[0., .0102, .03], strict_snapshots=True)
+    assert result.status == 'complete', result.error
+    np.testing.assert_allclose(result.snapshot_times, [0., .0102, .03], atol=1e-14)
+    first = [item for item in result.attempts if item['accepted'] and item['t'] < .0102]
+    assert len(first) == 2
+    assert all(item['boundary_partition'] for item in first)
+    np.testing.assert_allclose([item['step'] for item in first], [.0102/2]*2)
 
 
 def test_sdirk2_embedded_pair_uses_order_two_controller():
@@ -138,3 +161,19 @@ def test_pi_rejection_uses_last_accepted_error(scheme):
         else:
             assert item['factor'] < 1.
     assert np.linalg.norm(result.final.velocity-model.exact(1.)) < 1e-5
+
+
+def test_accepted_state_observer_sees_only_committed_natural_nodes():
+    model = ODEModel()
+    initial = State(0., model.exact(0.))
+    observed = []
+    result = integrate_adaptive(
+        model, SDIRK3(), initial, .5, .4,
+        controller=IController(atol=1e-7, rtol=1e-5, max_step=.4),
+        on_accept=lambda state: observed.append(state.t))
+    assert result.status == 'complete', result.error
+    assert any(not attempt['accepted'] for attempt in result.attempts)
+    np.testing.assert_allclose(observed, result.times[1:], atol=0, rtol=0)
+    assert len(observed) == sum(bool(a['accepted']) for a in result.attempts)
+    assert result.snapshot_times == []
+    assert result.observer_cpu_seconds >= 0.

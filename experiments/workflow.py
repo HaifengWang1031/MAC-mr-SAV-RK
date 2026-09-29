@@ -53,7 +53,9 @@ def provenance() -> dict:
         hasher.update(str(path.relative_to(PROJECT)).encode()); hasher.update(path.read_bytes())
     return {'code_sha256':hasher.hexdigest(),'python':sys.version,'platform':platform.platform(),
             'packages':{name:importlib.metadata.version(name) for name in ('numpy','scipy','numba','h5py','sympy','matplotlib')},
-            'threads':{key:os.environ.get(key) for key in ('OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','NUMBA_NUM_THREADS')}}
+            'threads':{key:os.environ.get(key) for key in (
+                'OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','MKL_NUM_THREADS',
+                'VECLIB_MAXIMUM_THREADS','NUMEXPR_NUM_THREADS','NUMBA_NUM_THREADS')}}
 
 def effective_config(config: dict) -> dict:
     unknown=set(config)-set(DEFAULTS)-{'experiment','steps','lid_speed'}

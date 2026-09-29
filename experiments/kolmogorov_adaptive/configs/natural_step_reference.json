@@ -1,0 +1,21 @@
+{
+  "purpose": "T=30 natural adaptive trajectories with optional node-aligned velocity reference errors",
+  "base_config": "experiments/kolmogorov_adaptive/configs/production.json",
+  "tuned_parameters": "experiments/kolmogorov_adaptive/configs/tuned_parameters.json",
+  "common": {
+    "initial_step": 1e-5,
+    "min_step": 1e-5,
+    "max_step": 0.005,
+    "min_factor": 0.5,
+    "max_factor": 1.2,
+    "atol_velocity": 1e-8
+  },
+  "reference_diagnostic": {
+    "enabled": true,
+    "method": "fixed SDIRK3 on each accepted interval",
+    "max_step": 0.0001,
+    "min_substeps": 8,
+    "refinement_factor": 2,
+    "verification_fraction": 0.05
+  }
+}

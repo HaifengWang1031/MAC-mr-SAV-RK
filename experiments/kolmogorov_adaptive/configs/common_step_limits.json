@@ -1,0 +1,17 @@
+{
+  "purpose": "T=30 Kolmogorov comparison under common absolute step cap and controller growth range",
+  "selection_record": "runs/kolmogorov_adaptive/tuning/selection-20260928T035927/selection.json",
+  "common": {
+    "initial_step": 1e-5,
+    "min_step": 1e-5,
+    "max_step": 0.005,
+    "min_factor": 0.5,
+    "max_factor": 1.2,
+    "atol_velocity": 1e-8
+  },
+  "comparison": {
+    "fixed_step": 0.0025,
+    "reference": "existing same-grid fixed SDIRK3, step 0.0001",
+    "error": "maximum relative MAC velocity L2 error over t=0:0.1:30"
+  }
+}

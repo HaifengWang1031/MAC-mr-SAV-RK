@@ -1,4 +1,4 @@
-"""One six-panel comparison per adaptive run with three same-scheme fixed controls."""
+"""One six-panel comparison per adaptive run with four same-scheme fixed controls."""
 import argparse
 import json
 import sys
@@ -15,25 +15,35 @@ if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from experiments.workflow import PROJECT, digest, write_json
-from experiments.kolmogorov_adaptive.analyze import SCHEMES, read_member
+from experiments.kolmogorov_adaptive.analyze import (
+    SCHEMES, aligned_output_times, read_member,
+)
+from experiments.kolmogorov_adaptive.run_fixed_controls import FIXED_STEPS
 from solver.mac.grid import MACGrid
 
 
 def analyze_separate(batch_path: Path, *, root: Path = PROJECT) -> Path:
     batch = json.loads(batch_path.read_text())
     steps = batch['fixed_steps']
-    if len(batch['members']) != 8 or len(batch['fixed_members']) != 12 or \
-            sorted(steps) != sorted([.005, .001, .0005]):
-        raise ValueError('Expected eight adaptive runs and three fixed steps per scheme')
+    if len(batch['members']) != 8 or len(batch['fixed_members']) != 4*len(FIXED_STEPS) or \
+            sorted(steps) != sorted(FIXED_STEPS):
+        raise ValueError('Expected eight adaptive runs and four fixed steps per scheme')
     if batch['status'] != 'complete':
         raise ValueError('Fixed-control batch did not complete')
     config = batch['config']
     grid = MACGrid(config['nx'], config['ny'], 2*np.pi, 2*np.pi)
-    _, reference_manifest, reference = read_member(Path(batch['reference']))
-    if reference_manifest['status'] != 'complete':
-        raise ValueError('Reference run did not complete')
-    reference_velocity = {round(float(time), 12): grid.pack(u, v) for time, u, v in zip(
-        reference['output_times'], reference['output_u'], reference['output_v'])}
+    source_hash = batch['source']['code_sha256']
+    reference_config, reference_manifest, reference = read_member(Path(batch['reference']))
+    expected_reference_step = batch['comparison_reference_step']
+    if reference_manifest['status'] != 'complete' or \
+            reference_manifest['source']['code_sha256'] != source_hash or any(
+                reference_config[key] != value for key, value in config.items()
+                if key != 'reference_step') or \
+            reference_config['reference_step'] != expected_reference_step:
+        raise ValueError('Reference run is failed, stale, or incompatible')
+    nominal_outputs = aligned_output_times(config, reference, 'reference')
+    reference_velocity = [grid.pack(u, v) for u, v in zip(
+        reference['output_u'], reference['output_v'], strict=True)]
     folder = root/'reports/kolmogorov_adaptive'/(
         datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')+'-'+uuid4().hex[:8])
     (folder/'figures').mkdir(parents=True)
@@ -55,12 +65,13 @@ def analyze_separate(batch_path: Path, *, root: Path = PROJECT) -> Path:
             entries.extend((rf'Fixed $\tau={item["step"]:g}$', item, color, '--', marker)
                            for item, color, marker in zip(
                                sorted(controls, key=lambda value: -value['step']),
-                               ('C1', 'C2', 'C3'), ('*', 'd', 's')))
+                               ('C1', 'C2', 'C3', 'C4'), ('*', 'd', 's', '^')))
             fig, panels = plt.subplots(2, 3, figsize=(18, 10))
             axes = panels.ravel()
             for label, item, color, linestyle, marker in entries:
                 actual, manifest, data = read_member(Path(item['path']))
-                if manifest['status'] != 'complete' or any(
+                if manifest['status'] != 'complete' or \
+                        manifest['source']['code_sha256'] != source_hash or any(
                         actual[key] != value for key, value in config.items()
                         if key != 'fixed_step'):
                     raise ValueError(f'Incompatible or failed member: {item["path"]}')
@@ -84,12 +95,14 @@ def analyze_separate(batch_path: Path, *, root: Path = PROJECT) -> Path:
                     axes[4].scatter((t+h)[valid & ~accepted],
                                     data['attempt_error'][valid & ~accepted],
                                     color=color, marker='x', s=20)
+                output_nodes = aligned_output_times(config, data, item['path'])
                 errors = []
-                for time, u, v in zip(data['output_times'], data['output_u'], data['output_v']):
+                for index, (u, v) in enumerate(zip(
+                        data['output_u'], data['output_v'], strict=True)):
                     velocity = grid.pack(u, v)
-                    target = reference_velocity[round(float(time), 12)]
+                    target = reference_velocity[index]
                     errors.append(grid.norm(velocity-target)/max(grid.norm(target), 1e-14))
-                axes[5].semilogy(data['output_times'], errors, **style)
+                axes[5].semilogy(output_nodes, errors, **style)
             ylabels = ['Step sizes', 'Step count', 'CPU time (s)', r'$|r|$',
                        r'$L^2$ embedded error / tolerance',
                        r'Relative $L^2$ error of velocity']
@@ -103,7 +116,7 @@ def analyze_separate(batch_path: Path, *, root: Path = PROJECT) -> Path:
                 axes[0].axhline(bound, color='0.35', linestyle='--', linewidth=.8)
             axes[4].axhline(1., color='0.35', linestyle='--', linewidth=.8)
             handles, labels = axes[0].get_legend_handles_labels()
-            fig.legend(handles, labels, loc='lower center', ncol=4, fontsize=11,
+            fig.legend(handles, labels, loc='lower center', ncol=5, fontsize=10,
                        bbox_to_anchor=(.5, .01))
             fig.subplots_adjust(left=.08, right=.97, bottom=.16, top=.98,
                                 wspace=.34, hspace=.52)

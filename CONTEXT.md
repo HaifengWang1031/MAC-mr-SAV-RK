@@ -20,3 +20,7 @@ Stage pressure is an incremental multiplier, not a demonstrated second-order phy
 2026-09-23 A/B 旋转实验：新增 experiments/forced_rotation（experiment kind `rotation_ns`），外力 f_A=0.1(sin5y,-sin5x)（净力矩 2f0/k=0.04）与 f_B=0.1(cos5y,-cos5x)（零净力矩），域 (0,2π)²、零初值、r0=0。模型诊断新增 angular_momentum（域心、格心二阶求积）、power=(f,u)、dissipation=ν|∇u|²；配置新增 snapshot_every 输出节奏；cli.run_batch 不再维护自己的实验白名单，改由 workflow 校验。首轮探索参数 ν=1e-3、256²，长期配置 T=3000（τ=0.005，256² 约 21 h/次，无断点续算）。
 
 2026-09-26 三阶格式扩展：依据 Obsidian `数值分析/SDIRK3-mr-ccSAV 无滑移NS/02,03,04,15`，solver/schemes 新增四阶段普通 SDIRK3 和增量 SDIRK3-mr-ccSAV。普通格式令 G=1，mrSAV 采用 G=1-r³、Q=1+r+r²、五次实根选择；r0=0。两者支持 MAC 与 spectral model seam、固定步长和给定序列。workflow 支持 scheme=sdirk3/sdirk3_mrsav，HDF5 对三阶格式存四阶段及每阶段最多五个候选实根。受迫收敛 campaign 可通过 schemes=["sdirk3","sdirk3_mrsav"] 选择第三阶对照组，默认二阶组不变。这里实现的是笔记增量格式；三阶 PDE 收敛取决于笔记所列附加正则性条件，ODE 验证不能替代该证明。
+
+2026-09-27 自适应实验重置：删除旧 `runs/reports/kolmogorov_adaptive` 批次；基础 campaign 只保留 4 格式 × I/PI 的 8 个自适应成员和 SDIRK3 细步参考，删除已知无效的 `τ=0.01` 固定对照。固定阶梯独立使用 (0.0025,0.001,0.0005)。批次复用及两类分析均校验配置、源码哈希、完成状态和结果校验和；JIT 预热不计入积分 CPU 时间。严格输出对齐若将留下小于 `min_step` 的余量，则把到输出点的距离分成四个相等试步，浮点舍入余量直接吸收，任何实际试步不得小于 `min_step`。参考步长/误差指标与 mrSAV 标量控制暂不改。
+
+2026-09-27 容差扫描：128²、T=0.1、单线程、3 次交错重复，扫描 rtol∈{1e-3,5e-4,2e-4,1e-4,5e-5}，保持 atol/rtol=2e-4、SDIRK3 参考步 1e-4，以输出速度最大相对误差≤1e-4 为门槛。120 个自适应计时全部完成，最小试步为 1e-5。八组统一可用容差仍为 rtol=5e-5、atol=1e-8，故 production 不改；若允许各组异容差，最快可用档的聚合 CPU 中位数比统一 5e-5 低 16.7%，但不用于公平同容差比较。原始记录见 `reports/timings/20260927T141542-82e76f6e-a87d30ee-adaptive-tolerance-scan/timings.json`。

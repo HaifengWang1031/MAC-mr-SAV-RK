@@ -1,5 +1,6 @@
 """Add prescribed fixed-step controls to an existing adaptive batch."""
 import argparse
+import hashlib
 import json
 import sys
 from datetime import datetime, timezone
@@ -16,15 +17,46 @@ from experiments.kolmogorov_adaptive.run import (
     save_member,
 )
 from solver.integrate import integrate
+from solver.mac.kernels import warmup
 
-FIXED_STEPS = (0.005, 0.001, 0.0005)
+# Coarsest control. IMEX-SDIRK2 treats convection explicitly, so its step is bounded by a
+# CFL-like condition. A linear probe on this configuration (max|u|~6, hx=2*pi/128) puts the
+# onset near max|u|*tau/hx ~ 1, i.e. tau ~ 0.008: tau=0.01 amplifies grid-scale modes by
+# 1.6 per step and overflows, tau=0.005 is marginal (+-1.00), tau=0.0025 is damped (0.86).
+# SDIRK3 still survives 0.01, but the ladder has to be common to all four schemes.
+FIXED_STEPS = (0.005, 0.0025, 0.001, 0.0005)
+
+
+def _require_usable_base(base: dict, source: dict) -> None:
+    """Require a complete, internally consistent adaptive-only base batch."""
+    if len(base['members']) != 8 or not base['reference']:
+        raise ValueError('A complete eight-member adaptive batch is required')
+    if base.get('fixed_members'):
+        raise ValueError('The base batch must not contain fixed controls')
+    if any(item['status'] != 'complete' for item in base['members']):
+        raise ValueError('All eight adaptive members must be complete')
+    source_hash = source['code_sha256']
+    if base.get('source', {}).get('code_sha256') != source_hash:
+        raise ValueError('The base batch was produced by different source code')
+    for item in [*base['members'], {'path': base['reference']}]:
+        directory = Path(item['path'])
+        actual = json.loads((directory/'config.json').read_text())
+        manifest = json.loads((directory/'manifest.json').read_text())
+        if manifest.get('status') != 'complete':
+            raise ValueError('All adaptive members and the reference must be complete')
+        if manifest.get('source', {}).get('code_sha256') != source_hash or any(
+                actual.get(key) != value for key, value in base['config'].items()):
+            raise ValueError(f'Incompatible or stale base record: {directory}')
+        checksum = hashlib.sha256((directory/'results.npz').read_bytes()).hexdigest()
+        if checksum != manifest.get('result_sha256'):
+            raise ValueError(f'Checksum mismatch in base record: {directory}')
 
 
 def run_fixed_controls(base_batch_path: Path, *, steps: tuple[float, ...] = FIXED_STEPS,
                        root: Path = PROJECT) -> Path:
     base = json.loads(base_batch_path.read_text())
-    if base['status'] != 'complete' or len(base['members']) != 8 or not base['reference']:
-        raise ValueError('A complete eight-member adaptive batch is required')
+    source = provenance()
+    _require_usable_base(base, source)
     if len(set(steps)) != len(steps) or any(step <= 0 for step in steps):
         raise ValueError('Fixed steps must be distinct and positive')
     config = base['config']
@@ -33,11 +65,12 @@ def run_fixed_controls(base_batch_path: Path, *, steps: tuple[float, ...] = FIXE
     batch_dir = root/'runs/kolmogorov_adaptive/batches'/identity
     batch_dir.mkdir(parents=True)
     batch_path = batch_dir/'batch.json'
-    source = provenance()
+    jit_warmup_seconds = warmup()
     batch = {'status': 'running', 'config': config, 'source': source,
              'base_batch': str(base_batch_path.resolve()), 'members': base['members'],
              'fixed_members': [], 'reference': base['reference'],
              'fixed_steps': list(steps),
+             'jit_warmup_seconds': jit_warmup_seconds,
              'comparison_reference_step': min(config['reference_step'], min(steps)/5)}
     write_json(batch_path, batch)
     with (batch_dir/'run.log').open('w', buffering=1) as log:
@@ -92,9 +125,11 @@ def run_fixed_controls(base_batch_path: Path, *, steps: tuple[float, ...] = FIXE
                 message = f'reference step={reference_step} status={result.status} path={member}'
                 print(message, flush=True)
                 log.write(message+'\n')
-            batch['status'] = ('complete' if all(
+            reference_complete = json.loads(
+                (Path(batch['reference'])/'manifest.json').read_text())['status'] == 'complete'
+            batch['status'] = ('complete' if reference_complete and all(
                 item['status'] == 'complete' for item in batch['fixed_members'])
-                and result.status == 'complete' else 'complete_with_failures')
+                else 'complete_with_failures')
         except Exception as exc:
             batch.update(status='failed', error=f'{type(exc).__name__}: {exc}')
             raise

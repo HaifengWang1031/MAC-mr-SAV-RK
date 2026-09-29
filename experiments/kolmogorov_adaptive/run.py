@@ -5,7 +5,6 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from time import process_time
 from typing import Any
 from uuid import uuid4
 
@@ -20,6 +19,7 @@ from solver.adaptivity import IController, PIController, integrate_adaptive
 from solver.core import Scheme, State
 from solver.integrate import integrate
 from solver.mac.grid import MACGrid
+from solver.mac.kernels import warmup
 from solver.mac.stokes import DirectStokes
 from solver.mac.tensor_stokes import TensorStokes
 from solver.mac_ns import MACNavierStokes
@@ -45,8 +45,6 @@ def config_check(config: dict) -> None:
         raise ValueError('Invalid adaptive step bounds')
     if config['reference_step'] <= 0 or config['reference_step'] >= config['max_step']:
         raise ValueError('Reference step must be finer than max_step')
-    if config['fixed_step'] <= 0 or config['fixed_step'] > config['max_step']:
-        raise ValueError('fixed_step must be positive and no larger than max_step')
     if config.get('progress_every', 1000) <= 0 or \
             config.get('reference_progress_every', 10000) <= 0:
         raise ValueError('Progress intervals must be positive')
@@ -125,6 +123,10 @@ def save_member(directory: Path, config: dict, scheme_name: str, controller_name
                       attempt_h=np.asarray([a['step'] for a in attempts],dtype=float),
                       attempt_error=np.asarray([a['error'] for a in attempts],dtype=float),
                       attempt_accepted=np.asarray([a['accepted'] for a in attempts],dtype=bool),
+                      attempt_boundary_partition=np.asarray(
+                          [a.get('boundary_partition', False) for a in attempts], dtype=bool),
+                      attempt_output_truncated=np.asarray(
+                          [a.get('output_truncated', False) for a in attempts], dtype=bool),
                       attempt_cpu=np.asarray([a['cpu_seconds'] for a in attempts],dtype=float))
         (directory/'attempts.json').write_text(json.dumps(attempts,indent=2)+'\n')
     else:
@@ -132,6 +134,8 @@ def save_member(directory: Path, config: dict, scheme_name: str, controller_name
         values['attempt_h'] = np.diff(result.times)
         values['attempt_error'] = np.full(len(result.times)-1,np.nan)
         values['attempt_accepted'] = np.ones(len(result.times)-1,dtype=bool)
+        values['attempt_boundary_partition'] = np.zeros(len(result.times)-1,dtype=bool)
+        values['attempt_output_truncated'] = np.zeros(len(result.times)-1,dtype=bool)
         values['attempt_cpu'] = (np.asarray(cpu_history) if cpu_history is not None else
                                  np.full(len(result.times)-1,np.nan))
     np.savez_compressed(directory/'results.npz',**values)
@@ -145,18 +149,22 @@ def save_member(directory: Path, config: dict, scheme_name: str, controller_name
 def run_campaign(config: dict, *, root: Path = PROJECT,
                  reuse_batch: Path | None = None) -> Path:
     config_check(config)
+    source = provenance()
     previous = None if reuse_batch is None else json.loads(reuse_batch.read_text())
     if previous is not None and previous['config'] != config:
         raise ValueError('Reuse batch has a different effective configuration')
+    if previous is not None and previous.get('source', {}).get('code_sha256') != source['code_sha256']:
+        raise ValueError('Reuse batch was produced by different source code')
     reusable = {}
     if previous is not None:
-        for item in previous['members'] + previous['fixed_members']:
+        for item in previous['members']:
             if item['status'] != 'complete':
                 continue
             directory = Path(item['path'])
             actual = json.loads((directory/'config.json').read_text())
             manifest = json.loads((directory/'manifest.json').read_text())
-            if manifest['status'] != 'complete' or any(
+            if manifest['status'] != 'complete' or manifest.get('source', {}).get(
+                    'code_sha256') != source['code_sha256'] or any(
                     actual[key] != value for key, value in config.items()):
                 raise ValueError(f'Incompatible reused member: {directory}')
             if hashlib.sha256((directory/'results.npz').read_bytes()).hexdigest() != \
@@ -167,10 +175,11 @@ def run_campaign(config: dict, *, root: Path = PROJECT,
     batch_dir = root/'runs/kolmogorov_adaptive/batches'/identity
     batch_dir.mkdir(parents=True)
     batch_path = batch_dir/'batch.json'
-    source = provenance()
+    jit_warmup_seconds = warmup()
     batch: dict = {'status':'running','config':config,'source':source,
                    'members':[],'fixed_members':[],'reference':None,
-                   'reuse_batch':None if reuse_batch is None else str(reuse_batch.resolve())}
+                   'reuse_batch':None if reuse_batch is None else str(reuse_batch.resolve()),
+                   'jit_warmup_seconds':jit_warmup_seconds}
     write_json(batch_path,batch)
     outputs = output_times(config)
     with (batch_dir/'run.log').open('w',buffering=1) as log:
@@ -210,37 +219,13 @@ def run_campaign(config: dict, *, root: Path = PROJECT,
                                              'status':result.status})
                     write_json(batch_path,batch)
                     message(f'{result.status} accepted={len(result.times)-1} rejected={len(result.attempts)-len(result.times)+1} path={member}')
-            for scheme_name in SCHEMES:
-                old = reusable.get((scheme_name, 'fixed'))
-                if old is not None:
-                    batch['fixed_members'].append(old)
-                    write_json(batch_path,batch)
-                    message(f'reused scheme={scheme_name} fixed_step={config["fixed_step"]} '
-                            f'path={old["path"]}')
-                    continue
-                model,initial = model_and_initial(config)
-                cpu_start = process_time()
-                cpu_history: list[float] = []
-                def fixed_progress(count: int, time: float, elapsed: float) -> None:
-                    cpu_history.append(process_time()-cpu_start)
-                    progress(f'{scheme_name}-fixed', count, time, elapsed,
-                             config.get('progress_every', 1000))
-                message(f'start scheme={scheme_name} fixed_step={config["fixed_step"]}')
-                fixed_result = integrate(model,make_scheme(scheme_name,config['gamma']),initial,
-                                         reference_schedule(outputs,config['fixed_step']),snapshots=outputs,
-                                         progress=fixed_progress)
-                member = root/'runs/kolmogorov_adaptive'/f'{identity}-{scheme_name}-fixed'
-                save_member(member,config,scheme_name,'fixed',fixed_result,source,cpu_history=cpu_history)
-                batch['fixed_members'].append({'scheme':scheme_name,'controller':'fixed',
-                                               'path':str(member.resolve()),'status':fixed_result.status})
-                write_json(batch_path,batch)
-                message(f'{fixed_result.status} fixed_steps={len(fixed_result.times)-1} path={member}')
             old_reference = None if previous is None else previous['reference']
             if old_reference is not None:
                 ref_dir = Path(old_reference)
                 ref_config = json.loads((ref_dir/'config.json').read_text())
                 ref_manifest = json.loads((ref_dir/'manifest.json').read_text())
-                if ref_manifest['status'] == 'complete' and all(
+                if ref_manifest['status'] == 'complete' and ref_manifest.get(
+                        'source', {}).get('code_sha256') == source['code_sha256'] and all(
                         ref_config[key] == value for key, value in config.items()) and \
                         hashlib.sha256((ref_dir/'results.npz').read_bytes()).hexdigest() == \
                         ref_manifest['result_sha256']:
@@ -260,7 +245,7 @@ def run_campaign(config: dict, *, root: Path = PROJECT,
                 message(f'reference={reference.status} path={ref_dir}')
             reference_complete = json.loads((Path(batch['reference'])/'manifest.json').read_text())['status'] == 'complete'
             batch['status'] = ('complete' if reference_complete and
-                               all(m['status']=='complete' for m in batch['members']+batch['fixed_members']) else
+                               all(m['status']=='complete' for m in batch['members']) else
                                'complete_with_failures')
             write_json(batch_path,batch)
         except Exception as exc:

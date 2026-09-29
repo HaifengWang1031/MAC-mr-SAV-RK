@@ -1,0 +1,91 @@
+{
+  "purpose": "T=30 Kolmogorov 128x128 tuned adaptive controller parameters",
+  "base_config": "production.json",
+  "selection_record": "runs/kolmogorov_adaptive/tuning/selection-20260928T035927/selection.json",
+  "criterion": "Each pair has lower maximum relative MAC velocity L2 error over outputs t=0:0.1:30 than the same-scheme fixed tau=0.0025 run; optimize CPU among tested feasible cases.",
+  "common": {
+    "initial_step": 1e-05,
+    "min_step": 1e-05,
+    "atol_velocity": 1e-08,
+    "fixed_step_controls": [
+      0.005,
+      0.0025,
+      0.001,
+      0.0005
+    ]
+  },
+  "pairs": {
+    "sdirk2": {
+      "I": {
+        "rtol": 1.4e-05,
+        "max_step": 0.00475,
+        "max_factor": 1.22,
+        "min_factor": 0.5,
+        "safety": 0.89
+      },
+      "PI": {
+        "rtol": 2e-05,
+        "max_step": 0.005,
+        "max_factor": 1.25,
+        "min_factor": 0.5,
+        "safety": 0.9,
+        "proportional": 0.7,
+        "integral": 0.4
+      }
+    },
+    "sdirk2_mrsav": {
+      "I": {
+        "rtol": 1.4e-05,
+        "max_step": 0.00475,
+        "max_factor": 1.22,
+        "min_factor": 0.5,
+        "safety": 0.89
+      },
+      "PI": {
+        "rtol": 2e-05,
+        "max_step": 0.005,
+        "max_factor": 1.25,
+        "min_factor": 0.5,
+        "safety": 0.9,
+        "proportional": 0.7,
+        "integral": 0.4
+      }
+    },
+    "sdirk3": {
+      "I": {
+        "rtol": 1e-06,
+        "max_step": 0.0035,
+        "max_factor": 1.2,
+        "min_factor": 0.5,
+        "safety": 0.9
+      },
+      "PI": {
+        "rtol": 1e-06,
+        "max_step": 0.0035,
+        "max_factor": 1.2,
+        "min_factor": 0.5,
+        "safety": 0.9,
+        "proportional": 0.7,
+        "integral": 0.4
+      }
+    },
+    "sdirk3_mrsav": {
+      "I": {
+        "rtol": 1e-06,
+        "max_step": 0.0035,
+        "max_factor": 1.2,
+        "min_factor": 0.5,
+        "safety": 0.9
+      },
+      "PI": {
+        "rtol": 1e-06,
+        "max_step": 0.0035,
+        "max_factor": 1.2,
+        "min_factor": 0.5,
+        "safety": 0.9,
+        "proportional": 0.7,
+        "integral": 0.4
+      }
+    }
+  }
+}
