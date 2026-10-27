@@ -7,6 +7,7 @@ import numpy as np
 from skfem import Basis, ElementTriP1, ElementTriP2, ElementVector, MeshTri
 
 from solver.fem import Space
+from solver.schedule import schedule_nodes, nearest_node_indices
 from solver.schemes.registry import scheme_info
 
 METADATA = {'fem_schema_version': 1, 'boundary': 'homogeneous_no_slip',
@@ -118,18 +119,9 @@ def _validate(data: Any, cfg: dict, manifest: dict) -> tuple[Any, Any]:
     if requests.ndim != 1 or not np.isfinite(requests).all():
         raise ValueError('Invalid FEM snapshot requests')
     actual = _array(data, 'snapshots/actual_times', requests.shape)
-    # Match the driver's compensated schedule; ordinary cumsum changes midpoint ties.
-    nodes = np.zeros(len(schedule)+1)
-    correction = 0.
-    for i, step in enumerate(schedule):
-        increment = step-correction
-        nodes[i+1] = nodes[i]+increment
-        correction = (nodes[i+1]-nodes[i])-increment
+    nodes = schedule_nodes(0., schedule)
     expected_requests, expected_times = [], []
-    for request in cfg['snapshots']:
-        distance = np.abs(nodes-request)
-        tolerance = 8*np.finfo(float).eps*max(abs(request), float(np.max(np.abs(nodes))), np.finfo(float).tiny)
-        node_index = int(np.flatnonzero(distance <= distance.min()+tolerance)[0])
+    for request, node_index in zip(cfg['snapshots'], nearest_node_indices(nodes, cfg['snapshots'])):
         if node_index <= n:
             expected_requests.append(request)
             expected_times.append(times[node_index])

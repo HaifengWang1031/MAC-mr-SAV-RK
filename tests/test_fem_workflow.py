@@ -62,6 +62,16 @@ def test_six_scheme_saved_fields_pressure_edges_and_readonly_analysis(tmp_path, 
     assert {p.name: p.read_bytes() for p in directory.iterdir()} == before
 
 
+@pytest.mark.parametrize('contained', [True, False], ids=['contained', 'external'])
+def test_analysis_run_locator_is_relative_only_for_contained_runs(tmp_path, contained):
+    root = tmp_path/'project'
+    directory = run({'nx': 2, 'ny': 2, 'T': .01}, root=root if contained else tmp_path/'external')
+    summary = json.loads((analyze(directory, root=root)/'analysis.json').read_text())
+    expected = f'runs/fem_ns/{directory.name}' if contained else str(directory.resolve())
+    assert summary['run'] == expected
+    assert (root/summary['run']).resolve() == directory.resolve()
+
+
 def refresh_checksum(directory):
     manifest = json.loads((directory/'manifest.json').read_text())
     manifest['results_sha256'] = digest(directory/'results.h5')
@@ -100,11 +110,30 @@ def test_shortened_final_step_empty_snapshots_and_reconstruction_input_validatio
     assert json.loads((analyze(directory, root=tmp_path)/'analysis.json').read_text())['accepted_steps'] == 3
 
 
-def test_snapshot_mapping_uses_compensated_schedule_and_earlier_ties(tmp_path):
-    directory = run({'nx': 2, 'ny': 2, 'T': 10., 'dt': .01, 'scheme': 'imex_euler',
-                     'snapshots': [9.995]}, root=tmp_path)
-    load_fem(directory, require_complete=True)
-    fields = reconstruct(directory, np.array([[.3], [.4]]), snapshot=0)
+@pytest.mark.parametrize('fail', [False, True], ids=['complete', 'accepted-prefix'])
+def test_snapshot_mapping_uses_compensated_schedule_and_earlier_ties(tmp_path, monkeypatch, fail):
+    runner = importlib.import_module('experiments.fem_ns.run')
+    if fail:
+        real_build = runner.build_model
+        def with_bad_external_force(cfg):
+            model, initial = real_build(cfg)
+            external_force = model.force
+            model.force = lambda t: external_force(t) if t < 9.985 else np.full_like(model.zero_velocity(), np.nan)
+            return model, initial
+        monkeypatch.setattr(runner, 'build_model', with_bad_external_force)
+    steps = np.full(1000, .01)
+    steps[100::100] = np.nextafter(.01, np.inf)
+    requests = [10., 9.995, np.nextafter(9.995, np.inf), 0., 9.995]
+    directory = run({'nx': 2, 'ny': 2, 'T': 10., 'steps': steps.tolist(), 'scheme': 'imex_euler',
+                     'snapshots': requests}, root=tmp_path)
+    _, manifest = load_fem(directory, require_complete=not fail)
+    assert manifest['status'] == ('failed' if fail else 'complete')
+    with h5py.File(directory/'results.h5', 'r') as data:
+        indices = [999, 999, 0, 999] if fail else [1000, 999, 999, 0, 999]
+        assert len(data['dt']) == (999 if fail else 1000)
+        np.testing.assert_array_equal(data['snapshots/requested_times'][:], requests[1:] if fail else requests)
+        np.testing.assert_array_equal(data['snapshots/actual_times'][:], data['times'][:][indices])
+    fields = reconstruct(directory, np.array([[.3], [.4]]), snapshot=0 if fail else 1)
     assert fields['time'] == pytest.approx(9.99, abs=1e-12)
 
 

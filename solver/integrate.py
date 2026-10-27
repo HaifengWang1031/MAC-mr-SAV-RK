@@ -6,6 +6,7 @@ import numpy as np
 from .core import State, Stage, Scheme, History
 from .mac.grid import Array
 from .model import Model
+from .schedule import schedule_nodes, nearest_node_indices
 
 @dataclass
 class Result:
@@ -41,35 +42,17 @@ def step_sizes(T: float, *, dt: float | None = None, steps: list[float] | None =
     return np.r_[np.full(count,dt),T-count*dt]
 
 
-def _schedule_nodes(initial_time: float, sequence: Array) -> Array:
-    """Accumulate long prescribed schedules without losing their endpoint."""
-    nodes = np.empty(sequence.size+1, dtype=float)
-    nodes[0] = initial_time
-    total = float(initial_time)
-    correction = 0.
-    for index, step in enumerate(sequence, start=1):
-        increment = float(step)-correction
-        updated = total+increment
-        correction = (updated-total)-increment
-        total = updated
-        nodes[index] = total
-    return nodes
-
 def integrate(model: Model, scheme: Scheme, initial: State, steps: list[float] | Array,
               snapshots: list[float] | None = None,
               progress: Callable[[int, float, float], None] | None = None) -> Result:
     sequence=np.asarray(steps,dtype=float)
     if sequence.ndim!=1 or sequence.size==0 or np.any(sequence<=0) or not np.isfinite(sequence).all():
         raise ValueError('Invalid step sequence')
-    nodes = _schedule_nodes(initial.t, sequence)
+    nodes = schedule_nodes(initial.t, sequence)
     requests=[] if snapshots is None else list(snapshots)
     if any(not np.isfinite(t) or t<initial.t or t>nodes[-1]+1e-12 for t in requests):
         raise ValueError('Snapshot time outside integration interval')
-    indices=[]
-    for t in requests:
-        distance=np.abs(nodes-t)
-        tie_tolerance=8*np.finfo(float).eps*max(abs(t),float(np.max(np.abs(nodes))),np.finfo(float).tiny)
-        indices.append(int(np.flatnonzero(distance<=distance.min()+tie_tolerance)[0]))
+    indices = nearest_node_indices(nodes, requests)
     kept: dict[int,State]={}
     if 0 in indices: kept[0]=initial
     history=History(initial)

@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
-from solver.integrate import _schedule_nodes, integrate, step_sizes
+from solver.integrate import integrate, step_sizes
+from solver.schemes.imex_euler import IMEXEuler
 from solver.mac.grid import MACGrid
 from solver.mac_ns import MACNavierStokes
 from solver.schemes.sdirk2 import SDIRK2
@@ -35,6 +36,29 @@ def test_failed_step_retains_accepted_prefix():
 def test_long_nearly_uniform_schedule_keeps_endpoint():
     steps = np.full(300000, 1e-4)
     steps[1000::1000] = np.nextafter(steps[1000::1000], np.inf)
-    nodes = _schedule_nodes(0., steps)
-    assert abs(nodes[-1]-30.) < 1e-12
-    assert np.all(np.diff(nodes) > 0)
+    model = MACNavierStokes(MACGrid(3, 3), .1)
+    initial = model.state(0., np.zeros(model.grid.size))
+    model.force = lambda t: np.full(model.grid.size, np.nan)
+    # A request at 30 must pass interval validation even though naive cumsum drifts.
+    result = integrate(model, IMEXEuler(), initial, steps, snapshots=[30., 0., 0.])
+    assert result.status == 'failed' and result.times == [0.]
+    assert result.snapshot_requests == [0., 0.]
+    assert result.snapshot_times == [0., 0.]
+    with pytest.raises(ValueError, match='Snapshot time outside'):
+        integrate(model, IMEXEuler(), initial, steps, snapshots=[30.+3e-12])
+
+
+@pytest.mark.parametrize('initial_time', [0., .3])
+def test_long_schedule_maps_midpoints_to_earlier_actual_nodes(initial_time):
+    model = MACNavierStokes(MACGrid(3, 3), .1)
+    initial = model.state(initial_time, np.zeros(model.grid.size))
+    midpoint = initial_time+9.995
+    requests = [initial_time+10., midpoint, np.nextafter(midpoint, np.inf),
+                initial_time, midpoint]
+    result = integrate(model, IMEXEuler(), initial, [.01]*1000, snapshots=requests)
+    assert result.status == 'complete', result.error
+    assert result.snapshot_requests == requests
+    assert result.snapshot_times == [result.times[i] for i in (1000, 999, 999, 0, 999)]
+    np.testing.assert_allclose(result.snapshot_times, [initial_time+t for t in (10., 9.99, 9.99, 0., 9.99)],
+                               rtol=0., atol=3e-13)
+    assert result.final.t == result.times[-1] == result.snapshots[0].t

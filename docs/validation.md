@@ -2,6 +2,92 @@
 
 # 正式验收记录
 
+## 2026-10-27 FEM post-review fixes (ticket05)
+
+本轮在隔离 `fem/05-review-fixes` 工作树修复两个审查轴的三项 P2；下节的
+**437 例是先前发布记录，本轮最终全量为 444 passed，无跳过**。
+初始 HEAD 与 `integration/fem` 均为 `bd5b36c`，不可变来源基线仍为
+`fem/source-baseline` (`6babdf9`)。没有改写原 main、其他工作树或票据状态。
+
+### 来源修改与兼容性
+
+- `experiments/fem_ns/analyze.py`：项目内运行 locator 相对传入的项目根记录，
+  外部输入仍为绝对路径。公开 workflow 两分支断言先为 **1 failed / 1 passed**，
+  修复后该文件 **58 passed**；真实 CLI 还验证移动项目后 locator 仍可加载。
+- `solver/schedule.py`：仅提取既有纯补偿累加及最近节点/较早平局映射；
+  `solver/integrate.py` 与 FEM `representation.py` 共用。请求校验、容差、
+  浮点运算顺序、试步时间累加、失败接受前缀和实际快照时间均不改；
+  没有修改 Model、格式公式、默认值或引入求积选项。
+- 原私有 helper 测试改为公开 `integrate` 检查；300000 步近均匀调度以真实
+  非有限外力在首步失败，检验终点请求区间、超终点请求拒绝与零接受前缀，**不声称推进了300000步**。
+  另有真实1000步、非零起点、近似平局、重复/无序请求，以及 FEM 长给定步完整/
+  999步失败前缀的 run/load/reconstruct 检查。提取前后这两个测试文件均
+  **64 passed**。临时负对照：去补偿使 **5 failed**，改选较晚平局使
+  **4 failed**；均恢复原实现后重新运行最终绿灯。
+- 26 组公开 MAC/FEM 六格式完整/失败积分结果（含两组长调度）在提取前后序列化
+  逐字节一致；排除唯一非确定量耗时，保留时间、场、诊断、阶段压力/根及快照。
+  两份 JSON SHA256 均为
+  `507c0459e0d292ba091d8bddc419fe8f6cb87ae28ff327b7ffa098b2c77d51f2`。
+  这是保持行为的提取，不伪造现有实现的失败；MMS 也是补保留覆盖而非修数值 bug。
+
+### 实际 workflow MMS 求积敏感性
+
+`tests/test_fem_model.py` 经 `effective_config/build_model/model.force(0)` 使用
+真实 MMS（非另一个正弦力），保留原非多项式测试。域2x1、nu=.2，力最高13次，
+乘P2测试函数达15次，故默认8阶不能精确积分。使用18阶投影为参照，在同一自由
+系数空间按一致质量范数测量；原审查脚本本轮重新执行，得到：
+
+| 网格/振幅 | q8-q18 质量范数 | 相对范数 | q16-q18 质量范数 |
+|---|---:|---:|---:|
+| 2x2 / 1 | 1.4989270681e-5 | 5.0821002614e-6 | 1.2174121962e-14 |
+| 默认8x4 / .1 | 2.2997996898e-10 | 7.1259740934e-10 | 7.3247004514e-16 |
+
+新增两例允许 q8 测量值的1%（绝对下限1e-14），要求 q16 差值 <2e-13；
+聚焦模型文件 **12 passed**。默认敏感性很小，**未改变默认8阶**，也不将
+粗网格大振幅的较大差值隐藏。此为 t=0 的力投影敏感性，不是轨迹误差上界、
+空间收敛、连续PDE时间阶或更长时段的求积认证。
+
+### 最终命令、类型检查与真实 CLI
+
+环境同前次：CPython3.12.14/scikit-fem12.0.2/NumPy2.5.3/SciPy1.18.1，
+数值库/Numba六项线程环境均为1、`MPLBACKEND=Agg`，独立 uv 环境包含 notebook。
+
+```sh
+uv sync --locked --group notebook
+uv run --locked --group notebook python -m pytest tests/test_integrate.py tests/test_fem_model.py tests/test_fem_validation.py tests/test_fem_workflow.py -q
+uv run --locked --group notebook python -m pytest -q
+uv run --locked --group notebook mypy solver/schedule.py solver/integrate.py solver/fem solver/model.py experiments/fem_ns tests/test_fem_workflow.py tests/test_integrate.py tests/test_fem_validation.py
+uv run --locked --group notebook mypy
+```
+
+实际最终结果：聚焦 **113 passed / 10.71 s**；notebook启用全量
+**444 passed / 73.04 s**（此前一轮444 passed / 84.24 s）；定向 mypy **16个源文件通过**。全项目 mypy 检查
+133个源文件仍为 **6 errors / 3 files**，在临时只读来源快照上用相同mypy检查
+不可变基线122个源文件，也是6错。排序比较路径/行号/消息/错误码 **完全一致**，
+均为原 `kolmogorov_adaptive` 六错，不声称全项目类型检查通过。
+额外尝试把旧 `test_fem_model.py` 纳入定向检查出现3个测试自身类型错误；
+从 `bd5b36c` 导出原文件同样3错（`SolveResult.continuity_residual` 及两项
+字典展开参数类型），本轮不扩展修复范围，原始失败日志也保留。
+
+最终Python来源哈希
+`55fab6b959e88a4a8ee21d4eee66e654c0e4d5d631c9f9490c9b9f4a783995b2`
+在真实 CLI 临时目录
+`/private/var/folders/qj/cgwwj9nx72jbn31skh50lnyh0000gn/T/fem-ticket05-smoke-9iczwxfg`
+完成 bundled smoke 计算、显式分析、复用、`--rerun`、公开加载/重建，再移动项目根
+验证相对locator，并从外部报告根分析验证绝对locator。原运行
+`20261027T123607-eaa0badd-97cd11d8` 被准确复用，新尝试
+`20261027T123609-eaa0badd-03007f65` 不覆盖；原四文件的SHA256始终不变。
+实际节点 `[0,.01,.02]`，快照实际时间 `[0,0,.02]`；每分量153个P2系数、
+45顶点，阶段压力 `(2,45)`。最大阶段动量/弱连续性/标量残差为
+`1.8164e-16 / 2.6292e-18 / 7.2621e-25`；最终物理散度L2仍为
+`4.71807e-3`，不是逐点无散。结果HDF5 SHA256为
+`7340a938f61da5b9415dece25378927ddd6133d0be05f722e07cf261e8116c68`。
+
+外部完整证据：`MAC-mr-SAV-RK-fem-work/notes/fem-review-fixes-evidence.md`；
+脚本、红绿灯、负对照、前后JSON、类型检查与CLI原始日志均在同目录
+`evidence/05-*`。临时运行需备份才可长期保留。未运行生产批次、长期/性能或
+PDE时间阶研究，未添加自适应/非齐次边界；最终独立双轴复审仍是必须门槛。
+
 ## 2026-10-27 FEM release verification
 
 本轮为已合并 ticket01–03（`7135ad5`）的文档与发布核验，不修改数值公式、

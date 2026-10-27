@@ -2,8 +2,9 @@
 
 Independent fifth spatial Model: scikit-fem supplies affine triangular meshes,
 bases, DOF maps and weak-form assembly; SciPy supplies sparse direct solves.
-The shared time schemes and integrator are unchanged. Locally installed and
-locked: scikit-fem 12.0.2, CPython 3.12.14, macOS arm64.
+The shared time schemes and stepping policies are unchanged; the integrator and
+saved-run reader share pure compensated schedule/snapshot mapping arithmetic.
+Locally installed and locked: scikit-fem 12.0.2, CPython 3.12.14, macOS arm64.
 
 ## Usage
 
@@ -67,7 +68,13 @@ initial = model.state(0., velocity, r=0.)
   Both terms use the same quadrature; the weak load is mass-solved to coefficients.
   Thus nonlinear work cancels even for non-strongly-solenoidal discrete fields.
   `quadrature_order>=5` covers affine P2 mass and convection polynomials;
-  nonpolynomial loads need separate higher-order sensitivity checks.
+  nonpolynomial loads and manufactured forces need separate higher-order sensitivity
+  checks. The workflow MMS force/test integrand reaches degree 15, so its default
+  order 8 is not exact: versus order 18, projected-force mass-norm differences are
+  `1.498927e-5` on 2x2/amplitude 1 and `2.299800e-10` on defaults 8x4/amplitude .1.
+  Order 16 agrees within `2e-13` in both cases. Retained tests allow 1% around
+  these order-8 measurements (absolute floor `1e-14`); defaults remain unchanged.
+  These are force-projection sensitivities at t=0, not trajectory error bounds.
 - Trial input is not mutated; failed integrations retain only accepted prefixes.
   Stage pressures retain registry multiplier semantics, including
   `euler_step_multiplier_mean_zero` for Euler and
@@ -91,7 +98,9 @@ integrity, not authenticity against deliberate rewriting.
 
 `reconstruct` and `analyze` only rebuild saved meshes/bases; neither constructs a
 dynamical Model/backend nor integrates. Analysis requires an explicit run
-directory and writes JSON/CSV/log reports; the 17x13 display grid is derived
+directory and writes JSON/CSV/log reports. Contained run locators are relative
+to the supplied project root; external inputs retain absolute locators.
+The 17x13 display grid is derived
 sampling, not the stored representation. Failed prefixes are labelled. Setup or
 storage failures re-raise and may have no loadable results. Atomic rename does
 not guarantee durable fsync recovery; interrupted records are not reused.

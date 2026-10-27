@@ -14,6 +14,8 @@ from .run import load_fem
 
 def analyze(directory: Path, *, root: Path = PROJECT) -> Path:
     directory = Path(directory).resolve()
+    root = Path(root).resolve()
+    locator = directory.relative_to(root) if directory.is_relative_to(root) else directory
     cfg, manifest = load_fem(directory)
     report = (Path(root)/'reports'/'fem_ns'/directory.name).resolve()
     if report.is_relative_to(directory):
@@ -27,7 +29,7 @@ def analyze(directory: Path, *, root: Path = PROJECT) -> Path:
     with h5py.File(directory/'results.h5', 'r') as data:
         times, dt = data['times'][:], data['dt'][:]
         diagnostics = {key: data['diagnostics/'+key][:] for key in data['diagnostics']}
-        summary = {'run': str(directory), 'run_id': directory.name, 'status': manifest['status'],
+        summary = {'run': str(locator), 'run_id': directory.name, 'status': manifest['status'],
                    'error': manifest.get('error', ''), 'final_time': fields['time'],
                    'accepted_steps': len(dt), 'r_final': fields['r'],
                    'manifest_sha256': digest(directory/'manifest.json'),
