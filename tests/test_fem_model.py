@@ -180,6 +180,8 @@ def test_constant_field_projection_and_invalid_boundaries():
                    {'nu': .2, 'cache_size': 0}):
         with pytest.raises(ValueError):
             FEMModel(Space(2, 2), **kwargs)
+    with pytest.raises(ValueError, match='pressure constraints'):
+        FEMModel(Space(1, 1), nu=.2)
     for mass, viscosity in ((0., 0.), (-1., .1), (1., -1.), (np.nan, .1)):
         with pytest.raises(ValueError):
             model.solve(constant, mass=mass, viscosity=viscosity)

@@ -54,6 +54,8 @@ class FEMModel:
         self.boundary_dofs = self.velocity_basis.get_dofs().all()
         self.free_dofs = self.velocity_basis.complement_dofs(self.boundary_dofs)
         self.component_dofs = tuple(self.velocity_basis.split_indices())
+        if len(self.free_dofs) < self.pressure_basis.N-1:
+            raise ValueError('Mesh has too few free velocity DOFs for the pressure constraints')
         self.mass = asm(_mass, self.velocity_basis)[self.free_dofs][:, self.free_dofs].tocsc()
         self.stiffness = asm(_stiffness, self.velocity_basis)[self.free_dofs][:, self.free_dofs].tocsc()
         self.divergence = asm(_divergence, self.velocity_basis, self.pressure_basis)[:, self.free_dofs].tocsr()
