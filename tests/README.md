@@ -8,7 +8,20 @@
 | Stokes 求解、压力定标与分解复用 | test_stokes、test_numerics 的空间收敛 |
 | 二阶、SAV 能量与实根 | test_numerics、test_schemes |
 | 三阶 ODE 精度、MAC 定常态与四阶段工作流 | test_sdirk3 |
+| 一阶 ODE、独立耦合线性系统、能量平衡与标量衰减 | test_imex_euler |
+| 一阶六后端压力/完整约束、固定 lifting 与失败检查 | test_imex_models |
+| 单阶段工作流、失败前缀、元数据与只读验证分析 | test_imex_workflow |
 | 谱空间、lifting 与去混叠 | test_spectral |
+| 谱求积缓存、张量质量逆、多右端与等价计时流程 | test_spectral_optimization, test_legendre_optimization |
+| 谱张量 Stokes、真实 Schur、六格式与自适应拒步 | test_spectral_tensor |
+| 编译后单步计时、冷热分解计数、四模型保存与只读分析 | test_step_efficiency |
+| 周期 FFT/Parseval/伴随/严格频带与 Leray/Stokes 零模 | test_fourier_space、test_fourier_stokes |
+| 周期解析对流、能量配对、四格式 MMS、I/PI 与标量控制 | test_fourier_model、test_fourier_integration |
+| 周期布局、保存复用、失败前缀、只读分析与计时子记录 | test_periodic_workflow |
+| Channel 保存场动画、Poiseuille 参照、周期粒子输运与只读导出 | test_channel_animation |
+| 顶盖方腔动画、移动壁插值、保存场与只读导出 | test_cavity_animation |
+| 周期动画、解析受迫剪切、双周期粒子与只读导出 | test_periodic_animation |
+| Orr–Sommerfeld 独立特征值、MAC TS 初值/约束、增长及移动坐标 | test_channel_instability |
 | 时间序列与失败前缀 | test_integrate |
 | 保存、复用、失败记录与显式分析 | test_workflow、test_forced_convergence |
 | 自适应批次、四分边界、容差选择与固定阶梯 | test_adaptivity、test_kolmogorov_adaptive |
@@ -16,6 +29,12 @@
 | A/B 体力、角动量、反转和能量诊断 | test_forced_rotation |
 
 同一机制保留一个代表用例，但不同格式、不同离散后端及不同失败机制仍分别验证。网格收敛所需的多个网格不是重复测试。
+
+Channel 首版新增 `test_channel_operators`（周期布局、壁面算子、伴随和离散旋度）、
+`test_channel_model`（独立通量参考、能量配对、平均流和完整 Stokes）、
+`test_channel_integration`（四格式固定网格时间阶、连续空间阶、I/PI 与终点）、
+`test_channel_workflow`（持久化、复用、独立分析、失败前缀及验证研究校验）。
+`test_channel_fft` 对照全局直接解，覆盖奇偶／矩形网格、交错相位、零模式、批量载荷、四格式和自适应。
 
 2026-09-24：46 → 44 个测试实例。谱弱形式与空间收敛仅保留非方形区域，移除重复方形参数；移除重复 G/D 断言及重复反转断言。角动量参考从 4096² 数值求积换为独立解析积分，减少内存占用。全套 44 passed；mypy 40 个源文件通过。求解器及实验参数未改动。
 

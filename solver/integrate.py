@@ -5,7 +5,7 @@ from collections.abc import Callable
 import numpy as np
 from .core import State, Stage, Scheme, History
 from .mac.grid import Array
-from .mac_ns import MACNavierStokes
+from .model import Model
 
 @dataclass
 class Result:
@@ -55,7 +55,7 @@ def _schedule_nodes(initial_time: float, sequence: Array) -> Array:
         nodes[index] = total
     return nodes
 
-def integrate(model: MACNavierStokes, scheme: Scheme, initial: State, steps: list[float] | Array,
+def integrate(model: Model, scheme: Scheme, initial: State, steps: list[float] | Array,
               snapshots: list[float] | None = None,
               progress: Callable[[int, float, float], None] | None = None) -> Result:
     sequence=np.asarray(steps,dtype=float)

@@ -51,6 +51,65 @@ def test_rejected_trial_does_not_advance_state_on_failure():
     assert all(not item['accepted'] for item in result.attempts)
 
 
+@pytest.mark.parametrize('controller_class', [IController, PIController])
+@pytest.mark.parametrize('scheme_name', ['sdirk2', 'sdirk2_mrsav', 'sdirk3', 'sdirk3_mrsav'])
+def test_terminal_alignment_step_can_be_below_min_step(controller_class, scheme_name):
+    from solver.mac.grid import MACGrid
+    from solver.mac_ns import MACNavierStokes
+    from solver.schemes.sdirk2 import SDIRK2
+    from solver.schemes.sdirk2_mrsav import SDIRK2MRSAV
+
+    schemes = {'sdirk2': SDIRK2(), 'sdirk2_mrsav': SDIRK2MRSAV(),
+               'sdirk3': SDIRK3(), 'sdirk3_mrsav': SDIRK3MRSAV()}
+    model = MACNavierStokes(MACGrid(3, 3), .1)
+    initial = model.state(1., np.zeros(model.grid.size))
+    end = initial.t + .0202
+    observed = []
+    controller = controller_class(atol=1., rtol=0., min_step=.001, max_step=.01,
+                                  estimator_order=2 if scheme_name.startswith('sdirk2') else 3)
+    result = integrate_adaptive(model, schemes[scheme_name], initial, .0202, .01,
+                                controller=controller, snapshots=[end],
+                                on_accept=lambda state: observed.append(state.t))
+    assert result.status == 'complete', result.error
+    assert len(result.attempts) == 3
+    last = result.attempts[-1]
+    assert last['accepted'] and last['error'] <= 1.
+    assert 0 < last['step'] < controller.min_step
+    assert last['step'] == end-result.times[-2]
+    assert result.final.t == result.times[-1] == result.snapshot_times[-1] == observed[-1] == end
+    np.testing.assert_array_equal(model.vector(result.final), np.zeros(model.grid.size))
+
+
+def test_roundoff_sized_terminal_remainder_is_integrated():
+    model = ODEModel()
+    initial = State(0., model.exact(0.))
+    end = np.nextafter(.02, np.inf)
+    result = integrate_adaptive(
+        model, SDIRK3(), initial, end, .01,
+        controller=IController(atol=1., rtol=0., min_step=.001, max_step=.01),
+        snapshots=[end])
+    assert result.status == 'complete', result.error
+    assert result.final.t == result.times[-1] == result.snapshot_times[-1] == end
+    last = result.attempts[-1]
+    assert last['accepted']
+    assert last['step'] == end-result.times[-2]
+    assert 0 < last['step'] < np.finfo(float).eps
+
+
+def test_terminal_alignment_step_still_checks_error():
+    model = ODEModel()
+    initial = State(0., model.exact(0.))
+    result = integrate_adaptive(
+        model, SDIRK3(), initial, .02, .1,
+        controller=IController(atol=1e-15, rtol=0., min_step=.1))
+    assert result.status == 'failed'
+    assert result.final is initial
+    assert len(result.attempts) == 1
+    assert result.attempts[0]['step'] == .02
+    assert not result.attempts[0]['accepted']
+    assert result.attempts[0]['reason'] == 'error_exceeded'
+
+
 def test_strict_snapshot_partitions_before_a_short_alignment_remainder():
     from solver.schemes.sdirk2 import SDIRK2
     model = ODEModel()

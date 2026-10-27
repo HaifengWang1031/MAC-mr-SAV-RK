@@ -1,4 +1,19 @@
 # Confirmed conventions
+2026-10-05 Legendre 优化：用户批准按规划实施。求积/基函数缓存、精确一维闭式、张量质量逆、共享算子、非线性收缩复用和多右端 SuperLU 已接入；保留原空间与六格式语义、完整检查。新增可选 stokes_backend=tensor：速度广义特征分解加真实压力 Schur-CG，采用可分离质量 Schur/压力质量组合预条件器。默认 direct，按实测规模和步长选择；与 MAC/Channel/Fourier 路径独立。详见 docs/legendre-optimization.md。
+2026-10-05 Channel 失稳可视化：用户要求看到失稳。独立 ts_wave 算例以中心速度和半高定义 Re，使用离散 Poiseuille 加基于同一 MAC 线性化的 TS 特征模态；epsilon 表示初始格心速度扰动峰值/Umax。原有算例参数语义不变。普通 SDIRK3/FFT 实际推进，独立连续 Orr–Sommerfeld 参照、短时步长/网格加密和低 Re 对照先核验增长，再生成非线性动画。TS 动画使用初始波速的移动坐标和相对速度流线，速度颜色仍为实验室系量；不等同于三维湍流。
+
+2026-10-04 一阶扩展：用户确认经典 IMEX Euler 与 IMEX Euler-mr-ccSAV，新增 scheme=imex_euler/imex_euler_mrsav；显式旧时刻对流/外力，隐式黏性与压力，单阶段。SAV 固定 G=1-r、Q=1，两个同矩阵右端后直接求唯一线性标量解；默认 r0=0、gamma>=0。复用四模型接口，固定/给定步长及公开 MAC/周期/Channel 运行保存分析。注册表提供阶段数/容量/阶数，单阶段 HDF5 容量1，Euler 压力标记 euler_step_multiplier_mean_zero。旧四格式及默认研究组不变；本次不含一阶自适应，后续需独立 step doubling。见 docs/imex-euler.md。
+2026-10-04 Channel：用户确认纯 MAC 的流向周期、上下壁面 u=v=0 模型。`solver/channel` 独立实现，u 保留 `(ny,nx+1)` 重复周期末列，仅 nx 列参与自由度和内积；v 为 `(ny+1,nx)` 且壁面行零。复用 DirectStokes（仅输入类型改为公共算子协议）、四格式和 I/PI；允许非零平均流与定常均值驱动力，压力仅全局零均值。专属 `experiments/channel_ns` 管理运行与只读分析。按规划先完成直接后端，再增加同一二阶 MAC 离散的可选 FFT 带状后端：保留全部模式和交错差分相位，零波数仅固定压力均值。默认 backend=direct，可选 fft。见 docs/channel.md；旧 MAC/Legendre/Fourier 语义及调用方式保持不变。
+2026-10-04 周期扩展：用户确认在保持既有求解器使用方式的前提下实现二维双周期 Fourier–Leray 后端。`solver/fourier` 独立实现，复用四套时间格式和 I/PI 控制；公开 State/Stage 为实数 collocated `(ny,nx)` 场，内部为 forward-normalized rFFT 系数，严格 2/3 频带、压力零均值、瞬态保留速度均值、定常零均值兼容性检查。`experiments/periodic_ns` 独立计算/存储/分析及短时验证，不扩展旧 MAC workflow 的布局假设。详见 docs/fourier.md；原 MAC/Legendre 数值公式、数组及旧实验参数不改。
+
+2026-10-04 自适应终点对齐：按用户要求，最后一步取 `initial.t+T-current.t`，成功接受后状态、时间记录、终点快照及回调均严格使用 `initial.t+T`。这个终点对齐步允许小于 `min_step`，包括浮点舍入级余量；仍执行原有阶段求解与速度/标量误差检验。普通步及内部严格输出节点的最小步长规则不改；此前“任何实际试步不得小于 min_step”的约定仅对终点对齐增加这一例外。
+
+2026-10-04 固定对照补充：用户要求在既有256²、T=30的正式自适应六联图中增加tau=0.01/0.005/0.0025，沿用三次重复和原物理参数。已有18个成员及共同1e-4/5e-5参考保持不变，通过显式派生campaign增加9个新成员；数值执行使用原23ec5c78源码快照，补算入口单独记录校验和。新增步长均整除0.1输出间隔，旧参考覆盖新采样时刻；不重新计算参考。图扩展为一组自适应加八组固定对照，保留原曲线颜色/标记和最细固定步长参考核验未过的标记。
+
+2026-10-02 EIT-WSL 自适应/固定对照：独立 adaptive_fixed_256.json 使用 MAC 256²、T=30，沿用 Kolmogorov 参数 nu=0.02、f=(-sin(4y),0)、epsilon=4、initial_modes=10、gamma=1000；atol_u=1e-8、rtol_u=2e-6、atol_r=1e-4，初步1e-5、min_step=1e-12、max_step=无穷（JSON null）。联合局部指标及分量控制阶数沿用已确认定义，I safety=0.9、倍率[0.5,1.2]。五组同格式固定对照tau=0.1/0.05/0.025/0.001/0.0005；三次交错单线程重复。自适应输出不截断自然步长，保存0.1间隔请求的最近自然节点及实际时刻，共同普通SDIRK3参考1e-4/5e-5访问实际采样时刻并核验5%敏感性。六联图和误差统计来自保存记录；失败前缀明确标识。T=0.1、单次重复的pilot只验证256²运行/存储/绘图流程，不代表T=30结果。此批次不使用独立固定收敛算例的nu=0.001与f=(0,sin x)。
+
+2026-10-02 自适应标量控制：用户选定 SDIRK3-mrSAV 的联合指标 E=max(E_u,E_r)，其中速度沿用嵌入差及 atol_u+rtol_u*max(||u_old||_h,||u_trial||_h)，E_r=|r_trial-exp(-gamma*h)r_old|/atol_r。辅助变量为一阶更新，局部缺陷为 O(h²)，速度嵌入差为 O(h³)；两项分别产生步长建议并取较小值，PI 分别保留接受步误差历史。通过显式 ScalarErrorControl 启用，既有速度单独控制的默认行为保留。新容差搜索使用独立 joint_tolerance_scan.json，保持既有128² Kolmogorov物理参数，不使用独立256²固定收敛实验的初值或外力；固定绝对局部容差不等于全局 |r| 上界。正式扫描为T=30、三次交错单线程重复，共同细步参考需通过5%敏感性检查；短时pilot只验证流程和耗时。
+
 2D incompressible velocity-pressure Navier–Stokes on a uniform rectangular MAC grid, homogeneous no-slip walls. u shape (ny,nx+1), v shape (ny+1,nx), pressure shape (ny,nx). Free normal-boundary velocities are eliminated. Scalar r is the paper variable, with Gu=1-r², Gr=1+r and r(0)=0.
 
 V1: IMEX-SDIRK2 and incremental SDIRK2-mr-ccSAV, fixed or explicitly prescribed positive time steps. Numba array kernels, SciPy sparse direct Stokes solves, bounded factorization cache. 32²–128² validation plus rectangular grids. Exponential schemes, adaptive controllers, nonzero velocity walls and checkpoint continuation are outside V1.
@@ -24,3 +39,7 @@ Stage pressure is an incremental multiplier, not a demonstrated second-order phy
 2026-09-27 自适应实验重置：删除旧 `runs/reports/kolmogorov_adaptive` 批次；基础 campaign 只保留 4 格式 × I/PI 的 8 个自适应成员和 SDIRK3 细步参考，删除已知无效的 `τ=0.01` 固定对照。固定阶梯独立使用 (0.0025,0.001,0.0005)。批次复用及两类分析均校验配置、源码哈希、完成状态和结果校验和；JIT 预热不计入积分 CPU 时间。严格输出对齐若将留下小于 `min_step` 的余量，则把到输出点的距离分成四个相等试步，浮点舍入余量直接吸收，任何实际试步不得小于 `min_step`。参考步长/误差指标与 mrSAV 标量控制暂不改。
 
 2026-09-27 容差扫描：128²、T=0.1、单线程、3 次交错重复，扫描 rtol∈{1e-3,5e-4,2e-4,1e-4,5e-5}，保持 atol/rtol=2e-4、SDIRK3 参考步 1e-4，以输出速度最大相对误差≤1e-4 为门槛。120 个自适应计时全部完成，最小试步为 1e-5。八组统一可用容差仍为 rtol=5e-5、atol=1e-8，故 production 不改；若允许各组异容差，最快可用档的聚合 CPU 中位数比统一 5e-5 低 16.7%，但不用于公平同容差比较。原始记录见 `reports/timings/20260927T141542-82e76f6e-a87d30ee-adaptive-tolerance-scan/timings.json`。
+
+2026-10-02 三阶无滑移受迫收敛参数更新：独立配置 `experiments/no_slip_reference_convergence/configs/sdirk3_256_gamma1000.json` 只比较 SDIRK3 与 SDIRK3-mr-ccSAV，域 (0,2π)²、MAC 256²、nu=0.001、f=(0,sin x)、gamma=1000、r0=0、T=4、输出 0.5/1/2/4；tau=0.1*2^(-k)，k=0,...,8 且无小数档。共同普通 SDIRK3 参考 k=10，以 k=11 做5%参考敏感性检查。初值使用用户指定的 4 sin²(x/2) sin²(y/2) 加权整格点流函数和，包含 0<k1²+k2²<=100 的全部316个有符号模式；顶点流函数离散旋度生成 MAC 速度，无随机种子、归一化或额外投影。保留稀疏直接 Stokes 后端及1e-9残差阈值。既有旧配置与结果不改；新初值和外力只通过显式配置选择。固定网格误差表及参考敏感性检查不能替代空间收敛或无滑移 PDE 三阶证明。
+
+2026-10-05 新的 H-valued-force 整数收敛批次：f=((1-cos(x))*sin(y), -sin(x)*(1-cos(y)))，C=1，force_profile=clamped_streamfunction；四种 SDIRK2/3 方法，k=0,...,8。沿用 MAC 256²、nu=0.001、gamma=1000、r0=0、用户原 lattice 初值、T=4 和 0.5/1/2/4 输出、tau=0.1*2^(-k)、直接 Stokes 1e-9。共同普通 SDIRK3 参考 k=10/11 随新外力重新计算；保留旧结果，待整数结果后再选小数加密区间。生产仅在 MAC MINI 上运行，远端原有时间格式未更新为本地其他扩展。

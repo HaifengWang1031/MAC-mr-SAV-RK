@@ -1,0 +1,4 @@
+{
+  "case": "mms", "scheme": "imex_euler",
+  "nx": 24, "ny": 18, "T": 0.1, "dt": 0.002, "snapshots": [0.0, 0.1]
+}

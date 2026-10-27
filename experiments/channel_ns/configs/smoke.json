@@ -1,0 +1,13 @@
+{
+  "case": "perturbed",
+  "scheme": "sdirk3_mrsav",
+  "nx": 32,
+  "ny": 24,
+  "nu": 0.1,
+  "driving": 0.1,
+  "epsilon": 0.01,
+  "gamma": 1.0,
+  "T": 0.1,
+  "dt": 0.01,
+  "snapshots": [0.0, 0.05, 0.1]
+}

@@ -13,8 +13,8 @@ smoke 配置用 16² 网格并镜像 `m=2`、零初值；若要用各向同性�
 ## 执行
 
 ```sh
-uv run --locked --extra mpi python experiments/forced_ns_convergence/run.py --config experiments/forced_ns_convergence/configs/smoke.json
-uv run --locked --extra mpi python experiments/forced_ns_convergence/run.py --config experiments/forced_ns_convergence/configs/production.json
+uv run --locked python experiments/forced_ns_convergence/run.py --config experiments/forced_ns_convergence/configs/smoke.json
+uv run --locked python experiments/forced_ns_convergence/run.py --config experiments/forced_ns_convergence/configs/production.json
 ```
 
 首轮生产包括16个被测运行和2个参考运行，参考对共有245760步；参考继续细化时成本显著增加。运行保留现有来源/校验和复用机制，显式 `--rerun` 新建运行，不覆盖旧结果，不支持断点续算。失败保留接受前缀，其后观测时刻为NaN。
@@ -27,7 +27,7 @@ uv run --locked --extra mpi python experiments/forced_ns_convergence/run.py --co
 计算入口在显式参考成员保存后调用分析；独立分析入口仅加载指定批次，不触发计算：
 
 ```sh
-uv run --locked --extra mpi python experiments/forced_ns_convergence/analyze.py --batch /absolute/path/to/batch.json
+uv run --locked python experiments/forced_ns_convergence/analyze.py --batch /absolute/path/to/batch.json
 ```
 
 `reports/forced_ns_convergence/<analysis-id>/` 中包含analysis.json、analysis.log、误差CSV、L2.tex、H1.tex和误差/成本/r图。表格按T分组，每组两种格式各Error/Rate，k只取整数。Rate仅从相邻k的有限正误差计算，否则为--；缺失误差写NaN。H1半范数采用差值的离散黏性二次型，不等同于压力或涡量误差。成本含预热、分解和推进，不能直接当作纯时间推进加速比。LaTeX使用booktabs与graphicx。

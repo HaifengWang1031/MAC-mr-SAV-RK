@@ -17,18 +17,14 @@ from uuid import uuid4
 import numpy as np
 
 from experiments.kolmogorov_adaptive.model import force, initial_velocity
+from experiments.kolmogorov_adaptive.run import SCHEMES, make_scheme
 from experiments.workflow import PROJECT, provenance, write_json
-from solver.core import Scheme
 from solver.integrate import integrate
 from solver.mac.grid import MACGrid
 from solver.mac.kernels import warmup
 from solver.mac.stokes import DirectStokes
 from solver.mac.tensor_stokes import TensorStokes
 from solver.mac_ns import MACNavierStokes
-from solver.schemes.sdirk2 import SDIRK2
-from solver.schemes.sdirk2_mrsav import SDIRK2MRSAV
-from solver.schemes.sdirk3 import SDIRK3
-from solver.schemes.sdirk3_mrsav import SDIRK3MRSAV
 
 
 CONFIG = {
@@ -52,19 +48,6 @@ CONFIG = {
     "max_iterations": 100,
     "primary_timing": "process_time_seconds_including_backend_setup",
 }
-
-SCHEMES = {
-    "sdirk2": SDIRK2,
-    "sdirk2_mrsav": SDIRK2MRSAV,
-    "sdirk3": SDIRK3,
-    "sdirk3_mrsav": SDIRK3MRSAV,
-}
-
-
-def make_scheme(name: str, gamma: float) -> Scheme:
-    constructor = SCHEMES[name]
-    return constructor(gamma) if name.endswith("mrsav") else constructor()
-
 
 def schedules(config: dict[str, Any]) -> dict[str, np.ndarray]:
     fixed = np.full(config["steps"], config["fixed_step"])

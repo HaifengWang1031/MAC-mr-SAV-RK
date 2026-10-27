@@ -1,0 +1,7 @@
+{
+  "case": "kolmogorov", "scheme": "sdirk3_mrsav", "nx": 64, "ny": 64,
+  "nu": 0.02, "gamma": 1000.0, "amplitude": 1.0, "k_f": 4, "epsilon": 0.1,
+  "T": 1.0, "mode": "adaptive", "initial_step": 0.001,
+  "controller": {"kind": "PI", "atol": 1e-8, "rtol": 5e-5},
+  "scalar_atol": 1e-5, "snapshots": [0.0, 0.5, 1.0]
+}

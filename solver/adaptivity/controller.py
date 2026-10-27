@@ -1,6 +1,6 @@
 """I and PI controllers for the four-stage IMEX-SDIRK3(2) embedded pair."""
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from time import perf_counter, process_time
 from typing import Any
 
@@ -70,6 +70,25 @@ class PIController(IController):
         return float(np.clip(factor, self.min_factor, self.max_factor))
 
 
+@dataclass(frozen=True)
+class ScalarErrorControl:
+    """Local defect against r'=-gamma*r, scaled by a fixed absolute tolerance.
+
+    This controls the first-order auxiliary update, whose local defect is O(h^2).
+    It does not impose an absolute bound on the accumulated scalar error |r|.
+    """
+    atol: float
+    gamma: float
+
+    def __post_init__(self) -> None:
+        if not np.isfinite([self.atol, self.gamma]).all() or self.atol <= 0 \
+                or self.gamma < 0:
+            raise ValueError('Invalid scalar error controls')
+
+    def defect(self, old_r: float, trial_r: float, step: float) -> float:
+        return float(trial_r-np.exp(-self.gamma*step)*old_r)
+
+
 @dataclass
 class AdaptiveResult(Result):
     """Result plus one record per trial, including rejected trials."""
@@ -98,11 +117,16 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
                        error_norm: Callable[[Any], float] | None = None,
                        strict_snapshots: bool = False,
                        progress: Callable[[int, float, float], None] | None = None,
-                       on_accept: Callable[[Any], None] | None = None) -> AdaptiveResult:
+                       on_accept: Callable[[Any], None] | None = None,
+                       scalar_control: ScalarErrorControl | None = None) -> AdaptiveResult:
     """Advance the order-three state; rejected trials never change the accepted state.
 
     T is a duration from initial.t. Snapshot requests are absolute physical times
     and map to the nearest accepted node (earlier node wins an exact tie).
+    The terminal step reaches initial.t+T exactly and may be below min_step;
+    it still passes the same error and stage checks as every other trial.
+    With scalar_control, accept max(E_u,E_r)<=1 and take the smaller component
+    step proposal. Velocity and scalar use their own orders and PI histories.
     """
     if not np.isfinite([T, initial_step, initial.t]).all() or T <= 0 or initial_step <= 0:
         raise ValueError('T and initial_step must be finite and positive')
@@ -119,6 +143,9 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
     step = min(initial_step, controller.max_step)
     rejections = 0
     previous_error: float | None = None
+    previous_u: float | None = None
+    previous_r: float | None = None
+    scalar_controller = replace(controller, estimator_order=2)
     output_index = 0
     boundary_step: float | None = None
     boundary_steps_remaining = 0
@@ -132,8 +159,6 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
             break
         remaining = end-result.final.t
         time_tolerance = 8*np.finfo(float).eps*max(abs(end), abs(result.final.t), 1.)
-        if remaining <= time_tolerance:
-            break
         proposed_step = min(step, remaining)
         step = proposed_step
         boundary_partition = False
@@ -169,22 +194,33 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
                     boundary_partition = True
                 else:
                     step = min(proposed_step, distance_to_output)
-        if step < controller.min_step:
+        terminal_step = step == remaining
+        if step < controller.min_step and not terminal_step:
             result.status, result.error = 'failed', 'Step below min_step'
             break
         reason = ''
         error = float('inf')
+        error_u = float('inf')
+        error_r = float('nan')
+        scalar_defect = float('nan')
         trial = None
         try:
             trial = scheme.step(model, result.final, step)
             if trial.embedded_velocity is None:
                 raise ValueError('Scheme does not provide an embedded velocity')
             high = model.vector(trial.state)
+            if terminal_step:
+                trial.state = model.state(end, high, trial.state.r)
             if not np.isfinite(high).all() or not np.isfinite(trial.embedded_velocity).all() \
                     or not np.isfinite(trial.state.r):
                 raise FloatingPointError('Nonfinite trial state')
-            error = _error(model, model.vector(result.final), high,
-                           trial.embedded_velocity, controller, error_norm)
+            error_u = _error(model, model.vector(result.final), high,
+                             trial.embedded_velocity, controller, error_norm)
+            error = error_u
+            if scalar_control is not None:
+                scalar_defect = scalar_control.defect(result.final.r, trial.state.r, step)
+                error_r = abs(scalar_defect)/scalar_control.atol
+                error = max(error_u, error_r) if np.isfinite(error_r) else float('inf')
             if not np.isfinite(error):
                 reason = 'nonfinite_error'
             elif error > 1.:
@@ -198,16 +234,28 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
         if reason:
             # Rejection depends only on the current trial; accepted PI history is
             # retained but never updated by a rejected trial.
-            factor = min(IController.accepted_factor(controller, error, None), 0.8)
+            factor = min(IController.accepted_factor(controller, error_u, None), 0.8)
+            if scalar_control is not None:
+                scalar_error = error_r if np.isfinite(error_r) else float('inf')
+                factor = min(factor, IController.accepted_factor(
+                    scalar_controller, scalar_error, None))
         else:
-            factor = controller.accepted_factor(error, previous_error)
+            factor = controller.accepted_factor(error_u, previous_u)
+            if scalar_control is not None:
+                factor = min(factor, scalar_controller.accepted_factor(error_r, previous_r))
         result.attempts.append({'t': float(result.final.t), 'step': float(step),
                                 'error': float(error), 'accepted': not bool(reason),
+                                'error_u': float(error_u), 'error_r': float(error_r),
+                                'scalar_defect': float(scalar_defect),
                                 'reason': reason, 'factor': float(factor),
                                 'boundary_partition': boundary_partition,
                                 'output_truncated': output_truncated,
                                 'previous_accepted_error': (float('nan') if previous_error is None
                                                             else previous_error),
+                                'previous_accepted_error_u': (float('nan') if previous_u is None
+                                                              else previous_u),
+                                'previous_accepted_error_r': (float('nan') if previous_r is None
+                                                              else previous_r),
                                 'controller': type(controller).__name__,
                                 'elapsed_seconds': perf_counter()-start-result.observer_wall_seconds,
                                 'cpu_seconds': process_time()-cpu_start-result.observer_cpu_seconds})
@@ -224,6 +272,9 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
         assert trial is not None
         rejections = 0
         previous_error = error
+        previous_u = error_u
+        if scalar_control is not None:
+            previous_r = error_r
         result.final = trial.state
         if strict_snapshots and output_index < len(requests) and \
                 abs(trial.state.t-requests[output_index]) <= 8*np.finfo(float).eps*max(1.,abs(trial.state.t)):

@@ -1,0 +1,18 @@
+{
+  "reynolds": 30000.0,
+  "alpha": 0.8,
+  "height": 2.0,
+  "centreline_speed": 1.0,
+  "nx": 96,
+  "ny": 192,
+  "fine_nx": 128,
+  "fine_ny": 256,
+  "T": 400.0,
+  "dt": 0.05,
+  "epsilon": 0.025,
+  "snapshot_interval": 1.0,
+  "verification_T": 20.0,
+  "verification_epsilon": 0.0001,
+  "stable_reynolds": 1000.0,
+  "growth_relative_gate": 0.02
+}

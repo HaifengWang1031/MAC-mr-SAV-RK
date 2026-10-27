@@ -17,11 +17,7 @@ from solver.mac.kernels import warmup
 from solver.mac.operators import MACOperators
 from solver.mac.stokes import DirectStokes
 from solver.mac_ns import MACNavierStokes
-from solver.core import Scheme
-from solver.schemes.sdirk2 import SDIRK2
-from solver.schemes.sdirk2_mrsav import SDIRK2MRSAV
-from solver.schemes.sdirk3 import SDIRK3
-from solver.schemes.sdirk3_mrsav import SDIRK3MRSAV
+from solver.schemes.registry import SCHEMES, make_scheme, scheme_info
 from solver.integrate import Result, integrate, step_sizes
 from .forced_ns_convergence.isotropic import TARGETS
 from .forced_rotation.model import KINDS
@@ -29,9 +25,10 @@ from .forced_rotation.model import KINDS
 PROJECT=Path(__file__).resolve().parents[1]
 DEFAULTS={'nx':32,'ny':32,'lx':1.,'ly':1.,'nu':.1,'amplitude':.1,
           'T':.1,'dt':.001,'scheme':'sdirk2_mrsav','gamma':1.,'cache_size':4,'stokes_tolerance':1e-9,'snapshots':[],'snapshot_every':None,'log_every':1000,
-          'm':1,'forcing_kind':'A','k_f':5.,
+          'm':1,'force_profile':'sin_2pi_m_x','forcing_kind':'A','k_f':5.,
           'ic_kind':'zero','ic_k_lo':4.,'ic_k_hi':12.,'ic_alpha':5./3.,'ic_seed':0,
-          'ic_target':'max','ic_value':1.,'ic_symmetric':False,'ic_project':True}
+          'ic_target':'max','ic_value':1.,'ic_symmetric':False,'ic_project':True,
+          'ic_lattice_cutoff':100,'ic_lattice_amplitude':4.}
 
 def write_json(path: Path, data: dict) -> None:
     temporary=path.with_suffix('.tmp')
@@ -69,7 +66,11 @@ def effective_config(config: dict) -> dict:
     elif 'lid_speed' in config: raise ValueError('lid_speed is only supported for cavity')
     if cfg['experiment']=='forced_ns':
         if type(cfg['m']) is not int or cfg['m']<1: raise ValueError('Force wavenumber m must be a positive integer')
-        if cfg['ic_kind'] not in ('zero','isotropic_beams'): raise ValueError('Unknown ic_kind')
+        if cfg['force_profile'] not in ('sin_2pi_m_x','sin_x','clamped_streamfunction'): raise ValueError('Unknown force_profile')
+        if cfg['force_profile']=='clamped_streamfunction' and not np.isclose(
+                [cfg['lx'],cfg['ly']],2.*np.pi,rtol=0.,atol=1e-12).all():
+            raise ValueError('Clamped force requires the (0, 2*pi)^2 domain')
+        if cfg['ic_kind'] not in ('zero','isotropic_beams','lattice_streamfunction'): raise ValueError('Unknown ic_kind')
         if cfg['ic_kind']=='isotropic_beams':
             if cfg['ic_target'] not in TARGETS: raise ValueError('Unknown ic_target')
             if not np.isfinite([cfg['ic_k_lo'],cfg['ic_k_hi'],cfg['ic_alpha'],cfg['ic_value']]).all() \
@@ -82,10 +83,29 @@ def effective_config(config: dict) -> dict:
             initial=f'isotropic_beams(k_lo={cfg["ic_k_lo"]},k_hi={cfg["ic_k_hi"]},'
             initial+=f'alpha={cfg["ic_alpha"]},seed={cfg["ic_seed"]},target={cfg["ic_target"]},'
             initial+=f'value={cfg["ic_value"]},symmetric={cfg["ic_symmetric"]},project={cfg["ic_project"]})'
+        elif cfg['ic_kind']=='lattice_streamfunction':
+            if type(cfg['ic_lattice_cutoff']) is not int or cfg['ic_lattice_cutoff']<1:
+                raise ValueError('Positive integer lattice cutoff required')
+            if not np.isfinite(cfg['ic_lattice_amplitude']) or cfg['ic_lattice_amplitude']<=0:
+                raise ValueError('Positive finite lattice amplitude required')
+            if not np.isclose([cfg['lx'],cfg['ly']],2.*np.pi,rtol=0.,atol=1e-12).all():
+                raise ValueError('Lattice streamfunction requires the (0, 2*pi)^2 domain')
+            if min(cfg['nx'],cfg['ny'])<=2*(np.floor(np.sqrt(cfg['ic_lattice_cutoff']))+1):
+                raise ValueError('Grid does not resolve the lattice frequencies')
+            if cfg['ic_project'] is not False:
+                raise ValueError('Lattice discrete curl requires ic_project=false')
+            initial=f'lattice_streamfunction(cutoff={cfg["ic_lattice_cutoff"]},'
+            initial+=f'amplitude={cfg["ic_lattice_amplitude"]},signed_integer_modes,discrete_curl,no_normalization)'
+            for key in ('ic_k_lo','ic_k_hi','ic_alpha','ic_seed','ic_target','ic_value','ic_symmetric'):
+                cfg.pop(key)
         else:
             initial='zero'
-        if type(cfg['ic_seed']) is not int or cfg['ic_seed']<0: raise ValueError('Invalid ic_seed')
-        cfg.update(force='[0, amplitude*sin(2*pi*m*x)]',initial_condition=initial,boundary='homogeneous_no_slip')
+        if 'ic_seed' in cfg and (type(cfg['ic_seed']) is not int or cfg['ic_seed']<0): raise ValueError('Invalid ic_seed')
+        if cfg['force_profile']=='clamped_streamfunction':
+            force='amplitude*[(1-cos(x))*sin(y), -sin(x)*(1-cos(y))]'
+        else:
+            force='[0, amplitude*sin(x)]' if cfg['force_profile']=='sin_x' else '[0, amplitude*sin(2*pi*m*x)]'
+        cfg.update(force=force,initial_condition=initial,boundary='homogeneous_no_slip')
     elif 'm' in config: raise ValueError('m is only supported for forced_ns')
     if cfg['experiment']=='rotation_ns':
         if cfg['forcing_kind'] not in KINDS: raise ValueError('Unknown forcing_kind')
@@ -104,7 +124,9 @@ def effective_config(config: dict) -> dict:
     if cfg['experiment']=='trig_ns':
         cfg.update(force='[amplitude*cos(x), 0]',initial_condition='weighted_trig_vorticity',boundary='homogeneous_no_slip')
     if not isinstance(cfg['log_every'],int) or cfg['log_every']<1: raise ValueError('Invalid log_every')
-    if cfg['scheme'] not in ('sdirk2','sdirk2_mrsav','sdirk3','sdirk3_mrsav'): raise ValueError('Unknown scheme')
+    if cfg['scheme'] not in SCHEMES: raise ValueError('Unknown scheme')
+    if scheme_info(cfg['scheme']).order == 1:
+        cfg['pressure_semantics'] = scheme_info(cfg['scheme']).pressure_semantics
     MACGrid(cfg['nx'],cfg['ny'],cfg['lx'],cfg['ly'])
     for key in ('nu','T'):
         if not np.isfinite(cfg[key]) or cfg[key]<=0: raise ValueError(f'Invalid {key}')
@@ -129,12 +151,15 @@ def effective_config(config: dict) -> dict:
     cfg['actual_steps']=schedule.tolist()
     return cfg
 
-def save_result(path: Path, result: Result, metrics: dict, n_stages: int = 2) -> None:
+def save_result(path: Path, result: Result, metrics: dict, n_stages: int = 2, *,
+                n_roots: int | None = None, pressure_semantics: str | None = None) -> None:
+    if n_roots is None: n_roots = {1: 1, 2: 3, 4: 5}[n_stages]
     temporary=path.with_suffix('.tmp')
     with h5py.File(temporary,'w') as data:
         data.attrs['schema_version']=1
         data.attrs['status']=result.status
         data.attrs['metrics_json']=json.dumps(metrics,allow_nan=False)
+        if pressure_semantics is not None: data.attrs['pressure_semantics'] = pressure_semantics
         data.create_dataset('times',data=result.times)
         data.create_dataset('dt',data=np.diff(result.times))
         for key in result.diagnostics[0]:
@@ -149,7 +174,6 @@ def save_result(path: Path, result: Result, metrics: dict, n_stages: int = 2) ->
             data.create_dataset('snapshots/u',data=np.stack([s.u for s in result.snapshots]),compression='gzip')
             data.create_dataset('snapshots/v',data=np.stack([s.v for s in result.snapshots]),compression='gzip')
             data.create_dataset('snapshots/r',data=[s.r for s in result.snapshots])
-        n_roots=5 if n_stages==4 else 3
         candidates=np.full((len(result.stages),n_stages,n_roots),np.nan)
         residuals=candidates.copy()
         counts=np.zeros((len(result.stages),n_stages),dtype=int)
@@ -210,6 +234,9 @@ def run_experiment(config: dict, *, root: Path = PROJECT, rerun: bool = False) -
     elif cfg['experiment'] in ('forced_ns','rotation_ns'):
         if cfg['ic_kind']=='zero':
             velocity0=np.zeros(grid.size)
+        elif cfg['ic_kind']=='lattice_streamfunction':
+            from .no_slip_reference_convergence.lattice import initial_velocity
+            velocity0=initial_velocity(grid,cutoff=cfg['ic_lattice_cutoff'],amplitude=cfg['ic_lattice_amplitude'])
         else:
             from .forced_ns_convergence.isotropic import build_isotropic
             velocity0=build_isotropic(grid,k_lo=cfg['ic_k_lo'],k_hi=cfg['ic_k_hi'],alpha=cfg['ic_alpha'],
@@ -240,8 +267,15 @@ def run_experiment(config: dict, *, root: Path = PROJECT, rerun: bool = False) -
                 boundary_load=lid_viscous_load(grid,cfg['nu'],cfg['lid_speed'])
                 model.force=lambda t: boundary_load
             if cfg['experiment']=='forced_ns':
-                from .forced_ns_convergence.model import force_vector
-                constant_force=force_vector(grid,cfg['amplitude'],cfg['m'])
+                if cfg['force_profile']=='clamped_streamfunction':
+                    from .no_slip_reference_convergence.lattice import clamped_force_vector
+                    constant_force=clamped_force_vector(grid,cfg['amplitude'])
+                elif cfg['force_profile']=='sin_x':
+                    from .no_slip_reference_convergence.lattice import force_vector as lattice_force
+                    constant_force=lattice_force(grid,cfg['amplitude'])
+                else:
+                    from .forced_ns_convergence.model import force_vector
+                    constant_force=force_vector(grid,cfg['amplitude'],cfg['m'])
                 model.force=lambda t: constant_force
             if cfg['experiment']=='rotation_ns':
                 from .forced_rotation.model import force_ab
@@ -254,11 +288,7 @@ def run_experiment(config: dict, *, root: Path = PROJECT, rerun: bool = False) -
                 from .forced_ns_convergence.model import force_vector_cos
                 constant_force=force_vector_cos(grid,cfg['amplitude'])
                 model.force=lambda t: constant_force
-            scheme: Scheme
-            if cfg['scheme']=='sdirk2': scheme=SDIRK2()
-            elif cfg['scheme']=='sdirk2_mrsav': scheme=SDIRK2MRSAV(cfg['gamma'])
-            elif cfg['scheme']=='sdirk3': scheme=SDIRK3()
-            else: scheme=SDIRK3MRSAV(cfg['gamma'])
+            scheme=make_scheme(cfg['scheme'],cfg['gamma'])
             def progress(step: int, time: float, elapsed: float) -> None:
                 if step%cfg['log_every']==0 or step==len(cfg['actual_steps']):
                     log.write(f'accepted={step}/{len(cfg["actual_steps"])} t={time:.12g} elapsed={elapsed:.3f}s\n')
@@ -278,7 +308,9 @@ def run_experiment(config: dict, *, root: Path = PROJECT, rerun: bool = False) -
             result.status='failed'; result.error=f'{type(error).__name__}: {error}'
             log.write(traceback.format_exc())
         metrics['total_seconds']=perf_counter()-start
-        save_result(directory/'results.h5',result,metrics,4 if cfg['scheme'].startswith('sdirk3') else 2)
+        info=scheme_info(cfg['scheme'])
+        save_result(directory/'results.h5',result,metrics,info.n_stages,n_roots=info.n_roots,
+                    pressure_semantics=cfg.get('pressure_semantics'))
         manifest.update(status=result.status,error=result.error,accepted_steps=len(result.times)-1,
                         final_time=result.final.t,metrics=metrics,results_sha256=digest(directory/'results.h5'),
                         finished_utc=datetime.now(timezone.utc).isoformat())
