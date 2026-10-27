@@ -1,4 +1,14 @@
 # Confirmed implementation specification
+2026-10-27 confirmed FEM extension: independent scikit-fem continuous Taylor–Hood
+P2 velocity/P1 pressure on deterministic rectangular triangular meshes, homogeneous
+no-slip, consistent mass/Riesz coefficient representation and antisymmetric convection.
+Unpenalized direct shifted Stokes checks every weak continuity row and physical-integral
+pressure gauge; physical gradient divergence is reported separately. All six shared
+formats support fixed/prescribed steps. Dedicated run/load/reconstruct/readonly analysis
+retains full coefficients and mesh/DOF metadata; legacy layouts remain unchanged.
+No adaptive or nonhomogeneous-boundary extension, production campaign or PDE time-order
+proof. See [FEM conventions](fem.md) and [measured evidence](validation.md#2026-10-27-fem-release-verification).
+
 2026-10-05 Legendre performance extension: cached immutable internal quadrature,
 exact 1D closed forms, tensor mass solves, shared weak operators and batched RHS.
 Default direct Stokes retains all equation/physical-divergence checks. Optional

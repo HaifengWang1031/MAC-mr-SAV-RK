@@ -1,5 +1,7 @@
 # FEM run / load / reconstruct / analyze
 
+[Numerical conventions](../../docs/fem.md) · [Release evidence](../../docs/validation.md#2026-10-27-fem-release-verification)
+
 Independent deterministic rectangular Taylor–Hood P2/P1 workflow. Reuses the six
 registered time schemes and common fixed/prescribed-step integrator; no adaptive
 mode, new numerical formulas, legacy record migrations or campaign framework.
@@ -103,5 +105,5 @@ manifest/log and re-raise, and records without valid results remain unreadable
 and unreusable. Atomic rename is not an fsync/durable transaction guarantee;
 interrupted pending/running records are not reused. No checkpoint continuation.
 Full-project mypy has six known pre-existing errors outside FEM; owned modules
-are checked separately. Integration validation documentation is maintained by
-the validation owner, using the external ticket03 evidence handoff.
+are checked separately. The linked release evidence records the integrated
+regression, exact baseline typing comparison and real tiny CLI lifecycle check.

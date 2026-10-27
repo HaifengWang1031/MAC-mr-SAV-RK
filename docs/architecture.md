@@ -1,4 +1,10 @@
 # 架构与记录约定
+2026-10-27 FEM 增加第五个 Model：`solver/fem` 分离确定性 P2/P1 空间、一致质量模型与无罚项直接 Stokes；时间格式和共同推进器不改。内部为自由速度系数，State.u/v 为含边/壁自由度的完整标量 P2 分量系数，按库映射拆装而非连续两半。
+
+`experiments/fem_ns` 使用专属 reader，沿用基础 HDF5 schema_version=1 并增加 fem_schema_version=1、FEM 布局/元素/边界/压力规范/库版本标签，以及 mesh、dofs 数据集。保存完整速度和最后接受步各阶段 P1 压力；快照只含速度/r，不含压力历史。pending 文件补齐元数据后更名并最终化 manifest。来源身份单独纳入 scikit-fem，不改变旧记录；加载需保存/安装库版本一致，复用另需同配置/源码/环境、完整状态和校验通过。rerun 新建尝试，失败保留接受前缀；不支持恢复或持久化事务保证。
+
+重建/分析只从已存网格和基函数评估，不构造动力模型或积分；显式运行目录输入，`runs/fem_ns` 与 `reports/fem_ns` 分离。报告 JSON/CSV/日志区分弱连续性、物理积分点散度与阶段乘子。见 [FEM](fem.md) 和 [运行记录说明](../experiments/fem_ns/README.md)。
+
 2026-10-05 Legendre 优化：模型与直接/张量后端共用空间算子和有界求积缓存；公开 Space 采样方法保持独立返回值。可选张量后端只更换线性求解算法，默认 direct。legendre_optimization 以独立 NPZ/JSON 运行记录保存两版源码、场、阶段压力/根、计时与校验和，报告只读消费显式运行编号；原 HDF5 格式保持兼容。见 docs/legendre-optimization.md。
 
 2026-10-05 TS 算例在 Channel HDF5 中追加 initial_mode 属性及 unit_velocity，不改变既有数组、阶段或根容量。
