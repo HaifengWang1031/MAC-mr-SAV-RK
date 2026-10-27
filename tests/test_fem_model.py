@@ -123,7 +123,7 @@ def test_shared_matrix_columns_and_pressure_projection():
                                (1., model.apply_G(solved.pressure)), (-1., rhs))
         assert model.max_abs(defect) < 2e-11
         assert model.max_abs(model.apply_D(solved.velocity)) < 1e-12
-        assert solved.continuity_residual < 1e-12
+        assert model.diagnostics(model.state(0., solved.velocity))['continuity_residual'] < 1e-12
         assert abs(model.pressure_integral(solved.pressure)) < 1e-12
     # Exercise another shift and return to the first (bounded cache must not change results).
     model.solve(first, mass=0., viscosity=.2)
@@ -197,10 +197,10 @@ def test_constant_field_projection_and_invalid_boundaries():
                    {'nx': 2, 'ny': 2, 'quadrature_order': 4}):
         with pytest.raises(ValueError):
             Space(**kwargs)
-    for kwargs in ({'nu': 0.}, {'nu': np.inf}, {'nu': .2, 'tolerance': np.nan},
-                   {'nu': .2, 'cache_size': 0}):
+    for nu, tolerance, cache_size in ((0., 1e-9, 4), (np.inf, 1e-9, 4),
+                                      (.2, np.nan, 4), (.2, 1e-9, 0)):
         with pytest.raises(ValueError):
-            FEMModel(Space(2, 2), **kwargs)
+            FEMModel(Space(2, 2), nu, tolerance=tolerance, cache_size=cache_size)
     with pytest.raises(ValueError, match='pressure constraints'):
         FEMModel(Space(1, 1), nu=.2)
     for mass, viscosity in ((0., 0.), (-1., .1), (1., -1.), (np.nan, .1)):

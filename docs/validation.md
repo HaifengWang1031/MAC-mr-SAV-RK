@@ -56,18 +56,23 @@
 uv sync --locked --group notebook
 uv run --locked --group notebook python -m pytest tests/test_integrate.py tests/test_fem_model.py tests/test_fem_validation.py tests/test_fem_workflow.py -q
 uv run --locked --group notebook python -m pytest -q
-uv run --locked --group notebook mypy solver/schedule.py solver/integrate.py solver/fem solver/model.py experiments/fem_ns tests/test_fem_workflow.py tests/test_integrate.py tests/test_fem_validation.py
+uv run --locked --group notebook mypy solver/schedule.py solver/integrate.py solver/fem solver/model.py experiments/fem_ns tests/test_fem_model.py tests/test_fem_validation.py tests/test_fem_workflow.py tests/test_integrate.py
 uv run --locked --group notebook mypy
 ```
 
-实际最终结果：聚焦 **113 passed / 10.71 s**；notebook启用全量
-**444 passed / 73.04 s**（此前一轮444 passed / 84.24 s）；定向 mypy **16个源文件通过**。全项目 mypy 检查
+实际最终结果（包含测试类型修正后重跑）：聚焦 **113 passed / 10.54 s**；
+notebook启用全量 **444 passed / 73.21 s**；定向 mypy **17个源文件通过**，
+覆盖全部三个FEM测试文件及 `test_integrate.py`。全项目 mypy 检查
 133个源文件仍为 **6 errors / 3 files**，在临时只读来源快照上用相同mypy检查
 不可变基线122个源文件，也是6错。排序比较路径/行号/消息/错误码 **完全一致**，
 均为原 `kolmogorov_adaptive` 六错，不声称全项目类型检查通过。
-额外尝试把旧 `test_fem_model.py` 纳入定向检查出现3个测试自身类型错误；
-从 `bd5b36c` 导出原文件同样3错（`SolveResult.continuity_residual` 及两项
-字典展开参数类型），本轮不扩展修复范围，原始失败日志也保留。
+最初扩展定向检查发现 `test_fem_model.py` 有3个**本FEM功能引入的测试类型错误**；
+该文件不存在于 `fem/source-baseline`，不能按ticket05前的状态将其归为仓库既有错误。
+现已修正：通过公开 `model.diagnostics(state)` 断言完整弱连续性，仍保留独立
+`apply_D` 检查及原1e-12阈值；四组非法模型输入改用明确的nu/tolerance/cache_size
+元组及具名参数，保留全部拒绝断言。未加ignore或修改生产接口。扩展定向检查从
+**3 errors / 17 files** 转为 **17 files clean**；仅全项目默认检查的上述六错属于
+来源基线既有问题。原始失败及本次绿灯日志均保留。
 
 最终Python来源哈希
 `55fab6b959e88a4a8ee21d4eee66e654c0e4d5d631c9f9490c9b9f4a783995b2`
@@ -85,7 +90,9 @@ uv run --locked --group notebook mypy
 
 外部完整证据：`MAC-mr-SAV-RK-fem-work/notes/fem-review-fixes-evidence.md`；
 脚本、红绿灯、负对照、前后JSON、类型检查与CLI原始日志均在同目录
-`evidence/05-*`。临时运行需备份才可长期保留。未运行生产批次、长期/性能或
+`evidence/05-*`；测试类型修正后的最终日志为 `05-owned-test-*`。
+本次后续提交只改测试及证据文档，生产Python来源哈希与已通过CLI的来源一致，
+没有再次计算CLI运行。临时运行需备份才可长期保留。未运行生产批次、长期/性能或
 PDE时间阶研究，未添加自适应/非齐次边界；最终独立双轴复审仍是必须门槛。
 
 ## 2026-10-27 FEM release verification
