@@ -1,5 +1,13 @@
 # Four-scheme MAC temporal convergence study
 
+## 研究成果
+
+[结果 Notebook](studies/time_convergence/results.ipynb) ·
+[中文论文实验描述](studies/time_convergence/description.tex) ·
+[执行、输入与论文引入说明](studies/time_convergence/README.md)
+
+Notebook 只读重绘显式保存数值数据，材料完成不等于新的数值验证结论。
+
 Purpose: compare SDIRK2, SDIRK2-mr-ccSAV, SDIRK3 and SDIRK3-mr-ccSAV against the same known solution on a fixed MAC grid. The fixed controls are the unit no-slip square, `nu`, streamfunction amplitude, `gamma`, grid and final time. Only scheme and fixed time step vary. `configs/production.json` is the complete effective campaign plan: 128², T=2, tau=0.1*2^(-k), integer k=-1,...,8.
 
 The vertex streamfunction is `psi=a(t) sin²(pi x) sin²(2 pi y)` with `a(t)=0.05 exp(-t)(1+0.25 sin(pi t))`. A discrete curl constructs W_h; the exact MAC velocity is `a(t) W_h`. The force is assembled from **the same MAC operators**: `f_h=a'(t)W_h+nu*a(t)*K_h W_h+a(t)²*N_h(W_h)`. This is a grid-consistent semidiscrete manufactured solution with pressure zero. It isolates time integration error; it is not a continuous-force spatial accuracy experiment.

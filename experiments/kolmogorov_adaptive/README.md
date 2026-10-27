@@ -1,5 +1,13 @@
 # No-slip Kolmogorov adaptive comparison
 
+## 自然节点自适应/固定步对照成果
+
+[中文论文实验描述](studies/adaptive_fixed/description.tex) ·
+[材料状态与论文引入](studies/adaptive_fixed/README.md)
+
+**Notebook 待补原始数据。** 本轮不以本地汇总表替代原始成员及双参考轨迹，
+也不将已有生产报告的参考未完全验证状态写成已验证结论。
+
 Purpose: compare I and PI controllers for SDIRK2, SDIRK2-mr-ccSAV, SDIRK3
 and SDIRK3-mr-ccSAV at a common velocity error tolerance. On `(0,2*pi)^2`
 with zero velocity at all walls, `f=(-sin(4*y),0)` has curl `4*cos(4*y)`.

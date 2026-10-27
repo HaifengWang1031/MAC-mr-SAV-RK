@@ -6,6 +6,7 @@ dependencies = ["numpy>=1.24", "scipy>=1.10", "numba>=0.59", "h5py>=3.8", "matpl
 
 [dependency-groups]
 dev = ["pytest>=7", "mypy>=1.10"]
+notebook = ["ipykernel>=6.29", "nbclient>=0.10", "nbformat>=5.10"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 [tool.mypy]
