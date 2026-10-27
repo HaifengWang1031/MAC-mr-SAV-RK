@@ -43,6 +43,7 @@
 | [H-valued 外力对照](no_slip_reference_convergence/README.md) | 保持初值等条件，使用夹持流函数外力研究粗步失败和时间误差 | — | — | 待整理 |
 | [Fourier 制造解验证](periodic_ns/README.md) | 双周期模型的时间/空间误差及保存读取，不替代无滑移验证 | — | — | 待整理 |
 | [Channel 制造解验证](channel_ns/README.md#short-verification-study) | 周期流向/无滑移壁面模型的时间细化与连续 Stokes 空间细化 | — | — | 待整理 |
+| [FEM 制造解保存与重建](fem_ns/README.md) | Taylor–Hood P2/P1、六格式固定/给定步的独立运行、完整系数重建和只读诊断 | — | — | 工作流验证；不替代空间/时间收敛证据 |
 | [一阶格式验证](imex_euler/README.md) | IMEX Euler 与 IMEX Euler-mr-ccSAV 的六后端精度和约束检查 | — | — | 待整理 |
 | [Kolmogorov 统一速度容差 I/PI](kolmogorov_adaptive/README.md#current-design) | 八组方法/控制器、严格输出对齐及同格式固定步阶梯 | — | — | 待整理 |
 | [Kolmogorov 速度容差搜索](kolmogorov_adaptive/README.md#tolerance-search) | 短时重复计时下共同容差与分组容差的成本/精度取舍 | — | — | 待整理；旧扫描报告缺失 |
