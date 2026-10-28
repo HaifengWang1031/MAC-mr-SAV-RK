@@ -1,11 +1,12 @@
 """Common fixed/prescribed-step driver, bounded state storage and failure prefixes."""
 from dataclasses import dataclass, field
-from time import perf_counter
+from time import perf_counter, process_time
 from collections.abc import Callable
 import numpy as np
 from .core import State, Stage, Scheme, History
 from .mac.grid import Array
 from .model import Model
+from .schedule import schedule_nodes, nearest_node_indices
 
 @dataclass
 class Result:
@@ -20,6 +21,8 @@ class Result:
     status: str = 'complete'
     error: str = ''
     seconds: float = 0.
+    observer_cpu_seconds: float = 0.
+    observer_wall_seconds: float = 0.
 
 def step_sizes(T: float, *, dt: float | None = None, steps: list[float] | None = None) -> Array:
     if not np.isfinite(T) or T<=0: raise ValueError('T must be positive')
@@ -41,35 +44,18 @@ def step_sizes(T: float, *, dt: float | None = None, steps: list[float] | None =
     return np.r_[np.full(count,dt),T-count*dt]
 
 
-def _schedule_nodes(initial_time: float, sequence: Array) -> Array:
-    """Accumulate long prescribed schedules without losing their endpoint."""
-    nodes = np.empty(sequence.size+1, dtype=float)
-    nodes[0] = initial_time
-    total = float(initial_time)
-    correction = 0.
-    for index, step in enumerate(sequence, start=1):
-        increment = float(step)-correction
-        updated = total+increment
-        correction = (updated-total)-increment
-        total = updated
-        nodes[index] = total
-    return nodes
-
 def integrate(model: Model, scheme: Scheme, initial: State, steps: list[float] | Array,
               snapshots: list[float] | None = None,
-              progress: Callable[[int, float, float], None] | None = None) -> Result:
+              progress: Callable[[int, float, float], None] | None = None, *,
+              on_accept: Callable[[State], None] | None = None) -> Result:
     sequence=np.asarray(steps,dtype=float)
     if sequence.ndim!=1 or sequence.size==0 or np.any(sequence<=0) or not np.isfinite(sequence).all():
         raise ValueError('Invalid step sequence')
-    nodes = _schedule_nodes(initial.t, sequence)
+    nodes = schedule_nodes(initial.t, sequence)
     requests=[] if snapshots is None else list(snapshots)
     if any(not np.isfinite(t) or t<initial.t or t>nodes[-1]+1e-12 for t in requests):
         raise ValueError('Snapshot time outside integration interval')
-    indices=[]
-    for t in requests:
-        distance=np.abs(nodes-t)
-        tie_tolerance=8*np.finfo(float).eps*max(abs(t),float(np.max(np.abs(nodes))),np.finfo(float).tiny)
-        indices.append(int(np.flatnonzero(distance<=distance.min()+tie_tolerance)[0]))
+    indices = nearest_node_indices(nodes, requests)
     kept: dict[int,State]={}
     if 0 in indices: kept[0]=initial
     history=History(initial)
@@ -94,7 +80,17 @@ def integrate(model: Model, scheme: Scheme, initial: State, steps: list[float] |
                                    'continuity_residual':s.continuity_residual}
                                   for s in trial.stages])
             if k+1 in indices: kept[k+1]=trial.state
-            if progress is not None: progress(k+1,trial.state.t,perf_counter()-start)
+            if on_accept is not None:
+                observer_wall, observer_cpu = perf_counter(), process_time()
+                try:
+                    on_accept(trial.state)
+                except Exception as error:
+                    raise RuntimeError(f'Accepted-state observer failed: {type(error).__name__}: {error}') from error
+                finally:
+                    result.observer_wall_seconds += perf_counter()-observer_wall
+                    result.observer_cpu_seconds += process_time()-observer_cpu
+            if progress is not None:
+                progress(k+1,trial.state.t,perf_counter()-start-result.observer_wall_seconds)
         except Exception as error:
             result.status='failed'
             result.error=f'{type(error).__name__}: {error}'
@@ -104,5 +100,5 @@ def integrate(model: Model, scheme: Scheme, initial: State, steps: list[float] |
             result.snapshot_requests.append(request)
             result.snapshot_times.append(kept[index].t)
             result.snapshots.append(kept[index])
-    result.seconds=perf_counter()-start
+    result.seconds=perf_counter()-start-result.observer_wall_seconds
     return result

@@ -1,0 +1,11 @@
+{
+  "resolution": 2.5,
+  "T": 12.0,
+  "scheme": "sdirk3_mrsav",
+  "mode": "adaptive",
+  "initial_step": 0.0002,
+  "stokes_backend": "recycled",
+  "controller": {"kind": "PI", "rtol": 0.0002, "max_step": 0.001},
+  "scalar_atol": 0.00001,
+  "log_every": 50
+}

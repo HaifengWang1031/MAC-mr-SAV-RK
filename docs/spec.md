@@ -1,4 +1,33 @@
 # Confirmed implementation specification
+
+2026-10-28 cylinder/adaptive FEM extension: existing six fixed formats and four
+embedded SDIRK2/3 I/PI formats are reused without changing stages or SAV root
+selection. DFG2D-2 Re100 uses a fixed parabolic inlet, no-slip cylinder/walls and
+gradient-form natural outlet; verified polygonal P2/P1 meshes retain all actual
+saved topology. Open pressure is ungauged, and physical force/probe pressure is
+separate from incremental stage multipliers. Boundary-consistent SAV work is in
+[ADR0001](adr/0001-open-flow-sav-boundary-work.md).
+
+FEM optimization preserves consistent mass, all pressure-test rows and original
+residual tolerances: cached P2 quadrature, one-call arbitrary force projection,
+known MMS-mode preprojection, checked direct ordering and bounded exact-matrix
+recycled-factor preconditioning. Old fixed records remain readable; adaptive
+attempts and failed accepted prefixes are validated. Numerical qualification must
+use developed lift cycles, separate mesh/geometry/time sensitivity and the cited
+sampled reference; performance uses repeated interleaving and identical-schedule
+replay, not weaker error gates. [Cylinder guide](../experiments/cylinder_ns/README.md)
+and [validation](validation.md) separate achieved evidence from remaining limits.
+
+2026-10-27 confirmed FEM extension: independent scikit-fem continuous Taylor–Hood
+P2 velocity/P1 pressure on deterministic rectangular triangular meshes, homogeneous
+no-slip, consistent mass/Riesz coefficient representation and antisymmetric convection.
+Unpenalized direct shifted Stokes checks every weak continuity row and physical-integral
+pressure gauge; physical gradient divergence is reported separately. All six shared
+formats support fixed/prescribed steps. Dedicated run/load/reconstruct/readonly analysis
+retains full coefficients and mesh/DOF metadata; legacy layouts remain unchanged.
+No adaptive or nonhomogeneous-boundary extension, production campaign or PDE time-order
+proof. See [FEM conventions](fem.md) and [measured evidence](validation.md#2026-10-27-fem-release-verification).
+
 2026-10-05 Legendre performance extension: cached immutable internal quadrature,
 exact 1D closed forms, tensor mass solves, shared weak operators and batched RHS.
 Default direct Stokes retains all equation/physical-divergence checks. Optional

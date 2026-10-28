@@ -10,6 +10,8 @@
 
 新增独立的 [ChannelModel](docs/channel.md)：流向周期、上下壁面无滑移，双向二阶 MAC 离散，复用四套时间格式与 I/PI 自适应。[Channel 实验入口](experiments/channel_ns/README.md) 提供 Poiseuille、启动流、受扰流及制造解；默认耦合稀疏直接求解，可选同一 MAC 方程的 FFT 带状后端。
 
+新增独立 [FEM Taylor–Hood P2/P1 模型](docs/fem.md)：一致质量、完整弱连续性检查及独立物理散度诊断；复用六格式固定/给定步与四种嵌入格式 I/PI 自适应。[FEM 实验入口](experiments/fem_ns/README.md) 提供完整系数保存重建；[圆柱绕流 DFG2D-2](experiments/cylinder_ns/README.md) 提供 Re100 自然出口、物理受力、网格/几何/时间验收及保存场动画，不改变既有模型或记录。
+
 ## 环境与首个计算
 
 使用 uv 管理项目独立环境，Python 3.12；依赖版本由 `uv.lock` 固定。
@@ -60,6 +62,7 @@ solver/
     model.py              谱离散的接缝实现
   fourier/                双周期 FFT 空间、Leray/Stokes、能量相容对流与 Model 实现
   channel/                流向周期、法向无滑移的 MAC 网格、算子、对流与 Model
+  fem/                    scikit-fem P2/P1 空间、一致质量 Model 与无罚项 Stokes
   adaptivity/             I/PI 接受/拒绝、速度误差与可选标量缺陷控制
 experiments/              各实验的配置、计算与分析入口
 runs/                     配置、manifest、HDF5、日志与批次记录

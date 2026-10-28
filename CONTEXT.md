@@ -1,4 +1,8 @@
 # Confirmed conventions
+2026-10-28 圆柱与自适应 FEM：在既有六格式和模型接缝下实现 DFG2D-2 Re100，固定抛物线入口、无滑移圆柱/壁面及梯度应力自然出口；开放压力不施加零均值。P2/P1、一致质量、反对称体积对流加边界通量、SAV 边界工作项见 ADR0001。四种嵌入格式沿用 I/PI 与可选标量控制；旧封闭 FEM 规范和固定记录保持兼容。实际网格、阶段增量压力和独立瞬时物理压力分开保存；独立空间/几何/时间及性能证据见 experiments/cylinder_ns/README.md、docs/validation.md，不声明新的开放边界能量定理或PDE时间阶证明。
+
+2026-10-27 FEM 首期范围：用户批准独立 scikit-fem Taylor–Hood P2/P1 矩形三角网格 Model，复用六格式固定/给定步。齐次无滑移、一致质量、反对称弱对流、无压力罚项及物理积分零均值；完整弱连续性与 FE 梯度物理散度分开记录。专属 fem_ns 保存全 P2/P1 系数及网格/DOF 映射，支持显式运行编号加载重建和只读分析，不改旧模型/记录。当时不含自适应、非齐次边界或 PDE 时间阶证明；后续扩展见上条。见 docs/fem.md、docs/validation.md。
+
 2026-10-05 Legendre 优化：用户批准按规划实施。求积/基函数缓存、精确一维闭式、张量质量逆、共享算子、非线性收缩复用和多右端 SuperLU 已接入；保留原空间与六格式语义、完整检查。新增可选 stokes_backend=tensor：速度广义特征分解加真实压力 Schur-CG，采用可分离质量 Schur/压力质量组合预条件器。默认 direct，按实测规模和步长选择；与 MAC/Channel/Fourier 路径独立。详见 docs/legendre-optimization.md。
 2026-10-05 Channel 失稳可视化：用户要求看到失稳。独立 ts_wave 算例以中心速度和半高定义 Re，使用离散 Poiseuille 加基于同一 MAC 线性化的 TS 特征模态；epsilon 表示初始格心速度扰动峰值/Umax。原有算例参数语义不变。普通 SDIRK3/FFT 实际推进，独立连续 Orr–Sommerfeld 参照、短时步长/网格加密和低 Re 对照先核验增长，再生成非线性动画。TS 动画使用初始波速的移动坐标和相对速度流线，速度颜色仍为实验室系量；不等同于三维湍流。
 
