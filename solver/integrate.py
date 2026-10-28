@@ -1,6 +1,6 @@
 """Common fixed/prescribed-step driver, bounded state storage and failure prefixes."""
 from dataclasses import dataclass, field
-from time import perf_counter
+from time import perf_counter, process_time
 from collections.abc import Callable
 import numpy as np
 from .core import State, Stage, Scheme, History
@@ -21,6 +21,8 @@ class Result:
     status: str = 'complete'
     error: str = ''
     seconds: float = 0.
+    observer_cpu_seconds: float = 0.
+    observer_wall_seconds: float = 0.
 
 def step_sizes(T: float, *, dt: float | None = None, steps: list[float] | None = None) -> Array:
     if not np.isfinite(T) or T<=0: raise ValueError('T must be positive')
@@ -44,7 +46,8 @@ def step_sizes(T: float, *, dt: float | None = None, steps: list[float] | None =
 
 def integrate(model: Model, scheme: Scheme, initial: State, steps: list[float] | Array,
               snapshots: list[float] | None = None,
-              progress: Callable[[int, float, float], None] | None = None) -> Result:
+              progress: Callable[[int, float, float], None] | None = None, *,
+              on_accept: Callable[[State], None] | None = None) -> Result:
     sequence=np.asarray(steps,dtype=float)
     if sequence.ndim!=1 or sequence.size==0 or np.any(sequence<=0) or not np.isfinite(sequence).all():
         raise ValueError('Invalid step sequence')
@@ -77,7 +80,17 @@ def integrate(model: Model, scheme: Scheme, initial: State, steps: list[float] |
                                    'continuity_residual':s.continuity_residual}
                                   for s in trial.stages])
             if k+1 in indices: kept[k+1]=trial.state
-            if progress is not None: progress(k+1,trial.state.t,perf_counter()-start)
+            if on_accept is not None:
+                observer_wall, observer_cpu = perf_counter(), process_time()
+                try:
+                    on_accept(trial.state)
+                except Exception as error:
+                    raise RuntimeError(f'Accepted-state observer failed: {type(error).__name__}: {error}') from error
+                finally:
+                    result.observer_wall_seconds += perf_counter()-observer_wall
+                    result.observer_cpu_seconds += process_time()-observer_cpu
+            if progress is not None:
+                progress(k+1,trial.state.t,perf_counter()-start-result.observer_wall_seconds)
         except Exception as error:
             result.status='failed'
             result.error=f'{type(error).__name__}: {error}'
@@ -87,5 +100,5 @@ def integrate(model: Model, scheme: Scheme, initial: State, steps: list[float] |
             result.snapshot_requests.append(request)
             result.snapshot_times.append(kept[index].t)
             result.snapshots.append(kept[index])
-    result.seconds=perf_counter()-start
+    result.seconds=perf_counter()-start-result.observer_wall_seconds
     return result

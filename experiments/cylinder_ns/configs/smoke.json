@@ -1,0 +1,10 @@
+{
+  "resolution": 0.25,
+  "T": 0.02,
+  "scheme": "sdirk3_mrsav",
+  "mode": "adaptive",
+  "initial_step": 0.01,
+  "controller": {"kind": "PI", "rtol": 0.0001, "max_step": 0.01},
+  "scalar_atol": 0.00001,
+  "snapshots": [0, 0.004, 0.008, 0.012, 0.016, 0.02]
+}

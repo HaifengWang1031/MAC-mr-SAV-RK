@@ -3,8 +3,9 @@
 [Numerical conventions](../../docs/fem.md) · [Release evidence](../../docs/validation.md#2026-10-27-fem-release-verification)
 
 Independent deterministic rectangular Taylor–Hood P2/P1 workflow. Reuses the six
-registered time schemes and common fixed/prescribed-step integrator; no adaptive
-mode, new numerical formulas, legacy record migrations or campaign framework.
+registered time schemes and common fixed/prescribed-step integrator. Embedded
+SDIRK2/3 ordinary/SAV schemes also reuse the shared I/PI adaptive driver; no stage
+formula or legacy record migration is introduced.
 
 ```sh
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 uv run python -m experiments.fem_ns.run \
@@ -35,8 +36,16 @@ Defaults: nx=8, ny=4, rectangle 2x1, nu=.2, amplitude=.1, quadrature_order=8,
 scheme=sdirk2_mrsav, gamma=1, r0=0, cache_size=4, stokes_tolerance=1e-9.
 Other scheme names are those in `solver.schemes.registry.SCHEMES`. `snapshots`
 defaults to `[0,T]`; `[]` retains none. Requested snapshots use nearest scheduled
-nodes, with earlier-node ties; actual accepted times are authoritative. Only
-accepted snapshots survive a failure. Unknown keys and invalid parameters fail
+nodes in fixed mode and nearest accepted nodes in adaptive mode, with earlier-node
+ties; actual accepted times are authoritative. Only accepted snapshots survive a failure.
+
+Adaptive example: `run({'mode': 'adaptive', 'scheme': 'sdirk3_mrsav',
+'initial_step': .001, 'controller': {'kind': 'PI', 'rtol': 1e-4},
+'scalar_atol': 1e-6, 'stokes_backend': 'recycled'}, root=root)`.
+Do not supply `dt`/`steps` in adaptive mode. Euler has no embedded estimator.
+`scalar_atol` is optional and SAV-only; `stokes_backend` is `direct` (default) or
+`recycled`. Inactive adaptive defaults are stripped from fixed effective configs,
+so existing fixed record identities remain readable. Unknown keys and invalid parameters fail
 before creating a run.
 
 ## Smooth reference problem
@@ -65,7 +74,8 @@ maps, basis DOF locations and element maps. Metadata explicitly distinguishes
 FEM from MAC. Reader checks these against the deterministic declared space,
 coefficient shapes/finiteness/constraints, pressure integral gauge, accepted
 schedule/time consistency, diagnostics, snapshot mapping, stages and root
-records. Missing/incompatible metadata is rejected even if a checksum was
+records. Adaptive records additionally retain and validate every attempted step,
+accept/reject reason, component error, controller proposal and accepted-error history. Missing/incompatible metadata is rejected even if a checksum was
 refreshed. Reading requires the saved scikit-fem version to match the installed
 version; old code hashes alone do not prohibit readonly analysis. Checksums
 provide integrity, not authenticity against deliberate record rewriting.
@@ -78,7 +88,7 @@ stored for every snapshot. Snapshot index addresses the saved list, not an
 arbitrary trajectory node. Points must be finite (2,n) coordinates in the domain.
 
 Analysis opens inputs readonly, constructs no Model/backend, and writes only
-`analysis.json`, `history.csv`, `fields.csv` and `analysis.log` in reports. The
+`analysis.json`, `history.csv`, `fields.csv`, `analysis.log` and adaptive `attempts.csv` in reports. The
 field CSV contains evaluated velocity and final-stage pressures on a small
 17x13 display grid, not a replacement coefficient representation. Analysis root
 inside the input run is rejected. It labels failed prefixes explicitly.
@@ -94,7 +104,16 @@ Tests cover actual six-scheme fixed/given integration roundtrips, evaluated
 velocity/pressure agreement, a known quadratic edge basis and analytic P1 field,
 readonly input-byte invariance with dynamical construction guards, reuse/rerun,
 provenance changes, refreshed-checksum metadata corruption, zero/one accepted
-step failures and compensated long-schedule midpoint ties.
+step failures and compensated long-schedule midpoint ties. Adaptive tests cover
+I/PI, both SAV scalar estimators, actual rejection/history and failure prefixes.
+
+Cached library P2 quadrature contractions replace repeated form assembly; arbitrary
+force callbacks evaluate once per quadrature grid. The known MMS time modes are
+preprojected exactly, without assuming arbitrary forces are separable. Direct LU
+uses checked MMD ordering with robust fallback. Recycled LU is only a bounded
+preconditioner for the **exact current shift**, with full checks and direct refresh;
+it never rounds adaptive steps. Measured scope is documented with the
+[cylinder/native-state performance workflow](../cylinder_ns/README.md#性能对照与独立细化).
 
 Physical divergence diagnostics are finite-element quadrature-point maxima and
 L2 norms, distinct from full weak continuity residuals. Stage pressures keep

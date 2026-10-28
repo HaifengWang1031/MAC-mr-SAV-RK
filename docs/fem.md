@@ -1,7 +1,8 @@
 # FEM: Taylor–Hood P2/P1
 
 Independent fifth spatial Model: scikit-fem supplies affine triangular meshes,
-bases, DOF maps and weak-form assembly; SciPy supplies sparse direct solves.
+bases, DOF maps and weak-form assembly; SciPy supplies sparse direct solves and
+optional recycled-factor preconditioned solves of the identical shifted system.
 The shared time schemes and stepping policies are unchanged; the integrator and
 saved-run reader share pure compensated schedule/snapshot mapping arithmetic.
 Locally installed and locked: scikit-fem 12.0.2, CPython 3.12.14, macOS arm64.
@@ -20,7 +21,9 @@ uv run --locked python -m experiments.fem_ns.analyze \
 All six names are supported: `imex_euler`, `imex_euler_mrsav`, `sdirk2`,
 `sdirk2_mrsav`, `sdirk3`, `sdirk3_mrsav`. Use fixed `dt` or an explicit positive
 `steps` sequence, not both. The bundled continuous polynomial Navier–Stokes MMS
-is a tiny workflow example, not a convergence campaign. See the
+is a tiny workflow example, not a convergence campaign. Embedded SDIRK2/3 formats
+also support the existing I/PI driver (`mode=adaptive`, `initial_step`, `controller`,
+optional SAV `scalar_atol`), without changing fixed record identities. See the
 [experiment guide](../experiments/fem_ns/README.md) for configuration,
 `run`, `load_fem`, `reconstruct`, `analyze`, reuse and `--rerun`.
 
@@ -58,7 +61,11 @@ initial = model.state(0., velocity, r=0.)
 - Pressure zero mean means the basis-integral weighted domain integral is zero,
   **not** the arithmetic mean of coefficients. Every solve checks normalized
   weak momentum, **every** pressure-test continuity row and the integral gauge
-  against the configured tolerance (default 1e-9).
+  against the configured tolerance (default 1e-9). An additional mass-solved
+  momentum-coefficient defect is checked. Default direct MMD ordering falls back
+  to robust COLAMD when factorization or true checks fail. Optional `recycled`
+  uses a bounded old LU only as a GMRES preconditioner for the exact new matrix;
+  failed iteration/checks refresh directly. No step quantization or tolerance relaxation.
 - Weak continuity `||Bu||_inf` and physical divergence are different diagnostics.
   `divergence_l2` integrates FE gradients; `divergence_inf` is their maximum at
   quadrature points, **not an analytic supremum**. A successful solve need not
@@ -114,7 +121,16 @@ CLI lifecycle check. Exact semidiscrete time references require no fine-step
 reference; they do not establish continuous-PDE time order. Six runnable schemes,
 small stage residuals and observed SAV rates are not general mrSAV order proofs.
 
-No adaptive stepping, nonhomogeneous walls, periodic/curved/imported meshes,
-other element pairs, pressure stabilization, parallelism, checkpoint continuation,
-production campaign, long-time stability or performance claim is included.
+The rectangular MMS remains homogeneous and has no curved/imported/periodic mesh,
+other element pair, pressure stabilization or checkpoint continuation. The separate
+[DFG2D-2 cylinder workflow](../experiments/cylinder_ns/README.md) adds verified saved
+polygonal meshes, fixed nonzero inlet lifting and a natural outlet with **no pressure
+gauge**. Its skew-volume convection includes boundary energy flux; its separately
+reconstructed instantaneous pressure is not a stage multiplier. See
+[ADR0001](adr/0001-open-flow-sav-boundary-work.md) for the open-boundary SAV work.
+
+Cached library P2 quadrature data and owned value-checked field caches accelerate
+convection; force callbacks evaluate once, and only the known MMS time modes are
+preprojected. Repeated native-state performance results, including setup/observer
+costs and common-schedule fidelity, are recorded separately from accuracy claims.
 Legacy MAC/Legendre/Fourier/Channel APIs and records are unchanged.

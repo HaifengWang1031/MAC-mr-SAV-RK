@@ -25,6 +25,7 @@
 | 实验研究（计算说明） | 问题简述 | 结果展示 | 论文实验描述 | 材料状态 |
 | --- | --- | --- | --- | --- |
 | [顶盖驱动方腔](cavity/README.md) | 移动顶盖的稳态/启动过程与网格对比，含保存场动画 | — | — | 待整理 |
+| [FEM 圆柱绕流 DFG 2D-2](cylinder_ns/README.md) | Re=100 定常入口、自然出口、六格式与 I/PI 自适应、物理受力和保存场动画 | — | — | 四级自适应周期/空间/几何/时间资格通过；实测优化约2.51倍，范围见记录 |
 | [A/B 外力旋转](forced_rotation/README.md) | 净力矩与零净力矩的长期能量收支、角动量和旋转反转 | — | — | 待整理；历史原始证据有缺失限制 |
 | [周期 Kolmogorov 流](periodic_ns/README.md) | 双周期 Fourier 模型的受迫流及保存场动画，不是无滑移 Kolmogorov 对照 | — | — | 待整理 |
 | [Channel 压力驱动瞬态](channel_ns/README.md) | 离散 Poiseuille、从静止启动及受扰后的松弛，含保存场动画 | — | — | 待整理 |
@@ -43,7 +44,7 @@
 | [H-valued 外力对照](no_slip_reference_convergence/README.md) | 保持初值等条件，使用夹持流函数外力研究粗步失败和时间误差 | — | — | 待整理 |
 | [Fourier 制造解验证](periodic_ns/README.md) | 双周期模型的时间/空间误差及保存读取，不替代无滑移验证 | — | — | 待整理 |
 | [Channel 制造解验证](channel_ns/README.md#short-verification-study) | 周期流向/无滑移壁面模型的时间细化与连续 Stokes 空间细化 | — | — | 待整理 |
-| [FEM 制造解保存与重建](fem_ns/README.md) | Taylor–Hood P2/P1、六格式固定/给定步的独立运行、完整系数重建和只读诊断 | — | — | 工作流验证；不替代空间/时间收敛证据 |
+| [FEM 制造解保存与重建](fem_ns/README.md) | Taylor–Hood P2/P1、六格式固定/给定步及四格式 I/PI、完整系数重建和只读诊断 | — | — | 工作流验证；不替代空间/时间收敛证据 |
 | [一阶格式验证](imex_euler/README.md) | IMEX Euler 与 IMEX Euler-mr-ccSAV 的六后端精度和约束检查 | — | — | 待整理 |
 | [Kolmogorov 统一速度容差 I/PI](kolmogorov_adaptive/README.md#current-design) | 八组方法/控制器、严格输出对齐及同格式固定步阶梯 | — | — | 待整理 |
 | [Kolmogorov 速度容差搜索](kolmogorov_adaptive/README.md#tolerance-search) | 短时重复计时下共同容差与分组容差的成本/精度取舍 | — | — | 待整理；旧扫描报告缺失 |
@@ -57,6 +58,7 @@
 | 实验研究（计算说明） | 问题简述 | 结果展示 | 论文实验描述 | 材料状态 |
 | --- | --- | --- | --- | --- |
 | [Legendre–MAC 精度—成本](legendre_mac_benchmark/README.md) | 同一连续制造解的指定精度总成本，包含初始化 | — | — | 待整理 |
+| [FEM 自适应优化前后](cylinder_ns/README.md#性能对照与独立细化) | 同一充分发展原生状态，交错重复、共同调度重放及建立/观测成本 | — | — | 三次重复实测约2.51倍；范围限于记录的负载 |
 | [Legendre 优化前后](legendre_optimization/README.md) | 保存的前后源码等价性、总成本、剖析与内存 | — | — | 待整理 |
 | [热启动每步成本](step_efficiency/README.md) | 多模型/格式的编译后每步成本；固定步排除已有分解成本 | — | — | 待整理 |
 | [Channel direct/FFT](channel_ns/README.md#same-discretisation-timing-comparison) | 同一 MAC 离散的两种线性后端等价性与成本 | — | — | 待整理 |

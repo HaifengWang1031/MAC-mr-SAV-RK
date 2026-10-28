@@ -1,4 +1,11 @@
 # 架构与记录约定
+
+2026-10-28 FEM 圆柱与自适应：`solver/fem` 的 mesh-backed space / `OpenFlowModel` 保留共享格式接缝，固定入口仿射 lifting、自然出口无压力规范；封闭矩形模型仍保留积分均值规范。完整弱连续性和真正质量逆动量系数残差不因直接/复用后端而削弱。P2 求积缓存与有界旧 LU 预条件器只加速相同离散系统，不近似步长或变更控制器。
+
+`experiments/cylinder_ns` 单独拥有配置、物理观测和 HDF5 表示；真实网格/边界/DOF 映射保存后读取不重新三角化。阶段增量压力和独立瞬时约束速度率的物理压力分开命名。固定/自适应共同推进器的接受观测计时独立；观测失败仍保留已接受状态/快照。`fem_ns` 共享严格 attempts 契约，并保留旧固定有效配置的身份。
+
+`tools/benchmark_fem_adaptive.py` 是显式计算入口：保存原生网格/状态重启、独立空间/几何及时间参考、交错重复与共同调度重放。原生细化先插值/固体零延拓、施加固定迹并弱 Leray 投影，记录种子和实际起止时间；不是 checkpoint 续算。其 NPZ/JSON campaign 命名空间与标准 HDF5 运行分离。`cylinder_ns.records/performance/campaign` 只验证已完成显式记录及所有输入/工作器摘要，重建基函数、周期量和图像；不构造动力学模型或启动任何求解。报告均写入独立 reports 命名空间。详见 [圆柱使用说明](../experiments/cylinder_ns/README.md)。
+
 2026-10-27 FEM 增加第五个 Model：`solver/fem` 分离确定性 P2/P1 空间、一致质量模型与无罚项直接 Stokes；时间格式和共同推进器不改。内部为自由速度系数，State.u/v 为含边/壁自由度的完整标量 P2 分量系数，按库映射拆装而非连续两半。
 
 `experiments/fem_ns` 使用专属 reader，沿用基础 HDF5 schema_version=1 并增加 fem_schema_version=1、FEM 布局/元素/边界/压力规范/库版本标签，以及 mesh、dofs 数据集。保存完整速度和最后接受步各阶段 P1 压力；快照只含速度/r，不含压力历史。pending 文件补齐元数据后更名并最终化 manifest。来源身份单独纳入 scikit-fem，不改变旧记录；加载需保存/安装库版本一致，复用另需同配置/源码/环境、完整状态和校验通过。rerun 新建尝试，失败保留接受前缀；不支持恢复或持久化事务保证。

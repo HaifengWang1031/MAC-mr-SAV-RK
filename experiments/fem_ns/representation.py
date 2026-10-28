@@ -9,6 +9,7 @@ from skfem import Basis, ElementTriP1, ElementTriP2, ElementVector, MeshTri
 from solver.fem import Space
 from solver.schedule import schedule_nodes, nearest_node_indices
 from solver.schemes.registry import scheme_info
+from .attempts import validate_attempts
 
 METADATA = {'fem_schema_version': 1, 'boundary': 'homogeneous_no_slip',
             'discretization': 'taylor_hood_triangular', 'field_layout': 'full_component_P2_coefficients',
@@ -79,15 +80,30 @@ def _validate(data: Any, cfg: dict, manifest: dict) -> tuple[Any, Any]:
     mesh = MeshTri(data['mesh/coordinates'][:], data['mesh/connectivity'][:], sort_t=False)
     velocity = Basis(mesh, ElementVector(ElementTriP2()), intorder=cfg['quadrature_order'])
     pressure = Basis(mesh, ElementTriP1(), intorder=cfg['quadrature_order'])
+    return validate_fields(data, cfg, manifest, velocity, pressure)
+
+
+def validate_fields(data: Any, cfg: dict, manifest: dict, velocity: Any, pressure: Any, *,
+                    dirichlet_dofs: np.ndarray | None = None,
+                    boundary_values: np.ndarray | None = None,
+                    pressure_gauge: bool = True) -> tuple[Any, Any]:
+    """Common coefficient/time/stage contract, shared by actual closed and open FEM layouts."""
+    info = scheme_info(cfg['scheme'])
     times = np.asarray(data['times'][:])
     if times.ndim != 1 or not len(times) or times.dtype.kind != 'f' or not np.isfinite(times).all() \
             or times[0] != 0. or np.any(np.diff(times) <= 0):
         raise ValueError('Invalid FEM actual times')
     n, stages = len(times)-1, info.n_stages
-    schedule = np.asarray(cfg['actual_steps'])
-    if n > len(schedule) or not np.allclose(np.diff(times), schedule[:n], rtol=1e-12, atol=1e-14) \
-            or (manifest['status'] == 'complete' and (n != len(schedule) or not np.isclose(times[-1], cfg['T'], rtol=1e-12, atol=1e-14))):
-        raise ValueError('FEM accepted prefix/schedule mismatch')
+    adaptive = cfg.get('mode', 'fixed') == 'adaptive'
+    if adaptive:
+        validate_attempts(data, cfg, times)
+        if times[-1] > cfg['T'] or (manifest['status'] == 'complete' and times[-1] != cfg['T']):
+            raise ValueError('FEM adaptive endpoint mismatch')
+    else:
+        schedule = np.asarray(cfg['actual_steps'])
+        if n > len(schedule) or not np.allclose(np.diff(times), schedule[:n], rtol=1e-12, atol=1e-14) \
+                or (manifest['status'] == 'complete' and (n != len(schedule) or not np.isclose(times[-1], cfg['T'], rtol=1e-12, atol=1e-14))):
+            raise ValueError('FEM accepted prefix/schedule mismatch')
     if not np.array_equal(_array(data, 'dt', (n,)), np.diff(times)) \
             or _array(data, 'final/t', ())[()] != times[-1]:
         raise ValueError('FEM final time mismatch')
@@ -97,34 +113,43 @@ def _validate(data: Any, cfg: dict, manifest: dict) -> tuple[Any, Any]:
         if name == 'r' and (values[-1] != final_r or values[0] != cfg['r0']):
             raise ValueError('FEM scalar diagnostic mismatch')
     components = velocity.split_indices()
-    boundary = velocity.get_dofs().all()
+    boundary = velocity.get_dofs().all() if dirichlet_dofs is None else dirichlet_dofs
+    trace = np.zeros(velocity.N) if boundary_values is None else boundary_values
+    if np.shape(trace) != (velocity.N,) or not np.isfinite(trace).all():
+        raise ValueError('Invalid FEM expected Dirichlet trace')
 
     def check_velocity(prefix: str, leading: tuple[int, ...] = ()) -> None:
         full = np.zeros((*leading, velocity.N))
         for name, indices in zip(('u', 'v'), components):
             full[..., indices] = _array(data, prefix+'/'+name, (*leading, len(indices)))
-        if np.any(full[..., boundary] != 0.):
-            raise ValueError('Nonzero FEM boundary coefficients')
+        if np.any(full[..., boundary] != trace[boundary]):
+            raise ValueError('Incorrect FEM boundary coefficients')
 
     check_velocity('final')
     if n:
         coefficients = _array(data, 'final/stage_pressure', (stages, pressure.N))
-        for p in coefficients:
-            integral = float(np.sum(pressure.interpolate(p)*pressure.dx))
-            if abs(integral) > 1e-8*max(1., cfg['lx']*cfg['ly']*float(np.max(np.abs(p)))):
-                raise ValueError('FEM pressure integral constraint mismatch')
+        if pressure_gauge:
+            for p in coefficients:
+                integral = float(np.sum(pressure.interpolate(p)*pressure.dx))
+                if abs(integral) > 1e-8*max(1., cfg['lx']*cfg['ly']*float(np.max(np.abs(p)))):
+                    raise ValueError('FEM pressure integral constraint mismatch')
     elif 'final/stage_pressure' in data:
         raise ValueError('Stage pressure without accepted FEM step')
     requests = np.asarray(data['snapshots/requested_times'][:])
     if requests.ndim != 1 or not np.isfinite(requests).all():
         raise ValueError('Invalid FEM snapshot requests')
     actual = _array(data, 'snapshots/actual_times', requests.shape)
-    nodes = schedule_nodes(0., schedule)
     expected_requests, expected_times = [], []
-    for request, node_index in zip(cfg['snapshots'], nearest_node_indices(nodes, cfg['snapshots'])):
-        if node_index <= n:
+    if adaptive:
+        for request in cfg['snapshots']:
             expected_requests.append(request)
-            expected_times.append(times[node_index])
+            expected_times.append(times[int(np.argmin(np.abs(times-request)))])
+    else:
+        nodes = schedule_nodes(0., schedule)
+        for request, node_index in zip(cfg['snapshots'], nearest_node_indices(nodes, cfg['snapshots'])):
+            if node_index <= n:
+                expected_requests.append(request)
+                expected_times.append(times[node_index])
     if not np.array_equal(requests, expected_requests) or not np.array_equal(actual, expected_times):
         raise ValueError('FEM requested/actual snapshot mismatch')
     if len(requests):

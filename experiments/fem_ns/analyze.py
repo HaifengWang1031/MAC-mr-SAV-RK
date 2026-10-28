@@ -10,6 +10,7 @@ import numpy as np
 from experiments.workflow import PROJECT, digest, provenance, write_json
 from .reconstruct import reconstruct
 from .run import load_fem
+from .attempts import FIELDS as ATTEMPT_FIELDS, STRINGS
 
 
 def analyze(directory: Path, *, root: Path = PROJECT) -> Path:
@@ -29,9 +30,13 @@ def analyze(directory: Path, *, root: Path = PROJECT) -> Path:
     with h5py.File(directory/'results.h5', 'r') as data:
         times, dt = data['times'][:], data['dt'][:]
         diagnostics = {key: data['diagnostics/'+key][:] for key in data['diagnostics']}
+        attempts = ({key: data['attempts/'+key].asstr()[:] if key in STRINGS else data['attempts/'+key][:]
+                     for key in ATTEMPT_FIELDS} if 'attempts' in data else {})
         summary = {'run': str(locator), 'run_id': directory.name, 'status': manifest['status'],
                    'error': manifest.get('error', ''), 'final_time': fields['time'],
-                   'accepted_steps': len(dt), 'r_final': fields['r'],
+                   'accepted_steps': len(dt), 'r_final': fields['r'], 'mode': cfg.get('mode', 'fixed'),
+                   'rejected_steps': int(np.sum(~attempts['accepted'])) if attempts else 0,
+                   'controller': cfg.get('controller'), 'scalar_atol': cfg.get('scalar_atol'),
                    'manifest_sha256': digest(directory/'manifest.json'),
                    'results_sha256': manifest['results_sha256'], 'analysis_source': source,
                    'field_layout': cfg['field_layout'], 'pressure_semantics': cfg['pressure_semantics'],
@@ -58,6 +63,11 @@ def analyze(directory: Path, *, root: Path = PROJECT) -> Path:
         for i in range(points.shape[1]):
             writer.writerow([*points[:, i], *fields['velocity'][:, i], speed[i],
                              *([] if pressure is None else pressure[:, i])])
+    if attempts:
+        with (report/'attempts.csv').open('w', newline='') as stream:
+            writer = csv.writer(stream)
+            writer.writerow(ATTEMPT_FIELDS)
+            writer.writerows(zip(*(attempts[key] for key in ATTEMPT_FIELDS)))
     (report/'analysis.log').write_text(f"{manifest['status']}: readonly saved run {directory.name}\n")
     return report
 

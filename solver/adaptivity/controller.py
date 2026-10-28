@@ -93,8 +93,6 @@ class ScalarErrorControl:
 class AdaptiveResult(Result):
     """Result plus one record per trial, including rejected trials."""
     attempts: list[dict[str, float | bool | str]] = field(default_factory=list)
-    observer_cpu_seconds: float = 0.
-    observer_wall_seconds: float = 0.
 
 
 def _error(model: Model, old: Any, high: Any, low: Any, controller: IController,
@@ -289,6 +287,10 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
                                'divergence_inf': s.divergence_inf,
                                'continuity_residual': s.continuity_residual}
                               for s in trial.stages])
+        for index, request in enumerate(requests):
+            distance = abs(request-trial.state.t)
+            if distance < best[index][0]:
+                best[index] = (distance, trial.state)
         if on_accept is not None:
             observer_wall_start = perf_counter()
             observer_cpu_start = process_time()
@@ -301,10 +303,6 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
             finally:
                 result.observer_cpu_seconds += process_time()-observer_cpu_start
                 result.observer_wall_seconds += perf_counter()-observer_wall_start
-        for index, request in enumerate(requests):
-            distance = abs(request-trial.state.t)
-            if distance < best[index][0]:
-                best[index] = (distance, trial.state)
         if progress is not None:
             progress(len(result.times)-1, trial.state.t,
                      perf_counter()-start-result.observer_wall_seconds)
