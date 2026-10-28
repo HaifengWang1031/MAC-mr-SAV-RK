@@ -64,7 +64,7 @@ def test_results_navigation_links_real_materials_and_covers_existing_families():
 
 
 def test_published_navigation_and_study_section_links_resolve():
-    documents = [PROJECT/'experiments/README.md',
+    documents = [PROJECT/'experiments/README.md', PROJECT/'experiments/convergence-results.md',
                  *PROJECT.glob('experiments/*/studies/*/README.md')]
     for document in documents:
         for link in re.findall(r'\]\(([^)]+)\)', document.read_text()):
@@ -76,6 +76,23 @@ def test_published_navigation_and_study_section_links_resolve():
             headings = {re.sub(r'[^\w -]', '', line.lstrip('# ').lower()).replace(' ', '-')
                         for line in target.read_text().splitlines() if line.startswith('#')}
             assert anchor in headings, (document, link)
+
+
+def test_convergence_topic_separates_historical_forcing_and_unverified_references():
+    topic = PROJECT/'experiments/convergence-results.md'
+    assert all(path.is_file() for path in _linked_materials(topic))
+    text = topic.read_text()
+    assert '20260922T032418-3cd92bd4' in text and '20260922T054144-5aee3c91' in text
+    assert 'f=(0,sin x)' in text and 'f=(0,sin 4*pi*x)' in text
+    assert 'finer_reference_unverified' in text and '92' in text
+    for study in ['forced_time_convergence', 'trig_time_convergence']:
+        directory = PROJECT/'experiments/forced_ns_convergence/studies'/study
+        assert directory/'results.ipynb' in _linked_materials(topic)
+        assert directory/'description.tex' in _linked_materials(topic)
+        assert all(path.is_file() for path in _linked_materials(directory/'README.md'))
+        description = (directory/'description.tex').read_text()
+        assert '\\documentclass' not in description and '\\begin{document}' not in description
+        assert '严格' in description and ('空间' in description or '长期' in description)
 
 
 NOTEBOOK_PATH = PROJECT/'experiments/manufactured_convergence/studies/time_convergence/results.ipynb'

@@ -72,7 +72,7 @@ class Model(Protocol):
         """Discrete gradient: pressure to velocity."""
 
     def apply_D(self, velocity: Any) -> Any:
-        """Discrete divergence: velocity to pressure. G = -D^T for this pair."""
+        """Discrete divergence: velocity to pressure. G = -D* in the model pairing."""
 
     def physical_divergence_inf(self, velocity: Any) -> float:
         """Physical divergence diagnostic, including any boundary lifting."""
@@ -107,11 +107,15 @@ class Model(Protocol):
 
 
 if TYPE_CHECKING:
-    # Both realisations are checked against the seam here rather than in a test: the type
+    # Realisations are checked against the seam here rather than in a test: the type
     # checker only inspects the packages in mypy's `files`, which exclude tests/, so a
     # conformance assignment inside a test file would never be read. A missing or wrongly
-    # typed member fails these two assignments.
+    # typed member fails these assignments.
     from .mac_ns import MACNavierStokes
     from .spectral.model import SpectralModel
+    from .fourier.model import FourierModel
+    from .channel.model import ChannelModel
     _staggered_realisation: type[Model] = MACNavierStokes
     _spectral_realisation: type[Model] = SpectralModel
+    _fourier_realisation: type[Model] = FourierModel
+    _channel_realisation: type[Model] = ChannelModel

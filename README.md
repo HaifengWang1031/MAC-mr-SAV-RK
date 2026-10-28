@@ -2,6 +2,14 @@
 
 二维不可压 Navier–Stokes 方程的无滑移 MAC 求解器。实现普通 IMEX-SDIRK2/3 与笔记中的增量 SDIRK2/3-mr-ccSAV，支持固定步长及给定步长序列。阶段速度和压力通过耦合 Stokes 系统一起求解，没有压力分裂子步。
 
+新增 [一阶 IMEX Euler 与 IMEX Euler-mr-ccSAV](docs/imex-euler.md)，配置名为
+`imex_euler/imex_euler_mrsav`。SAV 使用 G=1-r、Q=1，两个同矩阵 Stokes 右端加一个线性标量解。
+四种空间模型可复用，首轮支持固定/给定步长；[示例与六后端验证](experiments/imex_euler/README.md) 独立运行。
+
+另有独立的二维双周期 [Fourier–Leray 模型](docs/fourier.md)，复用四套格式与 I/PI 自适应，使用实数 collocated 场及严格 2/3 去混叠；既有 MAC/Legendre 接口不变。[周期实验入口](experiments/periodic_ns/README.md) 提供制造解、Kolmogorov、持久化分析和短时计时。
+
+新增独立的 [ChannelModel](docs/channel.md)：流向周期、上下壁面无滑移，双向二阶 MAC 离散，复用四套时间格式与 I/PI 自适应。[Channel 实验入口](experiments/channel_ns/README.md) 提供 Poiseuille、启动流、受扰流及制造解；默认耦合稀疏直接求解，可选同一 MAC 方程的 FFT 带状后端。
+
 ## 环境与首个计算
 
 使用 uv 管理项目独立环境，Python 3.12；依赖版本由 `uv.lock` 固定。
@@ -36,6 +44,9 @@ solver/
     kernels.py            Numba 对流、散度、内积核
     stokes.py             耦合稀疏求解、LU 缓存、后端接口
   schemes/
+    imex_euler.py         一阶经典 IMEX Euler
+    imex_euler_mrsav.py   一阶线性 mr-ccSAV，G=1-r、Q=1
+    registry.py           格式工厂、阶数、阶段/候选容量与估计器元数据
     sdirk2.py             普通 IMEX-SDIRK2
     sdirk2_mrsav.py        增量 SDIRK2-mr-ccSAV
     sdirk3.py             普通四阶段 IMEX-SDIRK3
@@ -47,7 +58,9 @@ solver/
     lifting.py            非齐次壁面（移动顶盖）作为已知场，载荷入右端、矩阵不变
     stokes.py             移位 Stokes 鞍点求解与分解缓存
     model.py              谱离散的接缝实现
-  adaptivity/             仅预留接口说明
+  fourier/                双周期 FFT 空间、Leray/Stokes、能量相容对流与 Model 实现
+  channel/                流向周期、法向无滑移的 MAC 网格、算子、对流与 Model
+  adaptivity/             I/PI 接受/拒绝、速度误差与可选标量缺陷控制
 experiments/              各实验的配置、计算与分析入口
 runs/                     配置、manifest、HDF5、日志与批次记录
 reports/                  分析来源、图、表和日志
@@ -68,12 +81,12 @@ uv run pytest
 - [验证结果](docs/validation.md)：实际网格、收敛阶和局限。
 - [确认的范围](docs/spec.md)、[领域约定](CONTEXT.md)。
 
-首版不包含变网格、非齐次边界、迭代 Stokes 实现、自适应控制或断点续算。阶段压力是增量乘子；除定常 Stokes 实验外，不将其视为物理终点压力的二阶近似。数值测试不能替代长期稳定性或收敛性的数学证明。
+当前不包含变网格或断点续算。移动顶盖、I/PI 自适应及可选 Stokes 后端的适用范围见各实验说明；一阶格式尚无自适应估计器。阶段压力是增量乘子；除定常 Stokes 实验外，不将其视为物理终点压力的二阶近似。数值测试不能替代长期稳定性或收敛性的数学证明。
 
 ## 经典算例可视化
 
 [顶盖驱动方腔流 Re=100](experiments/cavity/README.md)：新增常速度移动顶盖边界载荷、网格对比与流线/涡量图。
 
-实验记录导航见 [现存实验盘点](docs/experiment-inventory.md)，测试保留原则见 [代表性测试](tests/README.md)。
+从 [实验入口导航](experiments/README.md) 选择算例、验证或性能研究；[2026-09-24 历史记录盘点](docs/experiment-inventory.md) 不是当前支持清单。测试保留原则见 [代表性测试](tests/README.md)。
 
 四种格式的制造解时间收敛实验见 [实验说明](experiments/manufactured_convergence/README.md)。

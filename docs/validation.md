@@ -2,6 +2,45 @@
 
 # 正式验收记录
 
+## 2026-10-27 收敛性结果统一整理
+
+新增 `experiments/convergence-results.md`，按独立问题区分制造解、历史受迫方腔、
+三角涡量初值、两种 256² 无滑移外力，以及算法验证附录候选。
+制造解补充有范围限定的保存结果观察；新增两份参考解 Notebook 和中文 LaTeX 正文。
+不修改计算配置、空间算子、阶段公式、推进器或既有 runs/reports。
+
+修改前源码、环境和工作区快照为 `runs/cleanup/20261027T112712-ca6328fd-convergence-results/`，
+370 个文件逐项核对摘要。未安装新依赖。新增只读展示代码正常改变当前源码身份，
+不修改旧复用规则，不将历史输入冒充当前来源。
+
+关键身份差异：方腔报告 `20260922T032418-3cd92bd4` 的运行配置明确记录
+`f=[0, amplitude*sin(x)]`，不是当前生产配置的 `m=2` 外力。
+三角涡量报告 `20260922T054144-5aee3c91` 使用 `f=[amplitude*cos(x), 0]`、
+`weighted_trig_vorticity` 初值；未用当前工厂反推历史初态或宣称恢复了其解析配方。
+不得套用当前生产外力的定常窗口结论，也不混合更早未通过参考检查的报告。
+
+本轮核对制造解 40、历史方腔 18、三角涡量 20 份输入的配置及结果摘要和捕获批次；
+其中三角涡量含 5 份失败记录，不将它们算作有效误差。两项新 Notebook 实际执行后各保存
+全区间与 k>=6 放大图、完整误差表及原参考检查，执行前后 120 个输入文件摘要不变。
+失败用 NaN 断线及坐标底部标记表示，不将巨大但有限误差剔除，不跨失败层连线。
+制造解最细 L2 误差约 1.2e-13、观察阶下降，与仍接近三阶的 H1 半范数分别说明。
+
+256² 旧 `sin_x` 和新 H 值外力报告虽有 CSV，原始成员不齐且参考检查未通过或未完成。
+新外力 k=11 报告引用的 92 份 config/manifest/HDF5 均未在引用路径找到，且无更细参考；
+仅登记证据缺口，不生成空 Notebook、不用汇总替代原始轨迹、不补算。
+周期、Channel 和 IMEX Euler 的附录候选仅完成记录盘点，未重新审核全部子记录/NPZ。
+
+验证：聚焦文档与 Notebook 测试 **20 passed，22.40 s**；当前工作区全套
+**345 passed，85.04 s**。拒绝缺失/损坏、混来源、错误终点/观测节点、未验证参考、
+被测步长与层级不符或表格身份不符的输入；清洁内核下禁止启动计算并校验输入不变。
+`study_data.py`、`plotting.py` 的 mypy 通过；全项目检查 123 个源文件仍为原先相同的
+**6 个错误 / 3 个文件**，不报告为通过。三份中文片段合并后通过 XeLaTeX + ctexart、
+amsmath/amssymb 编译，检查了四幅实际保存图的可读性。
+从提交 `00f4551` 加本轮精确增量导出的独立目录全套 **111 passed，37.94 s**，
+未携带其他未提交数值开发；该结果与完整工作区的 345 项区分记录。
+
+本轮不是原始场误差的独立重算，不是新的 PDE、空间收敛或长期稳定性验证。
+
 ## 2026-10-27 实验成果导航与论文描述
 
 新增按独立研究问题组织的成果导航、两份中文 LaTeX 正文片段，以及制造解时间收敛的
@@ -49,6 +88,211 @@ Standards 与 Spec 两轴独立复核均确认原阻塞项已解决，未发现�
 普通文档验收仍执行。自动测试使用临时小型记录，不依赖本地生产数据；
 真实 Notebook 的保存输出与本地记录核验另行执行。
 未恢复远端数据、重做历史误差/性能测量或撰写未核验的结果结论。
+
+## 2026-10-27 实验目录首轮清理
+
+本轮增加 `experiments/README.md` 入口导航，修正已移除的 MPI extra 命令，
+标注缺少原始选择记录的旧调参工作流及需要外部源码基线的性能研究。
+仅删除 Finder 元数据和已移除并行实验的缓存残留；未移动实验源码、删除配置或改写既有运行/报告。
+Kolmogorov 运行和后端计时入口共用格式注册表及同一个四格式选择入口，
+保留默认顺序、SAV gamma 检验和对一阶/未知格式的原有拒绝行为。
+未修改空间算子、阶段公式、时间序列或记录校验规则。
+
+修改前源码、文档、测试、锁文件、安装版本和工作区补丁保存于
+`runs/cleanup/20261027T062308-d15ac4fa/`，`source.tar.gz` 的 279 个文件均已逐项核对 SHA256。
+这是本轮修改前的来源快照，不保证与更早生产批次的源码身份相同。
+Python 源码变更正常产生新的运行身份；不放宽旧批次复用/扩展的来源要求。
+该目录遵循 `runs/` 的忽略规则，需随本地数据另行备份，不随 git 提交。
+
+在现有 `.venv` 中执行：
+
+- 修改前两个聚焦测试文件：**12 passed**。
+- 修改后五个聚焦文件：**22 passed，29.17 s**，包括格式构造、接受/拒绝、保存/分析和不可变父记录。
+- `.venv/bin/python -m pytest -q`：**325 passed，59.06 s**。
+- 两个修改的 Python 源文件 mypy：**通过**。
+- 全项目 mypy：检查 122 个源文件，修改前后均为相同的 **6 个既有错误**，位于
+  `reference_error.py`、`run_natural_step_error.py`、`analyze_natural_partial.py`，本轮未修改这些文件。
+- 文档相对链接、失效 MPI 参数移除和仅生成文件的删除检查通过。
+
+未重跑生产计算、性能测量或长期收敛研究；未恢复缺失的历史原始记录。
+本轮测试不能替代这些历史结论的复核。
+
+## 2026-10-05 二维 Poiseuille 的 TS 失稳
+
+用户要求看到失稳。新增实验初值 ts_wave，不修改 Channel 空间算子或推进公式。
+基流为精确离散 Poiseuille，加入同一 MAC 线性化的第一流向 Fourier 特征模态；
+实际非线性推进仍使用普通 SDIRK3 和 FFT/banded Channel 后端，不施加持续波动外力。
+Re=30000（中心速度 Umax=1、半高=1）、alpha=0.8、nu=1/30000、F=2/30000、
+Lx=2*pi/0.8、96x192、dt=0.05、T=400，初始格心扰动速度峰值为 Umax 的 2.5%。
+
+父记录 `runs/channel_instability/20261005T041045-0667c56a` 保存四个短时资格验证成员：
+原网格、dt/2、128x256 加密网格及 Re=1000 稳定对照，均从峰值 1e-4 的小扰动推进至 T=20。
+独立 Chebyshev Orr–Sommerfeld 算法先核验已发表的 Re=10000、alpha=1 特征值，随后生成连续参照。
+
+| 验证量 | 实测 |
+|---|---:|
+| 原网格幅值增长率 | 0.0072207365 |
+| 半步长幅值增长率 | 0.0072207384 |
+| 加密网格幅值增长率 | 0.0072734050 |
+| 稳定对照增长率 | -0.051020440 |
+| 半步长增长率相对变化 | 2.58e-7 |
+| 原/细网格特征值增长率相对变化 | 0.724% |
+| 细网格与连续增长率相对差 | 0.573% |
+| 保存场拟合与离散特征值最大相对差 | 6.25e-7 |
+
+四项资格验证通过 2% 门槛及完整动量/散度检查后，非线性成员
+`runs/channel_ns/20261005T041110-beecfb14-e6ab58d0` 完成 8000 步、401 个保存帧。
+扰动 L2 幅值从 0.0426437 增至 0.462037，增长 10.8348 倍，在所有保存帧间均增加；
+对应扰动能量约增加 117 倍。最大完整散度 1.65e-14、阶段动量残差 7.78e-16。
+报告 `reports/channel_instability/20261005T041045-0667c56a/analysis.json` 只重读保存场，
+不重算模型、特征值或时间积分。有限幅值后增长偏离初始线性预测。
+
+动画 `reports/channel_animation/20261005T041110-beecfb14-e6ab58d0` 使用初始波速的 x-ct 坐标；
+颜色仍是实验室系速度/扰动涡量，叠加相对波速的瞬时流线。时间/网格验证限定于小扰动、T=20，
+没有核验整个 T=400 非线性末态的网格/步长收敛，也不构成三维湍流结论。
+
+聚焦 **23 passed**；全套 **285 passed，52.67 s**；`mypy experiments/channel_ns`
+的 **9 个源文件通过**。独立参照、初值归一化和完整约束、保存场增长/半步长、移动坐标方向有代表性测试。
+
+## 2026-10-05 Channel 管道流动画
+
+基于现有 Channel 的 periodic-x/no-slip-y MAC 模型，新增独立保存场渲染器
+`experiments/channel_ns/animate.py`，不修改空间算子或时间格式。模拟为恒定压降驱动的
+Poiseuille 流加散度自由扰动：域 6x2、nu=0.04、F=0.08、epsilon=0.15、192x64、
+普通 SDIRK3、FFT/banded 后端、dt=0.01、T=8。800 步完成，保存 201 个间隔 0.04
+的真实场快照；计算记录 `runs/channel_ns/20261005T034000-fc169e10-7905a5b3`。
+最大完整散度 2.20e-14、阶段动量残差 6.66e-16；相对离散 Poiseuille 的扰动 L2
+范数从 0.487302 降至 0.0208754。这是该算例的数值诊断，不是收敛或湍流结论。
+
+动画报告位于 `reports/channel_animation/20261005T034000-fc169e10-7905a5b3`。
+速度/扰动涡量固定颜色范围；MP4 为 1440x900、20 fps、201 帧、10.05 秒，GIF 循环播放。
+粒子由保存 MAC 面场的双线性插值、时间线性插值和 RK2 重建，不求解染料方程；
+此轨迹展示未进行独立时间/空间加密。静态文字经 PGF/XeLaTeX 渲染，pdffonts 确认
+嵌入 Times New Roman；数学符号为 LaTeX，动态时钟使用同一个系统字体。
+
+新增 2 个聚焦测试：独立离散 Poiseuille 剖面、零扰动涡量和已知粒子输运，及禁止
+模型构造的保存场 MP4/GIF/PNG 导出。全套 **282 passed，51.32 s**；渲染器及 Channel
+run/analyze 的 **3 个源文件 mypy 通过**。未新增网格/步长收敛研究或长时间高 Re 验证。
+
+## 2026-10-04 一阶 IMEX Euler / IMEX Euler-mr-ccSAV
+
+新增 `imex_euler/imex_euler_mrsav`，旧时刻显式对流和外力、隐式黏性与压力；
+SAV 固定 G=1-r、Q=1，两个同矩阵 Stokes 右端后直接求唯一线性标量解。
+现有四个 SDIRK 源文件没有改动，旧默认比较组和旧 HDF5 阶段/候选形状保持原约定。
+公开 MAC、周期和 Channel 接通单阶段保存/读取/复用/只读分析；六个示例配置实际运行均 complete。
+新格式首轮支持固定/给定步长，未实现一阶自适应或 step doubling。
+
+最终 `uv run --locked --offline pytest -q`：**278 passed，55.52 s**。
+`mypy solver experiments/workflow.py experiments/channel_ns experiments/periodic_ns experiments/imex_euler`：
+**52 个源文件通过**。全项目检查 105 个源文件，仍是改动前相同的 6 个错误，均在
+`experiments/kolmogorov_adaptive/{reference_error,run_natural_step_error,analyze_natural_partial}.py`。
+新测试覆盖独立耦合线性系统、backward Euler/标量衰减、非线性旋转 ODE 的一阶速度和标量趋势、
+六后端纯梯度压力、完整代数连续性检查、固定 lifting、失败前缀及只读分析校验。
+ODE 使用 400/800/1600 步；较粗的 100/200 步尚未进入本算例的一阶渐近区间，没有放宽阶数门槛。
+
+最终保存验证：`runs/imex_euler_validation/20261004T140449-1fa7c628`；
+重算场误差后的报告为
+[analysis.json](../reports/imex_euler_validation/20261004T140449-1fa7c628/analysis.json)。
+配置 T=.4、amplitude=.1，80/160/320 步；普通格式每后端一组，SAV gamma=1/1000，
+共 **18 组、54 个完整成员**。manifest 记录六项线程环境为1，源码哈希与最终代码核对一致。
+分析只读 NPZ 最终场、参照、时间及物理内积权重/质量矩阵，不构造模型或启动求解。
+
+| 后端 | 固定空间参数 | 三组速度观测阶范围 |
+|---|---|---|
+| MAC direct | 12x10 | 1.000167–1.000311 |
+| MAC Tensor | 12x10 | 1.000167–1.000311 |
+| Legendre | size=6 | 0.997590–0.998793 |
+| Fourier | 24x18 | 1.000261–1.000523 |
+| Channel direct | 12x10 | 0.996198–0.998099 |
+| Channel FFT | 12x10 | 0.996198–0.998099 |
+
+阶段最大归一化动量残差 **6.91e-15**、标量残差 **6.30e-20**、完整代数连续性残差 **1.12e-14**。
+MAC/Channel/Fourier 物理散度同样很小；Legendre 的最大物理散度为 **9.32e-6**，
+弱连续性约束满足到舍入量级不等于物理点态散度为零，两个指标单独保存。
+
+Fourier 使用已解析连续非线性 MMS，Channel 使用独立 NumPy 离散 MMS；
+MAC/Legendre 的制造外力来自固定算子，验证半离散时间格式而非空间算子的独立准确性。
+部分 MMS 辅助变量很小；其标量误差单独报告，不能用来声称一般标量轨道的高阶精度或全局控制。
+本次没有新的空间加密、长期稳定性、物理压力收敛阶或性能加速结论。
+旧周期 `20261004T074509-97e4552f-2dfbf4bf` 和旧 Channel
+`20261004T094358-810579d3-487f436f` 已用新 reader 成功读取，未迁移或改写旧数据。
+
+## 2026-10-04 Channel MAC 与 FFT 后端验收
+
+独立新增 `solver/channel` 与 `experiments/channel_ns`。先建立流向周期、上下壁面
+齐次无滑移的二阶 MAC 网格／算子、斜对称对流及 ChannelModel，复用 DirectStokes，
+随后增加对同一 MAC 系统做流向 FFT 和逐模式带状 LU 的 FFTStokes。四套时间格式、
+原 MAC/Legendre/Fourier 算子及旧入口未修改。共享 DirectStokes 仅将输入类型泛化为
+算子协议，求解公式、压力规范、残差门槛及缓存算法保持原样。
+
+最终全套 **222 passed，52.59 s**。`mypy solver experiments/channel_ns` 检查 **41**
+个源文件通过。全项目 mypy 仍报告三个旧 Kolmogorov 脚本中的 **6 个基线错误**
+（reference_error.py、run_natural_step_error.py、analyze_natural_partial.py）；未扩大修改范围。
+
+新增61个测试实例覆盖周期独立面权重、奇偶矩形网格、实数有限数据与壁面检查、解析
+差分特征值、G/D伴随、压力常数核、离散旋度、独立 NumPy 通量、对流零做功、全动量／
+散度、批量载荷与缓存、非负 SAV 响应能量、非零平均驱动、壁面法向载荷压力平衡，
+四格式的固定／变步长、I/PI接受拒绝、独立物理范数、回调／快照／严格终点、亚min_step
+终点、联合标量控制，以及保存／加载／复用／损坏拒绝／只读分析／失败前缀。
+FFT检查包括全部MAC模式（含Nyquist）、交错差分相位、零模式与非零模式压力均值，
+对照全局直接速度／压力解及四套格式结果，并检查自适应PI轨迹。
+
+最终源码的短时研究保存于 `runs/channel_ns_validation/20261004T094521-94681a55`；
+报告为 [analysis.json](../reports/channel_ns_validation/20261004T094521-94681a55/analysis.json)。
+24个固定网格时间成员（12x10、T=.4、40/80/160步、四格式、gamma=1/1000）、
+3组定常空间场和8个startup/perturbed短时成员全部完成。分析重新检查来源、校验和
+及保存场后复算误差。二阶速度观测阶 **1.9344、1.9675**，三阶 **2.9906、2.9962**；
+粗10/20步下二阶尚未进入渐近区间，不用于最终阶数判断。连续定常Stokes MMS使用
+16x8、32x16、64x32，速度L2空间观测阶 **2.0335、2.0083**。另有独立连续非线性
+MMS空间细化测试。固定网格MMS的载荷来自NumPy差分／通量参考，不调用被测算子／核。
+辅助变量误差单独记录；该制造解r较小，不代表一般轨迹的标量漂移。
+
+同一MAC问题的最终独立单线程计时保存于
+`runs/channel_ns_benchmark/20261004T094544-5bc2d1c2`；报告为
+[analysis.json](../reports/channel_ns_benchmark/20261004T094544-5bc2d1c2/analysis.json)。
+共72个成员（3网格x4格式x2后端x3次交错重复），全部同源、完整且通过场核验。
+计算使用相同受扰Poiseuille参数、T=.04和10步；六项线程环境均为1。此轮在全套
+测试和验证研究结束后执行。最大后端速度L2差 **6.31e-14**，最后阶段压力最大差
+**2.15e-12**，全成员阶段残差最大 **3.27e-12**、物理散度最大 **9.98e-13**。
+
+| 网格 | 积分CPU加速 direct/FFT，四格式范围 | 含模型setup的总CPU加速 |
+|---|---:|---:|
+| 32x24 | 0.970–0.999 | 0.964–0.995 |
+| 64x48 | 2.064–2.685 | 2.018–2.525 |
+| 128x96 | 5.225–8.991 | 5.092–8.413 |
+
+128x96普通SDIRK3的10步积分CPU中位数为direct **0.60306s**、FFT **0.088827s**；
+SDIRK3-mrSAV为 **0.712777s**、**0.136425s**。warmup单列，分解／求解已包含在
+积分计时中，不能重复加总。这是短时同离散后端比较，不是Fourier谱离散对MAC的
+精度／效率比较，也不能直接推广至长时、不同步长或不同硬件。
+
+六个配置示例亦完成。32x24 startup到T=.5，计算剖面与连续启动流级数对照图经
+视觉检查，PDF嵌入TimesNewRomanPSMT，数学由XeLaTeX/amsmath渲染；图位于
+[fields.pdf](../reports/channel_ns/20261004T094358-810579d3-487f436f/fields.pdf)。
+32x24受扰流gamma=1000、PI联合控制示例12步接受、严格到达T=.5；64x48 FFT
+受扰流固定10步完成。均只报告与其目的相符的诊断或参考误差。
+
+验证范围为均匀二维周期Channel、平滑制造解及短时经典流。未验证高Re长期湍流、
+三维、MPI、移动壁面、恒流量反馈、checkpoint续算、全局标量误差控制或高阶
+物理终点压力。壁面剪切使用半网格梯度，未声明一般二阶剪切精度。
+
+## 2026-10-04 周期 Fourier–Leray 扩展验收
+
+独立新增 `solver/fourier` 和 `experiments/periodic_ns`，四套时间格式未修改。共同固定推进器只泛化模型类型注解；Core.State、MAC/Legendre 布局与原入口保留。最终全套 **161 passed，39.07 s**；`mypy solver experiments/periodic_ns` 检查34个源文件通过。全项目 mypy 的6个基线错误仍存在于 `reference_error.py`、`run_natural_step_error.py`、`analyze_natural_partial.py` 三个旧 Kolmogorov 脚本，本扩展未修改这些脚本。
+
+自动检查覆盖矩形奇偶 FFT 往返、物理 Parseval、G/D 伴随、严格截止、Leray 幂等及梯度核、解析 shifted Stokes 全方程、均值兼容性、批量载荷/非负 SAV beta、独立解析对流、最高保留频率去混叠、反对称能量配对、实数状态/压力、四格式非线性 MMS、gamma=1000、给定步长、纯梯度阶段压力、I/PI 接受拒绝和独立物理 L2 范数、均值演化、亚 min_step 终点、联合标量控制、无限模态定常空间收敛、公开运行/保存/加载/复用/只读分析及失败前缀。损坏校验和或非周期布局被拒绝。
+
+收敛和计时研究保存于 `runs/periodic_ns_validation/20261004T074942-8a577b4b`，场与来源复核后的报告为 [analysis.json](../reports/periodic_ns_validation/20261004T074942-8a577b4b/analysis.json)。24²、T=.4、10/20/40步，四格式分别在 gamma=1/1000 检查；二阶速度观测阶2.005–2.011，三阶3.0015–3.0031。辅助变量误差单独保存，不据此声称标量高阶；该制造解 r 很小，不能代表一般轨迹的标量漂移。
+
+无限模态解析流函数 `exp(.7cos x+.4cos y)` 的定常 Stokes 检查排除了时间误差：12/18/24/32² 的物理速度 L2 误差依次为 `2.4927022e-2/1.5013586e-4/4.3537557e-7/2.5817182e-11`。有限模态的时间 MMS 不能替代这项空间检查，也不构成长期湍流空间精度证明。
+
+短时计时包含96个完整推进成员（32/64/128/256² ×4格式×固定/交替给定步×3重复），加24个完整时间收敛成员和4组定常场。线程环境六项均为1，SciPy FFT固定workers=1；两种序列均为10步、总时间.04。256²固定10步积分CPU中位数：SDIRK2 `0.154813 s`，SDIRK2-mrSAV `0.214617 s`，SDIRK3 `0.285309 s`，SDIRK3-mrSAV `0.409865 s`。同网格组件CPU中位数/次：非线性2.402ms、单RHS Stokes1.790ms、双RHS3.530ms、诊断1.776ms。setup单独记录，磁盘/绘图不计入积分；全部成员阶段动量残差最大 `5.16e-17`、物理散度最大 `3.26e-14`。这些是周期实现自身的短时成本；没有周期MAC同问题基线，不能推出相对无滑移MAC的加速比。
+
+CLI示例亦完成：`20261004T074509-97e4552f-2dfbf4bf` 为32×24固定MMS；`20261004T075335-6945ce0d-783f7d3d` 为32²、gamma=1000、PI联合控制MMS，17接受步、严格T=1、L2误差2.055e-6；`20261004T075336-4ea9b088-8f5f7620` 为64²周期Kolmogorov，23接受步、严格T=1，只报告诊断。实数collocated读图使用谱涡量和正确节点坐标，场栅格化以避免PGF逐单元矢量绘制的TeX内存限制。PDF/PNG导出在64²及256²复核；文字字体TimesNewRomanPSMT嵌入，数学由XeLaTeX/amsmath渲染。
+
+验证范围为二维双周期、光滑制造解和短时示例；尚未验证长期高Re湍流、3D、混合边界、MPI、checkpoint续算、全局标量误差控制或高阶终点压力。最后阶段压力仍为增量乘子。原无滑移实验参数和既有运行数据保持原样。
+
+---
 
 2026-09-20，在 uv.lock 指定的 Python 3.12 项目环境中完成。代码/依赖精确来源、运行编号、报告路径见 [validation_results.json](validation_results.json)。
 
@@ -478,3 +722,674 @@ PI 控制器只读取上一接受步的归一化误差，首个接受步使用 I
 | SDIRK3-mrSAV | 随机 | 4.5997 s | 0.4445 s | 10.349× | 90.3% |
 
 四种格式中位数求和后，固定步长由 2.7722 s 降至 1.0751 s（2.579×，下降 61.2%），随机步长由 17.4341 s 降至 1.0581 s（16.477×，下降 93.9%）。随机步长收益远高于固定步长的主要原因是初始 DirectStokes 对 10 个不同步长执行 10 次稀疏 LU 分解，而固定步长只需 1 次。末态速度最大相对差 `6.0e-13`，优化路径最大散度 `7.7e-13`。原始记录：`reports/timings/20260927T130948-4cf985b6-initial-vs-optimized-10-step/timings.json`。
+
+## 现存收敛批次的参数与原始数据复核
+
+本次只读核验以下显式批次及其成员，没有启动生产计算或改写配置、运行记录与旧报告：
+
+- `runs/no_slip_reference_convergence/batches/20260926T104431-b5af41e8/batch.json`：四格式无滑移受迫测试。
+- `runs/manufactured_ns_convergence/batches/20260926T094814-5097bbbb/batch.json`：四格式半离散制造解测试。
+- `runs/forced_ns_convergence/batches/20260922T023439-35a9711f/batch.json`：旧外力受迫测试。
+- `runs/trig_ns_convergence/batches/20260922T050733-f2dbf5c7/batch.json`：256² 三角初值测试，采用最后一次参考细化后的报告。
+
+共核验 128 个已收尾记录的配置与 HDF5 校验和、批次内物理参数与源码一致性、格式身份、接受步数和终止时刻；另外核对前两组的实际步长序列与批次计划。直接从保存的面速度重新计算带网格面积权的 L² 误差，并用面差分及切向半格壁面项独立计算 H¹ 半范数，逐行复算相邻名义步长比对应的阶数。与 CSV 的最大误差范数相对差为 `3.22e-16`，最大阶数绝对差为 `2.14e-14`；已保存快照与请求时刻的最大偏差为 `5.99e-12`。这些结果支持历史表格的数值与参数对应关系，不代表历史计算已由当前源码重跑。
+
+四格式无滑移组的实际参数为单位方域、128²、ν=0.001、外力 `(0,sin(2*pi*x))`、夹持梁初值频带 [2,6]、seed=7、投影后作为初值、γ=1、r₀=0；观测时刻为 0.5、1、2、4。名义步长为 `0.1*2**(-k)`，k∈{0,1,2,2.2,2.4,2.6,2.8,3,4,5,6,7}；小数 k 保留名义步长，只缩短各观测区间末步。48 个被测成员中 31 个完成、17 个失败：普通 SDIRK2 在 k≤4 的九个档位未完成全程，普通 SDIRK3 在 k≤3 的八个档位未完成全程，两种 mrSAV 的全部档位均完成。`complete` 只表示程序收尾：普通 SDIRK3 的 k=4 在 T=4 的最大速度分量约 `4.01e6`、L² 误差约 `1.00e5`，属于数值爆增，不能作为渐近收敛点。k=5,6,7 的细步段在 T=4 显示二阶与三阶，二阶末次 L² 阶约 2.004，三阶约 2.998；跨越粗步不稳定区所得的 12、18、38 等阶数不能解释为格式阶数。细步完成成员与两条参考的末态全散度最大值为 `4.18e-11`。
+
+该组共用普通 SDIRK3 的 k=10 参考，并以 k=11 检查敏感性。八项检查中仅 T=4 的 H¹ 未通过：参考差 `5.6032e-9` / 最小被测误差 `8.7226e-8` = 6.4238%，超过 5% 门槛；因此批次 `reference_unresolved` 与报告 `reference_passed=false` 一致，报告 `status=complete` 仅表示分析文件生成。只读改用已保存的 k=11 参考重算时，三阶格式末次 L² 阶仍约 2.9975、H¹ 阶约 2.9957，支持细步段三阶趋势，但不能据此宣称原参考门槛已通过。进一步参考检查需要新的细化证据；目前未计算 k=12，也未验证空间收敛。
+
+制造解组为单位方域、128²、ν=0.01、γ=1、T=2、`a(t)=0.05*exp(-t)*(1+0.25*sin(pi*t))`、`W_h=curl_h[sin²(pi*x)sin²(2*pi*y)]`，外力由同一 MAC 算子构造，精确参照是半离散速度 `a(t)W_h`。40/40 成员完成。二阶细步阶约 2.000–2.002；三阶在 k=6,7 的 L² 阶约 2.960、2.980，而 k=8 的误差约 `1.2e-13`、阶数降至 1.63–1.66，呈现舍入/代数误差底部的迹象，尚未单独分离二者。不能要求全部档位都显示三阶；该测试隔离时间误差，不能证明连续外力下的空间精度。两种 mrSAV 与普通格式的误差几乎相同，全部制造解成员的最大节点 |r| 仅约 `1.46e-6`，不能用这组数据论证粗步长稳健性优势。
+
+旧受迫批次保存的实际外力是 `(0,sin(x))`，与当前 `experiments/forced_ns_convergence/configs/production.json` 的 `(0,sin(4*pi*x))` 不同；当前仓库没有匹配后者 128²、ν=0.01、T=2、零初值参数组的完整运行记录。旧表细步二阶及参考敏感性通过，只适用于保存的旧问题。256² 三角初值批次实际为 ν=0.001、γ=5、`tau_base=1`、k=0,…,8，并非当前通用 `trig_production.json` 的参数；其最终参考检查通过，细步结果约二阶，五个粗步普通 SDIRK2 成员失败。
+
+当前源码的聚焦回归：`tests/test_no_slip_reference_convergence.py`、`tests/test_manufactured_convergence.py`、`tests/test_forced_convergence.py`、`tests/test_sdirk3.py` 共 11 项通过；`mypy solver experiments/manufactured_convergence experiments/no_slip_reference_convergence experiments/forced_ns_convergence` 检查 36 个源文件通过。全项目 mypy 检查 69 个源文件仍有 6 项现存错误，位于 `experiments/kolmogorov_adaptive/{reference_error,run_natural_step_error,analyze_natural_partial}.py`；本次未修复这些范围外问题，未运行完整测试集，未作发布验收。
+
+## 2026-10-02 自适应参数与本地结果核查
+
+只读核查 `runs/kolmogorov_adaptive/` 的 97 条本地成员记录：95 条为 24²、T=0.04 的历史测试，另两条为 128²、T=0.2/30 的 SDIRK3-mrSAV/I 自然节点测试。全部 manifest 标记 complete；结果校验和、接受/拒绝步数、节点对齐、终点、诊断数组和接受误差条件均通过。历史涡量控制记录不与速度控制记录混作同口径比较。核查产物及明确输入路径见 `reports/adaptive_audit/20261002T000517/audit.json`，最新短时八组及十二条固定对照的重算误差见同目录 `strict_smoke_summary.csv`。
+
+长时间批次 `runs/kolmogorov_adaptive/natural_step_error/20260929T015320-c0efeeb5/campaign.json` 只含一个成员；实际成员配置为 rtol_velocity=5e-7、atol_velocity=1e-8，覆盖基础配置的 rtol_velocity=5e-5。接受 6852 步、拒绝 0 次，终点恰为 30，最大归一化嵌入误差 0.734452；最大及末端参考速度相对 L² 误差均为 7.337421e-6。两条独立累计 SDIRK3 参考轨迹的最大步长为 1e-4/5e-5，最大粗细差 9.021405e-10，通过记录中的 5% 参考细化门槛。3210 步（46.85%，占物理时间 53.5%）达到 0.005 上限；末步为到 T 的截断，步长比小于 min_factor 不表示控制器公式出错。I 因子公式、上一接受误差历史、参考时刻与数据校验和通过逐项核查；当前源码哈希与该长时间运行一致。
+
+另重放该长时间记录前 24 步（至 t=0.00392484236）：归一化误差、动能和 r 与保存值完全一致；全散度最大 2.5813e-13，阶段方程残差最大 1.1238e-15，标量残差最大 6.0527e-18。这只是启动前缀的独立重放，不是整段长时间重算。
+
+聚焦测试 `tests/test_adaptivity.py tests/test_kolmogorov_adaptive.py tests/test_tensor_stokes_adaptive.py`：26 passed。`uv run mypy` 检查 69 个源文件，报告 6 处类型错误，位于 `reference_error.py`（model 注解为 object）、`run_natural_step_error.py`（批次字典类型推断）和 `analyze_natural_partial.py`（比较项的可选误差字典）；本轮检查未修改这些源文件，也未运行完整测试集。
+
+验证边界：文档所指 `tuning/selection-20260928T035927/selection.json` 和 120 次容差扫描的 timings.json 在当前本地目录缺失，不能据文档确认八组 T=30 结果或扫描结论。当前长时间 NPZ 没有最终速度场、快照及逐阶段散度/残差/根数组，故只能核查保存的误差历史并重放短前缀，不能事后独立复算整段参考误差或阶段诊断。同网格参考细化只检验时间分辨率；局部嵌入容差不等于全局误差上界。单组、单次且未明确固定线程数的 CPU 测量不支持 I/PI 或固定/自适应效率排名；本地没有同参数 T=30 固定对照。端点 |r| 最大 3.799946e-4 也不构成所有内部阶段 r 的界。
+
+## 当前求解器算法复核（基于 4a29bd5）
+
+后续处理范围（2026-10-04）：用户明确暂不处理审计中的第1项（仅相对容差下零解的NaN）和第3项（固定步状态时间累加漂移）；第2项自适应终点对齐按本文件“2026-10-04 自适应末步严格到达终点”记录修复。下文三项复现描述保留其审计时状态。
+
+本轮检查四种时间格式、MAC 与 Legendre 谱模型、直接与张量 Stokes 后端、标量求根和 I/PI 控制器；没有修改求解器代码。`uv run --locked --offline pytest -q`：91 passed（26.10 s）；`uv run --locked --offline mypy solver`：25 个源文件通过。项目整体 mypy 检查 69 个源文件时仍有 6 个错误，位于 `experiments/kolmogorov_adaptive/{reference_error,run_natural_step_error,analyze_natural_partial}.py`。本轮为适应沙箱，把 uv 缓存目录设到 `/private/tmp/mac-audit-uv`。
+
+精确有理数复算核对了代码中的三阶增量矩阵、全部公共节点三阶 additive RK 条件、二阶嵌入权重与条件、隐式稳定函数及增量矩阵对称部分的前导主子式。二阶三次式与三阶五次式均与两个共矩阵 Stokes 解后的标量消元一致；根筛选仍是浮点残差策略，不是全部实根的认证隔离。
+
+补充时间验证使用 MAC 12×10、区域 1.3×0.8、nu=0.03、T=0.8，令 `W=experiments.problems.initial_velocity(grid,0.15)`、`a(t)=cos(t)+0.2 sin(2t)`，精确半离散速度为 `a(t)W`，体力为 `a'(t)W+nu K(a(t)W)+N(a(t)W)`，步长依次为 0.04、0.02、0.01、0.005。最细两档的速度离散 L² 观测阶分别为 SDIRK2 2.0091、SDIRK2-mrSAV 2.0091、SDIRK3 3.0019、SDIRK3-mrSAV 3.0019；全部运行的最大散度小于 1e-14、最大阶段动量残差小于 8e-15。同一问题使用 seed=23 的 12 个均匀分布于 [0.001,0.02) 的给定步长时，四种格式的 Direct/Tensor 末态速度 L² 差均小于 2.7e-15。
+
+新复现的待修问题（现有测试未覆盖，尚未修复）：
+
+- 固定步推进器的补偿时间表只用于快照索引，未用于实际状态时间。对精确常值状态以 300000 个 1e-4 步推进，补偿终点为 30，实际终点及终点快照标签为 29.999999999943423；状态时间仍有约 -5.66e-11 的累加漂移。
+- 无严格输出节点时，终点余量没有进行最小步长保护分割。3×3 MAC 零解、T=0.0202、initial_step=max_step=0.01、min_step=0.001、atol=1、rtol=0，会在 t=0.02 返回失败 `Step below min_step`；同一参数配严格终点输出可完成。
+- I/PI 均允许 atol=0、rtol>0，但零初值及零体力产生零误差与零尺度，归一化结果为 NaN。拒步因子随后也成为 NaN，下一次试步抛出未捕获的 `ValueError: Invalid step size`，没有返回失败前缀。
+
+验证边界：补充制造解只核对固定空间离散下的短时速度阶数，其中 SAV 标量很小，不能单独支持显著标量修正时的精度结论；现有独立非线性 ODE 测试提供另一类证据。本轮没有新增高分辨率或长期 NS 运行，没有确认无滑移 PDE 的空间一致三阶精度、变步长 mr-ccSAV 长期稳定性或辅助变量误差控制，也没有验证物理节点压力的高阶精度。谱方法的弱约束残差与采样物理散度仍需分别解释。
+
+## 2026-10-02 SDIRK3 理论与路线复核
+
+审查关联 Obsidian 系列现有 00–17 共18篇笔记，并与当前三阶格式及控制器对照。独立有理数复算通过完整三阶 additive RK 条件、增量矩阵前缀强制性、隐式稳定函数、阶段阶数一阶、标量首项系数 81/400、五次消元及二阶嵌入权重。聚焦回归 `tests/test_sdirk3.py tests/test_adaptivity.py tests/test_schemes.py`：28 passed（10.80 s）；`mypy solver` 检查25个源文件通过；本轮没有修改求解器或笔记。
+
+新发现：现有二阶嵌入指示量在刚性衰减模态上有非零步长盲点。对 `y'=-lambda*y`、`z=lambda*tau>0`，精确代数给出
+
+\[
+R(-z)-\bar R(-z)=-\frac{2z^3(z-10)}{3(z+4)^4}.
+\]
+
+当 z=10 时，两输出都等于 `(64/1029)*y_n`，精确输出却是 `exp(-10)*y_n`。当前代码的独立指数衰减参照：lambda=1000、tau=T=0.01、初值 (1,0)、零对流与零外力、r0=0；SDIRK3 与 SDIRK3-mrSAV 均得到主输出 0.06219630709426628、真实速度误差 0.0621509071645038、嵌入差 4.85722573273506e-17。I 控制器在 atol=1e-12、rtol=0、max_step=0.01 时以归一化指示量 4.85722573273506e-5 接受该步。该反例否定指示量在此类问题上的普遍可靠性，不否定经典阶条件或主格式耗散性，也不代表已保存 NS 运行的误差被重新判定。
+
+含初值和四个阶段的固定系数仿射输出，其一般 IMEX 二阶匹配条件组成秩为4的矩阵。全部解都是 `low_theta=(1-theta)*U4+theta*low_original`；因此保持这种阶段组合形式而调整权重，仍保留 z=10 的盲点。后续应比较独立选择显/隐式函数值权重、增加额外信息或步长加倍等途径，并分别验证刚性可靠性与 mrSAV 修正的影响。
+
+PDE 三阶仍取决于第11篇未证明的端点缺陷。在原有步长比上界下，现有误差能量递推只需要 `||ell_n||^2+tau_n*||grad ell_n||^2 <= C*tau_n^8`；这是比两个范数均为 O(tau_n^4) 更弱的充分条件。该假设减弱没有证明具体 NS 解满足它。第06–09、12–14篇的长期推导在本轮未发现明显断点，但结论继续受其步长上界、上升比、正阻尼、定常外力及相空间条件限制；不能直接认定实际 I/PI 控制器具有所假设的连续自治映射或容差极限吸引子。
+
+验证边界：原稿 PDF 已不在笔记所列临时路径，本轮未进行原稿逐页比对或全面文献审计，未重跑生产计算或完整测试集。光滑区域的空间连续理论、固定 MAC/谱离散的有限维结论、空间网格一致的全离散理论继续分开。代码允许 gamma=0，但使用正标量阻尼的长期结论不覆盖该参数。
+
+## 2026-10-02 MAC MINI 三阶无滑移受迫收敛部署
+
+MAC MINI `/Users/wanghaifeng/Desktop/MAC-mr-SAV-RK` 与本机在提交 `4a29bd587a8c7b2f89a15a7c7f5d02acea8a2c74` 上的72个源码及环境文件哈希一致。部署仅接入新初值、显式外力配置、三阶组选择及结果溯源，不修改 SDIRK 阶段公式、根选择或直接 Stokes 后端。原配置与结果保留，远程被更新文件的基线备份在 `runs/no_slip_reference_convergence/setups/20261002T021024/`。
+
+新配置 `experiments/no_slip_reference_convergence/configs/sdirk3_256_gamma1000.json`：两种三阶格式、(0,2π)²、256²、nu=0.001、f=(0,sin x)、gamma=1000、T=4，输出0.5/1/2/4；k为0到8的整数，tau=0.1*2^(-k)，共同普通SDIRK3参考k=10，以k=11核验5%敏感性。初值逐字采用用户给出的加权有符号整格点流函数和，全部316项，无随机种子或幅值归一化；顶点离散旋度生成面速度，无额外投影。
+
+新增聚焦测试核对独立标量循环计算的流函数、矩形MAC网格离散散度与墙面法向零值、幅值保留、独立正弦外力采样，以及32²上运行/持久化/三阶组表格/PDF完整流程。本机完整测试94 passed（14.16 s），MAC MINI完整测试94 passed（22.13 s）；两端 `mypy solver experiments/no_slip_reference_convergence experiments/forced_ns_convergence experiments/workflow.py` 均通过34个源文件。此类型检查未覆盖已有自适应实验中的其他文件。
+
+MAC MINI正式256²短试跑记录：`runs/no_slip_reference_convergence/pilots/20261002T021157/pilot_summary.json`。参考步长9.765625e-5下两格式各完成10步，普通/修正格式最大阶段散度分别5.7434e-11/5.6461e-11，最大阶段残差分别5.9254e-11/8.4202e-11；最大阶段|r|分别0/3.3875e-6。初值L2范数20.2742182627、最大面速度分量6.05278332768、离散散度6.2708e-14。tau=0.1的一步短试跑也完成；修正格式该步最大阶段|r|=1.07655835982，不能据此判定整个粗步长运行的精度或稳定性。
+
+验证边界：短试跑只证明该网格、初值及参数能够启动并通过阶段残差检查；T=4的正式误差与阶数尚待生产批次和两个参考运行完成。失败运行保留有效前缀及失败状态，缺失快照在表格中记为NaN；参考敏感性未过时批次标记reference_unresolved。固定网格速度误差与H1黏性算子半范数不是空间收敛或无滑移PDE三阶收敛的证明。
+
+
+## 2026-10-02 SDIRK3-mrSAV joint velocity/scalar tolerance search
+
+User-selected indicator: E=max(E_u,E_r), E_r=|r_trial-exp(-gamma*h)r_old|/atol_r. `ScalarErrorControl` explicitly enables the homogeneous-decay local defect. Component I proposals use estimator orders 3 and 2; PI maintains independent accepted histories. Rejections do not update either history. Fixed scalar absolute tolerance controls a local defect, not the global |r|. Existing velocity-only default behavior is retained.
+
+Focused mechanism checks cover independent prescribed cubic/quadratic defects, nonzero old scalar propagation, rejection/PI histories, actual mrSAV quadratic defect scaling, invalid controls, and public compute/save/load/analyze workflows. Full checkout suite: 104 passed (15.34 s). Focused solver/new scan mypy: 27 source files clean. All-project mypy still reports the six pre-existing errors in reference_error.py, analyze_natural_partial.py and run_natural_step_error.py; no new errors were added there.
+
+Two 128² T=0.2 pilots each completed all 12 tolerance/baseline cases. The first, `runs/kolmogorov_adaptive/joint_tolerance_scan/20261002T024323-d2395fc2/campaign.json`, used reference steps 5e-4/2.5e-4. Its maximum reference refinement difference 5.1357398e-8 failed the 5% test for the most accurate cases; these were excluded from that report's eligible choices. This prompted an explicit reference refinement, not a change to the error criterion.
+
+Refined pilot: `runs/kolmogorov_adaptive/joint_tolerance_scan/20261002T024725-21bb1df3/campaign.json`. Common ordinary SDIRK3 references use 2e-4/1e-4. Maximum relative refinement difference is 3.2852944e-9, 1.4283% of the smallest observed candidate maximum velocity error; all 12 cases pass both maximum/final 5% checks. Maximum accepted-stage residual/divergence/scalar residual across the pilot are 1.1237455e-15 / 2.2366961e-12 / 6.8296852e-17.
+
+Selected pilot observations (atol_u=1e-8; velocity errors at uniform output nodes every 0.02):
+
+| rtol_u | atol_r | max relative velocity error | max accepted-node absolute r | integration CPU seconds |
+| --- | --- | --- | --- | --- |
+| 5e-7 | 2e-5 | 2.3001842e-7 | 3.2703975e-5 | 7.144866 |
+| 2e-6 | 1e-4 | 3.4012146e-6 | 9.1061615e-5 | 3.610418 |
+| 1e-5 | 1e-4 | 5.0400201e-6 | 9.3183083e-5 | 3.311178 |
+| 5e-7 | velocity-only | 9.2822935e-7 | 5.7476959e-5 | 4.922369 |
+
+Each pilot timing is one single-thread measurement, not a robust efficiency ranking. Production configuration keeps the existing 128², nu=0.02, gamma=1000 Kolmogorov force/initial condition; T=30, output_every=0.1, common step bounds [1e-5,0.005], common I safety 0.9 and factors [0.5,1.2], three interleaved repeats. It is separate from the concurrent 256² fixed-step lattice study. Short pilots miss the historical scalar-defect peak near t=4.9, so these values are only candidates. Global velocity maxima refer to the saved uniform output nodes, while scalar maxima use every accepted node. Reference sensitivity is numerical evidence, not a rigorous error bound or a spatial/PDE convergence proof. Failed, incomplete or reference-unverified candidates do not qualify for recommendations; long runs report through persistent logs and are not automatically monitored.
+
+
+Production launch handoff: `runs/kolmogorov_adaptive/joint_tolerance_scan/20261002T025658-184c1d46/campaign.json` is running (12 cases x 3 repeats). Startup logged the first ordinary SDIRK3 reference step at t=0.0002. The launch record is `runs/kolmogorov_adaptive/joint_tolerance_scan/launches/20261002T024841/launch.json`; its console log persists outside the interactive terminal. The macOS launchd attempt stalled before creating a Python child and was stopped; a POSIX double-fork/new-session launch with SIGHUP ignored started the actual scan. This is one continuous run, not a recurring automation. No long-run monitoring or automatic follow-up was created. The script writes `FINAL status=complete` only after all computation records are saved; `REPORT=...` identifies the subsequent read-only analysis. `analysis.json` preserves reference eligibility, repeated timings, Pareto rows and target-specific choices. At handoff the T=30 computation is not complete and no long-time recommended tolerance is claimed.
+
+## 2026-10-02 EIT-WSL 256² joint adaptive/fixed comparison
+
+SSH through the user-specified local port 3001 reached EIT-HF (WSL2 Linux,
+16 logical CPUs, approximately 14 GiB RAM). A fresh isolated checkout at
+`/home/hfwang/MAC-mr-SAV-RK` was synchronized from the current local working
+tree; other remote projects and local runs were preserved. uv 0.12.22 and
+the locked CPython 3.12.15 environment were installed. Source SHA256 matched:
+`4db86eac468711c2b591ed5423b95d7b964dd3dbbfffaef7ab3d62bea61f69d4`.
+
+`adaptive_fixed_256.json` implements the confirmed 256² T=30 comparison with
+atol_u=1e-8, rtol_u=2e-6, atol_r=1e-4, min_step=1e-12, no finite upper step
+bound, and same-scheme fixed controls 0.1/0.05/0.025/0.001/0.0005. Adaptive
+output requests preserve natural nodes rather than imposing an implicit 0.1
+step cap. Shared streamed references visit the actual saved sample times;
+accepted stage/root checks and final states are retained with checksums.
+
+Local full suite: 106 passed (32.44 s). EIT-WSL full suite: 105 passed, one
+environment failure (35.92 s): the independent lattice-convergence PDF test
+requires unavailable pdflatex. EIT-WSL joint-adaptivity/storage/analysis focused
+suite: 12 passed (7.95 s). Local and remote focused solver/new-runner mypy:
+28 source files clean. Matplotlib PNG/PDF output in this experiment does not
+require pdflatex. Existing all-project mypy limitations remain as recorded above.
+
+The focused workflow test exercises computation, snapshot matching, shared
+references, per-stage diagnostic persistence and read-only six-panel analysis
+on an 8² model, including interior output requests not reached by clipped
+adaptive steps. It does not establish long-time accuracy. The separate 256²
+pilot and subsequent production statuses are recorded below; a failed coarse
+control remains a labeled prefix and is never reported as a completed T=30 run.
+
+256² pilot `20261002T050007-e94606e0` completed all six cases at T=0.1.
+Adaptive: 76 accepted steps, zero rejected trials, step range
+[1e-5, 0.001996078329], maximum accepted E=0.7836969051, no output clipping,
+CPU 16.448713 s, maximum |r|=9.2424295e-5. The coarse tau=0.1 control
+completed its single step but reached |r|=1.0161474 and relative velocity
+error about 0.098563; completion does not establish accuracy.
+
+The original references 2e-4/1e-4 did not pass the 5% criterion for the
+tau=0.0005 control. The original campaign/report were preserved. Additional
+reference 5e-5 was computed in a new explicit derived pilot campaign
+`20261002T050555-b43535a9`, reusing only checksum/source-verified members and
+the complete 1e-4 reference; the parent campaign and refinement reason are
+recorded. Refinement pair 1e-4/5e-5 has maximum relative difference
+3.0111238e-10 and all six cases pass the criterion. Adaptive sampled velocity
+error is 2.2479524e-6; fixed 0.001/0.0005 errors are 3.4442339e-7/4.2991860e-8.
+Pilot velocity errors have only the final nonzero sample at T=0.1; production
+has requests every 0.1. Scalar maxima use every accepted node.
+
+The final explicit pilot report is
+`reports/kolmogorov_adaptive/adaptive_fixed/20261002T051000-1b29b1f9/`,
+with PNG/PDF and CSV retrieved locally and the PNG visually inspected.
+Plotting retains visible unverified-reference labels, single-point refinement
+markers and endpoint margins. Final focused workflow checks: local 2 passed
+(6.67 s), EIT-WSL 2 passed (9.30 s); focused mypy remains 28 clean files.
+Final synchronized source SHA256 is
+`23ec5c780edf3662f449868a14deffd88b9c0f0378edfa42ec6d4996aac69ec4`.
+
+Production was launched in EIT-WSL tmux session
+`mrsav-adaptive-fixed-20261002T050154`, with one bounded startup check:
+`runs/kolmogorov_adaptive/adaptive_fixed/20261002T051041-ae1a19fd/campaign.json`
+is running at 256², T=30, three repeats; its first adaptive step at t=1e-5 was
+logged. Shared reference steps are now 1e-4/5e-5. Persistent launch information
+and console output are in
+`runs/kolmogorov_adaptive/adaptive_fixed/launches/production-20261002T050154/`.
+Each accepted 1,000 steps and reference 10,000 steps log progress. The script
+automatically performs read-only six-panel analysis after computation, logs
+`REPORT=...` after successful plotting, and writes `exit_code.txt`. There is
+no scheduled follow-up, agent polling or checkpoint continuation. At handoff
+T=30 is not complete. Rough single-thread cost extrapolation from the pilot
+is about 1–2 days, not a measured production runtime. Long-time accuracy,
+failure behavior and reference sensitivity remain to be assessed from the
+completed campaign.
+
+## 2026-10-04 three additional fixed controls
+
+The original campaign `20261002T051041-ae1a19fd` and both references completed.
+Its final report `20261003T193914-6625f116` has all 18 members complete. The
+0.0005 control's endpoint refinement ratio is 5.001212389%, slightly above
+the strict 5% criterion, so it remains reference-unverified. The extension
+does not change that criterion or recompute references.
+
+User-added fixed steps are 0.01, 0.005 and 0.0025. Each has three single-thread
+repeats at unchanged 256², T=30, model, initial condition and gamma=1000.
+The steps divide output_every=0.1, so both completed references cover all
+new snapshots. `extend_adaptive_fixed.py` validates source/environment,
+configuration, result and stage checksums before reuse; a derived campaign
+contains immutable old member/reference paths and new member directories.
+Execution uses the preserved original source snapshot with SHA256
+`23ec5c780edf3662f449868a14deffd88b9c0f0378edfa42ec6d4996aac69ec4`.
+The new execution entrypoint has a separately recorded SHA256. Plotting
+uses the current analyzer, records its own source, supports nine curves,
+and retains the old six curve colors/markers.
+
+Focused tests exercise successful extension, exact parent/reference reuse,
+unchanged parent bytes, expected new step counts, nine-row PNG/PDF analysis,
+duplicate/incompatible step rejection and source mismatch rejection.
+Local full suite: 107 passed (31.43 s); EIT-WSL focused workflow: 3 passed
+(19.73 s). Local focused mypy: 28 files clean; remote solver/extension/analysis:
+27 files clean. The nine-curve small-case PNG was visually inspected. These
+checks validate the extension workflow, not completed 256² added results.
+
+Persistent tmux session `mrsav-extend-20261004T002008` launched the actual
+extension at `runs/kolmogorov_adaptive/adaptive_fixed/20261004T002506-abe19ed9/campaign.json`.
+One bounded startup check confirmed the source matched, campaign running,
+added steps, reused reference count, and first fixed-0.01 step at t=0.01.
+Logs/source snapshot/launch record are under
+`runs/kolmogorov_adaptive/adaptive_fixed/launches/extend-20261004T002008/`.
+The program adds 9 computations and automatically invokes the current
+read-only analyzer after saving all new results; REPORT identifies the
+updated figure directory. Estimated extra cost is about 3–4 hours based
+on prior fixed-step timings. At handoff the new data are not complete;
+there is no agent monitoring, scheduled follow-up or checkpoint continuation.
+
+
+## 2026-10-03 MAC MINI k=4 到5的0.1间隔补算
+
+用户要求在原有三阶无滑移受迫收敛表中插入k=4.1,4.2,...,4.9。复用原批次20261002T021840-3e1cd42e的18个成员（包括失败前缀）以及普通SDIRK3的k=10/11参考；只新增两格式各9档，共18次计算。MAC MINI源码及完整依赖、平台、线程来源与原批次一致，代码哈希仍为079ce539f994e4d4741e71e2c6b1d7ec0a419c0104031208ec123bcf930f09c9；本机其他自适应工作的改动不向MAC MINI同步。
+
+独立任务目录runs/no_slip_reference_convergence/extensions/20261003T144716-521f7bef保存配置、补算脚本、脚本校验值、启动信息及日志。编排脚本只调用既有schedule/run_experiment/analyze_batch，不改求解器、物理参数或原始记录；补算前核验全部旧成员与参考记录的校验和、来源、完整配置和实际步长序列。k=4与5端点不重算；新组合批次包含18档×2格式，结束自动生成CSV、L2/H1表和PDF。相邻rate使用log(error_previous/error_current)/log(tau_previous/tau_current)，在0.1间隔内步长比为2^0.1，观测区间末步继续缩短以命中0.5/1/2/4。
+
+两端32²真实运行/保存/读取/扩展/分析短检查通过：只计算两个新增小数档位成员，旧成员、参考与父批次文件哈希均不变，组合表格和PDF生成成功，独立步长比计算核验了输出rate，重复档位与混合源码均被拒绝。两端聚焦tests/test_no_slip_reference_convergence.py及tests/test_lattice_convergence.py共5项通过；独立补算脚本mypy通过。本次没有修改数值公式，未重复运行完整求解器测试集。
+
+验证边界：正式新增档位尚在后台计算，剧烈误差下降区的rate可能反映稳定性或标量修正过渡，不能据此直接认定为渐近收敛阶。原有T=2/4未通过5%参考敏感性检查的限制仍保留，不因插入中间档位而删除或改写。失败运行保留有效前缀，缺失快照仍记NaN。
+
+
+### 2026-10-04 小数k补算完成核验
+
+组合批次20261003T145610-778b4b07于北京时间2026-10-03 23:44:07结束，耗时约47.97分钟。新增18个成员全部最终化：12个完成、6个失败；普通SDIRK3的k=4.1–4.6失败，4.7–4.9完成，SDIRK3-mr-ccSAV新增9档均完成。报告reports/no_slip_reference_convergence/20261003T154407-3e0a50bb含原整数档和新增小数档的36个成员、144行CSV及两种范数LaTeX/PDF表，取回本机的10个原始报告文件哈希与远程一致。
+
+独立从HDF5按MAC面内自由速度及网格面积复算T=4的修正格式L2误差：k=4.6为0.8773011969663289，k=4.7为0.004303860505745799；两值与CSV一致。最大阶段|r|分别0.6433339786361695和0.0003814871427407693，也与原始阶段记录一致。该跳变是本参数组的数值观察，不能直接视为渐近阶；原有T=2/4的5%参考敏感性检查未过，批次状态仍为reference_unresolved。
+
+## 2026-10-04 MAC MINI SDIRK2整数档补算启动
+
+用户确认补算SDIRK2与SDIRK2-mr-ccSAV的k=0,...,8，并与现有三阶整数档统一比较。MAC MINI源码和完整运行环境与原批次一致（079ce539f994e4d4741e71e2c6b1d7ec0a419c0104031208ec123bcf930f09c9），18个旧三阶成员及k=10/11共同参考的配置、步长序列和文件校验值均通过复用门槛。独立目录runs/no_slip_reference_convergence/extensions/20261004T004929-sdirk2-integers记录补算、分析和启动脚本身份；未修改数值模块，未同步本机其他自适应改动。
+
+32²真实短流程通过：只新增18个二阶调用，18个旧成员和2个参考文件字节不变，36成员、3个短时节点的108行误差正确保存；从HDF5独立复算二阶最细档L2/H1误差，并核验所有有效相邻log2阶数；混合源码被拒绝。5项聚焦测试通过，补算和分析两文件mypy通过。四方法并列表格PDF的3个短检查页面已渲染并检查，曲线及标记版面已检查。该短检查仅验证工作流，不代表256²正式误差或阶数；没有数值公式更改，未重复完整求解器测试。
+
+正式组合批次20261004T010028-cc0c23a8于北京时间2026-10-04 09:00:27启动。09:01单次启动核验确认后台PID43382的父进程为1、SSH退出后仍运行，新增5个成员已终态（2完成、3失败），正在计算二阶修正格式k=2。程序最多新增40880步，结束自动分析并保存四方法CSV、LaTeX片段、PDF表及T=4双范数图。日志和launch/startup_snapshot文件提供状态来源；启动快照不会自动更新。
+
+验证边界：交接时完整18组补算和合并报告尚未完成；失败粗档及缺失观测保留状态，不填零。共同参考原有T=2/4的5%敏感性限制仍保留；突降的观测rate不能直接认定为渐近收敛阶。计算的最终状态与完整输出须在后续请求时从远端batch.json、analysis.json和four_methods_summary.json核验。
+
+### 2026-10-04 表格交付范围调整
+
+用户要求保留原表，只添加二阶两张表。独立append_tables.py只读原三阶扩展报告20261003T154407-3e0a50bb和本次新分析：直接保留原PDF页及两张原表的字节内容，追加SDIRK2/SDIRK2-mr-ccSAV的L2/H1对照表，接续表号3/4。每表沿用原布局和T=0.5/1/2/4四个时间组；原三阶表的已有小数档及rate保持不变。四方法图片保持单独输出，四方法宽表不作为交付内容。
+
+32²真实短检查验证旧报告全部文件字节不变、交付恰好新增2张表，原PDF副本和原LaTeX表副本均逐字节一致；追加脚本mypy通过，合并PDF已渲染检查。独立后台追加步骤PID43592的父进程为1，等待原数值进程最终化；未中断或重启模拟，未修改数值模块。正式交付是否完成及其目录须从append_result.json、append_analysis.json和append.log的FINAL核验；原参考敏感性限制继续保留。
+## 2026-10-04 MAC MINI SDIRK2 在 k=6 到7的加密扫描启动
+
+用户要求加密二阶格式的过渡区间，沿用此前0.1档间距，只补算 SDIRK2 / SDIRK2-mr-ccSAV 的 k=6.1,...,6.9，共18个成员；k=6、7与其余整数档不重算。复用已完成四方法整数批次20261004T010028-cc0c23a8的36个成员（含失败前缀）及普通SDIRK3 k=10/11参考。完整配置、实际步长序列、代码/环境、状态及文件校验值通过复用预检；MAC MINI代码身份仍为079ce539f994e4d4741e71e2c6b1d7ec0a419c0104031208ec123bcf930f09c9。本机其他数值工作的改动未向远程同步。
+
+独立任务 runs/no_slip_reference_convergence/extensions/20261004T024811-sdirk2-fractional 保存驱动与分析脚本。组合批次20261004T025542-3f97cb8f于北京时间10:55:41启动，10:56:34单次核验确认PID44234、父进程为1，正在计算SDIRK2 k=6.1；启动快照未有新增终态。正式最多新增66252步，实际耗时取决于失败档终止时间。数值模型、格式及原始记录不修改；各格式档位集合独立记录，三阶未计算的新档位不伪造。
+
+32²真实短流程通过：仅18个新增二阶调用，既有端点/参考/原三阶报告字节不变，二阶误差及0.1档实际步长比的相邻阶独立复算一致，重复端点与混合源码拒绝；四表PDF生成成功。独立驱动、后处理及追加脚本mypy通过，两项聚焦测试文件共5项通过；MAC MINI的XeLaTeX/fontspec绘图试验确认PDF实际嵌入Times New Roman。没有数值公式改动，未重复完整求解器测试集。
+
+正式计算结束后，程序从存储场生成新二阶L2/H1表，与原三阶两表及PDF页合并，原报告保留不覆盖；T=4四方法图保留三阶k=4到5加密点，加入二阶k=6到7新点，无放大子图、图例置底。失败档缺失误差保留NaN。最终batch.json的report及completion.json确认图表完成后才能报告完成；本条记录仅确认启动和短流程验证。既有T=2、4的5%参考敏感性限制继续核验并保留，突降区间的大rate不能直接解释为渐近收敛阶。
+
+## 2026-10-04 自适应末步严格到达终点
+
+仅修改 `integrate_adaptive` 的终点对齐：最后试步取 `end-current.t`，允许该步小于 `min_step`；不再因剩余时间属于舍入量级而提前结束。末步仍执行既有阶段求解、速度及可选辅助变量误差检验，通过后由模型重新构造时间恰为 `end=initial.t+T` 的状态，诊断、时间记录、终点快照及接受回调使用同一时间。普通步、内部严格输出节点的分割以及拒步后的最小步长门槛保持原规则；不强制接受误差超标的末步。
+
+回归覆盖四种格式分别配 I/PI 控制器，在3×3 MAC零解、非零起始时间1、T=0.0202、初步/最大步0.01、最小步0.001下均接受两步0.01及最后的终点余量，末步短于最小步长，末态保持精确零解且各终点时间严格相等；另外覆盖 `nextafter(0.02,+inf)` 的舍入级剩余时间，以及短于最小步长但误差超标的终点试步被拒绝并保留原状态。
+
+`uv run --locked --offline pytest -q tests/test_adaptivity.py tests/test_joint_adaptivity.py tests/test_tensor_stokes_adaptive.py`：34 passed；`uv run --locked --offline pytest -q`：117 passed（34.80 s）；`uv run --locked --offline mypy solver`：25个源文件通过。uv缓存设为 `/private/tmp/mac-audit-uv`。保留当前工作区已有的联合标量控制及实验改动，未修改固定步推进器、零尺度误差归一化、RK/SAV公式或线性求解容差。验证仅在本机进行，未同步远程主机或重跑既有生产批次；本次回归不支持新的长期稳定性或容差收敛结论。
+
+## 2026-10-04 Legendre 与 MAC 初步效率比较
+
+新增独立实验 `experiments/legendre_mac_benchmark`，不修改求解器。以矩形 1.3×0.8、nu=0.1、幅值0.1的光滑无滑移解析 Navier–Stokes 制造解比较现有 Legendre 稀疏 LU、MAC 稀疏 LU 和 MAC 张量 Schur-CG。主运行 `20261004T040637-142e5d6d`：MAC 16²/32²/64²/128²，Legendre 6/8/12/16/24/32 模态/方向；SDIRK3 与 SDIRK3-mr-ccSAV（gamma=1），固定及给定变步长各10步到 T=0.02，每组重复3次，共168个案例全部完成。线程环境设为1；保存真实配置、步长序列、源码/依赖/平台身份、各次计时、残差、末态、日志及校验值。导入、符号生成和 Numba 初次编译在计时外，初始化、体力预处理、首次 LU、推进器、阶段检查及诊断在总 CPU 时间内；误差计算、微计时、存储与分析在计时外。
+
+分析仅读取显式运行，核对全部登记的文件哈希，从保存场复算误差，并核对两种 MAC 后端。相对向量 L2 误差在共同物理 Gauss 网格上计算；MAC 使用包含零切向壁值的双线性面场重构，Legendre 直接求值。256到512节点/方向的误差积分最大相对变化0.002824（0.283%），全部通过2%门槛；MAC张量与直接末态最大相对差9.83e-14，所有案例最大阶段动量残差2.40e-12、连续性残差4.15e-12。弱连续性残差及物理散度另存，不能混同。
+
+主运行 SDIRK3 固定步 CPU 中位数（初始化+10步）：MAC直接32²为0.017057 s；MAC张量128²为0.306114 s；Legendre8模态为0.077065 s，误差分别5.783e-3、3.631e-4、3.094e-5。在已测分辨率内，达到1e-2误差门槛时MAC更省时，达到1e-3时Legendre约快3.97倍；这不是相同误差值或全部可选分辨率下的最优成本证明。给定变步长下对应1e-3门槛约快3.80倍。SAV格式对应约5.49倍、5.24倍。相近自由度下Legendre32模态耗时0.329938 s，MAC直接32²为0.017057 s，说明每未知量成本与精度收益必须分开。热对流微计时分别约4.058 ms、0.015 ms，现有谱路径反复生成节点与基函数；未实现缓存或新的谱线性后端。
+
+补充运行 `20261004T040954-95fc7574`、`20261004T040956-5ab5593d` 保持T=0.02，将步长减半、再减半，各12案例完成。Legendre16模态、固定步、两种三阶格式的速度误差约为2.031e-8、2.786e-9、3.515e-10，支持高模态平台主要受时间离散影响。这些单次补充未混入效率中位数。全部报告位于对应 `reports/legendre_mac_benchmark/<run-id>`，PNG已目视检查。
+
+聚焦测试 `tests/test_legendre_mac_benchmark.py`：2 passed，覆盖独立双线性重构、真实短运行/存储/读取/分析、MAC后端末态一致及损坏校验值拒绝；mypy对新实验与solver共27个源文件通过。没有改动数值求解公式，未作为发布重复完整测试集。验证限于本机macOS arm64、此短时光滑问题和当前实现；给定变步序列不是自适应控制器实验，没有拒步成本、峰值内存、压力误差、长时、高Re或非光滑边界的比较，也没有外推MAC未达到1e-4门槛的分辨率。
+
+
+### 2026-10-04 二阶加密扫描完成核验
+
+组合批次20261004T025542-3f97cb8f于北京时间12:42:35完成，耗时106分53秒；SDIRK2与SDIRK2-mr-ccSAV新增k=6.1,...,6.9全部18个成功。新报告20261004T044228-f5e5235c-appended包含144行二阶误差CSV、四表PDF和T=4四方法PNG/PDF/SVG，后处理均complete。本机副本的全部报告文件校验值与远程一致；原三阶PDF页和两张LaTeX表逐字节不变。四表PDF两页和新图已渲染并检查，绘图记录确认Times New Roman嵌入、曲线数据核验通过。原整数失败档保留；本次新增档位均成功。参考敏感性T=0.5/1通过，T=2/4仍未通过5%，最细T=4的L2/H1比值仍为10.9%/17.5%；reference_unresolved代表此限制，计算已结束。
+## 2026-10-04 自适应六联图的 L2 嵌入差
+
+正式 adaptive_fixed 图的 (e) 改为接受步的未归一化速度嵌入差
+`||u_high-u_embedded||_h`。核对 EIT-WSL 原 23ec5c78 源码快照，
+MAC 动能为 `K=0.5*inner_h(u,u)`，因此用保存的 `error_u` 乘原容差尺度
+`atol_velocity+rtol_velocity*max(sqrt(2*K_old),sqrt(2*K_new))` 恢复。
+分析校验接受试步与动能节点对应关系及数值有效性，另存恢复数组和尺度。
+拒绝试步缺少试算动能，固定步记录缺少嵌入差，故 (e) 只画接受自适应步；
+它不是相对参考解误差。其余图、原始运行和参考核验门槛不变。
+包含拒绝试步的已知向量范数恢复检查及运行/保存/分析流程共4项通过；
+分析文件 mypy 通过。不重新运行正式积分。
+
+### 拒绝试步嵌入差补算
+
+用户授权后，以原源码/环境重放正式代表运行 `adaptive-repeat-2`：
+诊断运行 `runs/kolmogorov_adaptive/rejected_replay/20261004T054746-50f2ada0`
+在15个快照区间共重放203次试步，35个拒绝点全部恢复，耗时56.62秒。
+逐步比较的开始时间、Eu、Er、联合指标、接受节点动能和r的最大差均为0；
+原始结果SHA256保持不变。拒绝候选终点位于1.098223到2.654812，
+未归一化嵌入差位于3.826447e-5到6.772614e-5，35次均由速度指标主导。
+补算耗时单独记录，不进入原积分CPU时间。绘图只读取显式诊断目录，核对
+原成员身份、源码、配置及补算校验和；红色×放在候选终点t+tau。
+聚焦测试5项通过（包含原运行保存、补算、独立MAC范数核验、拒绝点绘图和
+损坏来源拒绝）；两份补算/分析文件mypy通过。固定步嵌入差仍未补算。
+
+### 相对 L2 嵌入差展示
+
+后续按用户要求，(e) 改为 `||u_trial-u_embedded||_h/||u_trial||_h`，
+接受与拒绝试步使用各自候选终点速度范数作分母；不使用容差尺度作分母。
+接受范数由保存的动能恢复；诊断运行
+`runs/kolmogorov_adaptive/rejected_replay/20261004T061732-23bf45ab`
+再次重放同一203次试步，补存35个拒绝候选速度范数，原指标/动能/r比较差
+仍全部为0，已有拒绝嵌入差数组逐元素不变。相对差与原始差均单独保留，
+5项聚焦测试及两文件mypy通过，包含独立向量L2范数比值核验。
+原实验参数、轨迹、积分计时、参考核验及(f)的数学L2标签不变。
+
+### rtol_u=1e-6 临时六联图
+
+按用户要求，在细参考补算运行期间生成显式临时报告
+`reports/kolmogorov_adaptive/adaptive_fixed/20261004T121331-4e9812cd`。
+(a)到(e)读取已完成三次自适应和原固定对照；(e)代表运行为新批次repeat-1，
+通过原源码重放184次试步补齐34个拒绝点。(f)全部使用已完成的1e-4参考，
+同真实保存时刻比较，不插值、不冒充细参考。图题明确PRELIMINARY，状态为
+`preliminary_reference_unverified`，参考细化差缺失且核验标志全部为false。
+单参考临时分析的聚焦工作流测试通过，分析文件mypy通过，PNG已目视检查；
+当前正式参考补算和冻结的最终绘图流程不受影响。此报告不是最终误差结论。
+
+
+## 2026-10-04 两组0.05间距中点扫描启动
+
+用户要求细分三阶k=4.6到4.7、二阶k=6到6.1，新增SDIRK3及SDIRK3-mr-ccSAV的4.65、SDIRK2及SDIRK2-mr-ccSAV的6.05，共4个调用。独立目录runs/no_slip_reference_convergence/extensions/20261004T052705-midpoints校验并复用两个已结束家族批次的72个旧成员（含失败前缀）和共同SDIRK3 k=10/11参考；模型、初值、网格、参数、求解器及MAC MINI代码身份079ce539f994e4d4741e71e2c6b1d7ec0a419c0104031208ec123bcf930f09c9不变。各家族最终各19档，组合76个成员；未计算的跨家族档位不伪造。原始记录和已有报告保存不覆盖，新四表沿用表格布局，插入中点并按实际2^0.05步长比重算相邻阶。
+
+32²真实工作流通过：仅4个新增调用，端点和参考复用，全部旧运行/批次/报告文件字节不变；四个新成员的MAC L2/H1范数独立复算，0.05相邻步长比和观测阶一致，分家族表格及绘图读取档位正确，拒绝重复端点和混合来源。独立驱动及后处理mypy通过，既有两个聚焦测试文件共5项通过。此次没有修改数值公式，未重跑全测试集。
+
+于北京时间13:33:54通过nohup+caffeinate单线程后台启动，PID45239；组合批次20261004T053355-ebc8b73a。13:34:53单次核验确认父进程为1、正在计算SDIRK3 k=4.65，新增终态0/4，最多新增7320步。后续新四表PDF与T=4四方法图由程序依序生成，以最终日志FINAL、analysis.json和completion.json确认完成；此条仅确认启动和短检查。T=2/4既有5%参考敏感性限制保留，过渡区观测rate不直接代表渐近收敛阶。
+
+
+### 2026-10-04 中点补算完成核验
+
+组合批次20261004T053355-ebc8b73a于北京时间13:49:11结束，耗时15分17秒。新增4个终态：SDIRK3 k=4.65失败（Invalid Stokes RHS，T=4误差NaN），SDIRK3-mr-ccSAV k=4.65及两个二阶格式k=6.05完成。新报告20261004T054907-1c8a66ff含304行误差、四表PDF和T=4四方法PNG/PDF/SVG，analysis及completion均complete。全部取回报告文件校验值与远程一致；本机存在的先前受保护报告文件校验值保持不变。两页四表PDF与新图已视觉检查，中点分别出现在所属家族的两张表中，Times New Roman嵌入及曲线数据核验记录通过。现有T=2/4的5%最细参考敏感性检验仍未过，T=4 L2/H1比值仍为10.9%/17.5%；批次reference_unresolved不表示仍运行。过渡区大rate仅为观测量，不代表渐近收敛阶。
+
+## 2026-10-04 64²低频与衰减高频制造解稳定性探针
+
+用户要求将24²稳定性展示提高到至少64²。在单位正方形64×64 MAC网格上，
+以顶点流函数 `phi_L=sin(pi*x)^2*sin(pi*y)^2`、
+`phi_H=phi_L*sin(6*pi*x)*sin(6*pi*y)` 的离散旋度构造速度，
+分别归一化为离散L2范数为1的 `W_L,h`、`W_H,h`。
+两者离散内积约为−4.77e−18。制造解为
+`u_*,h(t)=4*W_L,h+0.12*exp(-4*t)*W_H,h`，压力取0；
+初始高频与低频模态的范数比为3%。使用离散算子一致的外力
+`f_h=u_*,h'+nu*K_h*u_*,h+N_h(u_*,h)`，因此参考是明确已知的
+半离散制造解，不需要未核验的细步数值参考。
+制造解在t=0、0.71、30的代入残差最大1.29e−12，散度最大1.14e−13，
+对流能量内积绝对值最大2.45e−15。
+
+选定参数 `nu=0.004, tau=0.003875, gamma=0.04, r(0)=0, T=30`，
+采用现有IMEX-SDIRK3及SDIRK3-mr-ccSAV实现，未改求解公式。
+每个接受节点均保存误差、速度范数、r、stage r/G、散度及残差；
+范数超过初始范数100倍时停止原格式并保存有限前缀，停止后不绘制延长线。
+相对误差分母为当前时刻精确速度的离散L2范数，范数图分母为初始速度范数。
+
+| 步长 | 原IMEX-SDIRK3 | mr-ccSAV全程最大相对L2误差 | mr-ccSAV终点误差 |
+| --- | --- | --- | --- |
+| 0.00385 | 完成T=30，最大误差7.43e−8 | 未运行 | 未运行 |
+| 0.003875 | t=18.66975超过100倍阈值 | 0.608766% | 0.0332003% |
+| 0.0038775 | t=14.50185超过100倍阈值 | 0.736011% | 0.0270908% |
+
+主例两种方法在t≤5的最大相对误差均约7.58e−8。
+mr-ccSAV误差峰值在t=18.4605；完整运行到T=30，范数比位于
+[0.9995503035, 1]。其最大动量归一化残差2.30e−12，最大绝对散度2.63e−11。
+原格式主例最后有限节点范数比152.824，最大绝对散度2.05e−9；
+邻近大步长原格式末步过冲至约1.63e7，绝对散度约1.34e−4。
+每次Stokes解仍执行已有的完整散度及速度尺度相关容差检查；
+爆破末步的绝对散度不能与正常幅值解直接混作同一绝对精度结论。
+
+此次成功例同时改变了幅值、黏性、衰减率及时间尺度，不能表述为24²原参数的单纯网格加密。
+保留原幅值1、nu=0.001、beta=1的64²试验，在tau=0.0155、T=120、gamma=0.01时，
+原格式t=74.679停止，SAV虽完成但全程最大误差30.2642%，不满足小误差目标。
+单独扫描gamma=0.001、0.1、1、10也未解决该峰值。
+成功例采用 `u_scaled(t)=4*u_base(4*t)`、`nu_scaled=4*nu_base`、
+`tau_scaled=tau_base/4`、`T_scaled=T_base/4`、`gamma_scaled=4*gamma_base`。
+逐元素验证两组原IMEX-SDIRK3归一化误差及范数历史完全相等，时间节点相差因子4；
+该缩放并不保证SAV历史相等，SAV在这组幅值下的表现为本次数值验证。
+
+主运行 `runs/low_high_stability_probe/20261004T080538558295`；
+小步长对照为 `20261004T080812216859`，邻近大步长为 `20261004T080812216934`。
+原幅值试验及gamma扫描目录、全部11个成员的输入SHA256与结果汇总保存在
+`reports/low_high_stability_probe/20261004T080538558295/validation.json`。
+各运行包含驱动、solver、uv.lock源码快照及日志。
+独立后处理从流函数重构MAC向量，重新核验11个成员末态的相对误差与范数比，
+确认相同数值源码身份、保存历史与摘要一致。绘图仅读显式运行目录，逐元素核对曲线，
+不平滑、不重算积分；两图输出PNG/PDF/SVG，检查Times New Roman嵌入并视觉检查。
+相对误差对数轴仅略去零初始误差。
+
+聚焦测试 `tests/test_sdirk3.py tests/test_manufactured_convergence.py` 共7项通过；
+solver的29个源文件及两份绘图/核验文件mypy通过。未作发布，未重跑完整测试集。
+验证限于此固定网格半离散制造解及接近原格式稳定边界的参数，
+不构成连续PDE的空间收敛、普遍稳定性定理或CPU效率比较。
+# 2026-10-05 H-valued forcing: integer convergence campaign preparation
+
+The new explicit `clamped_streamfunction` force profile is
+`((1-cos(x))*sin(y), -sin(x)*(1-cos(y)))` on `(0,2*pi)^2`, amplitude one.
+Analytic MAC face sampling preserves the continuous force without normalization
+or an added projection. Continuous divergence and full zero trace imply `f in V`
+and hence `f in H`; on the square mesh its sampled divergence also cancels to
+roundoff. Exact sampled cancellation is not claimed on unequal mesh spacings.
+The older force profile and configurations retain their behavior.
+
+Focused local and MAC MINI checks: seven tests across
+`test_h_force_convergence.py`, `test_lattice_convergence.py`, and
+`test_no_slip_reference_convergence.py`; two-file mypy passed. The new-force
+32² public run/load/analyze campaign completed eight trials and two references,
+generated four tables in a PDF, and exported the figure with embedded Times New
+Roman and LaTeX math. Preview labels are read from the saved configuration.
+Four 256² pilots reached `T=0.001`, two steps each; maximum stage divergence
+was below `5.9e-11`. These short checks establish the force/config/storage/report
+path, not accuracy or stability through `T=4`.
+
+The remote numerical baseline was `079ce539f994e4d4741e71e2c6b1d7ec0a419c0104031208ec123bcf930f09c9`.
+Only force selection/sampling were changed; solver files, lock/environment files,
+and existing reports were checksum-protected (137 files). The new remote source
+is `fb5d01b8468e46ce721936cde2d2945ef96945617f69f0aa48cece5b66d998a8`.
+Campaign package: `runs/no_slip_reference_convergence/extensions/20261005T030309-h-force-integers`.
+Production has 36 integer-k trials and new common SDIRK3 references `k=10,11`;
+reference sensitivity must be inspected after completion. No fractional levels
+are selected from the previous-force experiment.
+
+## 2026-10-05 Legendre 优化验收
+
+默认直接路径完成有界求积缓存、精确一维闭式、张量质量求解、共享算子与
+重构、固定 lid 采样缓存、多右端 SuperLU 和逐列完整检查。新增可选
+`stokes_backend="tensor"`，采用一维广义特征分解、真实 Schur-CG 和可分离
+质量 Schur/压力质量预条件器；默认仍为 direct。空间、求积、对流、lifting、
+六种时间格式和压力定义保持原约定，其他三个模型路径未改。
+
+- 完整测试：314 passed，60.59 s。包括矩形域解析重构/多项式投影、精确一维
+  矩阵符号验证、已知质量载荷与耦合速度/压力/连续性载荷、批量最后一列错误
+  检查、全部六格式的固定 lifting、四种 SDIRK × I/PI 的实际拒步及严格终点。
+- `mypy solver/spectral experiments/legendre_optimization`：11 源文件通过。
+  全项目检查113文件仍有三个 Kolmogorov 脚本的六项既有错误；不声明全项目
+  mypy 通过。
+- 第一轮正式记录：`runs/legendre_optimization/20261005T052848-aeb8c268`，
+  报告同号。8/16/32模态 × 六格式 × 固定/给定变步长 × 两版 × 三次重复，
+  216案例全部完成。当前谱源码与记录中的优化源码逐文件校验一致。
+- 第二轮正式记录：`runs/legendre_optimization/20261005T053105-e9d345fc`，
+  报告同号。8/32/64模态比较优化 direct 与 tensor，其他矩阵维度同上，216
+  案例全部完成；当前谱源码同样匹配保存快照。两轮108对成员均通过数值等价
+  和256/512点物理误差求积敏感性检查。
+
+第一轮最大速度物理L2相对差 `1.70e-15`、阶段压力物理L2绝对差 `1.09e-14`、
+阶段 r 绝对差 `5.59e-21`；第二轮对应 `2.57e-13`、`2.67e-13`、`1.96e-20`。
+时间节点及根数一致，根候选和诊断也通过相应门槛。阶段压力既保存绝对差也保存
+原始相对差：第一轮相对差最大 `4.49e-10`，其小分母为接近零的增量乘子。
+版本等价采用 `||delta p||_L2 <= 1e-12 + 1e-10 ||p_baseline||_L2`；这是
+舍入尺度的版本检查，不改变方程残差门槛，也不是终点物理压力精度验证。
+早期记录 `20261005T051357-4a9118c8` 保留原分析中纯相对压力检查未通过的结果；不作为
+正式验收或当前完整源码身份结果。
+
+同一矩形光滑NS制造解，nu=0.1、T=0.02、10步、gamma=1，单线程交错三次重复，
+初始化加完整推进的CPU中位数：
+
+|32模态|原实现/ms|优化 direct/ms|加速|
+|---|---:|---:|---:|
+|SDIRK3 固定|331.77|26.86|12.35|
+|SDIRK3 给定变步长|376.68|71.40|5.28|
+|SDIRK3-mr-ccSAV 固定|426.03|45.11|9.45|
+|SDIRK3-mr-ccSAV 给定变步长|474.13|90.29|5.25|
+
+全部第一轮测量配置的总CPU加速为2.77–12.35倍。第二轮64模态给定变步长：
+SDIRK3 优化 direct 379.14ms → tensor 140.98ms（2.69倍）；mr-ccSAV
+433.64ms → 264.54ms（1.64倍）。32模态的 mr-ccSAV 变步长 tensor 反而
+较慢，固定步长通常也优先 direct；不设置未经验证的自动后端切换阈值。
+
+64模态独立进程的 mr-ccSAV/给定变步长样本，whole-worker峰值RSS从
+289.19MB到162.20MB；结束时缓存的耦合LU与矩阵数组约56.37MB，在tensor
+路径中为零。tensor仍存有空间稀疏算子、一维特征基及工作数组，零耦合缓存
+不代表零模型内存。RSS包含解释器、导入、初始化、积分和热调用，非所有配置
+的峰值内存验证。各函数插桩计时另存，累计项不能相加充当主计时比例。
+
+效率结论限于本机、该光滑短时制造解、所扫描模态及步长范围。给定变步长不含
+控制器/拒步成本；自适应仅由含拒步的短测试验证，未做长时生产效率或高Re验证。
+弱连续性与物理散度分别保存；谱空间的弱约束不要求物理散度达到机器零。
+详细实现见 `docs/legendre-optimization.md`。
+
+优化后 MAC/Legendre 对照另存 `runs/legendre_mac_benchmark/20261005T053507-3daa7b53`，
+同号报告提供数据表。原配置的168案例全部完成；分析校验全部文件和重复成员，
+从保存末态复核共同512点物理误差，两种MAC后端末态最大相对差 `9.83e-14`。
+固定步长 SDIRK3、最终速度相对L2误差门槛1e-3时，扫描范围内最快MAC为
+128² tensor（310.47ms，误差3.63e-4），最快Legendre为8模态 direct
+（10.75ms，误差3.09e-5）。在门槛1e-2下，对应MAC32² direct 16.84ms、
+Legendre6模态10.04ms。实际误差不同，这些比较只是在扫描配置内满足同一
+误差门槛的总成本，不能解释成严格相同误差或全局最优；未生成新的学术图件。
+
+## 2026-10-05 N=128 编译后单步效率
+
+独立入口 `experiments/step_efficiency` 比较当前7个串行空间/线性后端与6种
+时间格式，未改动求解器算法。正式运行与报告同号
+`20261005T071803-3a9969bf`，252案例（7后端 × 6格式 × 固定/给定变步长 ×
+3重复）全部完成。当前代码哈希及依赖版本与运行来源复核一致。
+
+本机 macOS arm64、六个数值库线程环境均为1，域1.3×0.8、nu=0.1、gamma=1、
+MMS amplitude=0.1、名义dt=0.002。每例预热2步后重新从t=0开始测5步，
+主指标为三次重复的每步CPU均值的中位数。计入完整时间格式、强制项组合、
+非线性、阶段动量/连续性检查、状态/压力输出转换与一次原生模型诊断；
+导入、JIT加载/编译、模型/体力初始化、初值投影、预热及存储均在主计时外。
+报告同时保留不含诊断的单步CPU、诊断CPU、完整单步wall和三次范围。
+
+固定步长计时期间新的分解数为0；变步长序列每例5个互异新系数，直接及
+Channel FFT后端的新分解数均为5，未提前缓存未来系数。两序列总时长均0.01，
+给定变步长范围约0.001525–0.002504，不包含控制器及拒步。
+
+|SDIRK3 后端|固定/ms每步|给定变步长/ms每步|
+|---|---:|---:|
+|MAC direct|19.783|295.491|
+|MAC tensor|28.583|28.872|
+|Legendre direct|32.505|260.273|
+|Legendre tensor|41.937|41.659|
+|Channel direct|27.243|575.494|
+|Channel FFT|8.651|33.192|
+|Fourier Leray|7.211|7.117|
+
+分析校验全部配置/索引/场文件校验和、重复完整性、时刻及分解计数；同一
+离散的108对后端保存末态（速度数组/系数、最后步阶段压力、阶段r）全部通过
+`||delta a||_2 <= 1e-10+1e-8||a_direct||_2` 的一致性门槛。最大速度分量
+数组/系数欧氏范数相对差1.39e-11；阶段压力绝对差8.34e-11，阶段r绝对差
+5.35e-19。最大阶段动量残差7.46e-12、代数连续性残差1.11e-11、物理散度
+1.11e-9（物理散度与弱约束分别保留，后端自己的完整检查保持开启）。
+
+新增代表工作流测试 `tests/test_step_efficiency.py`：7后端的一阶mrSAV小网格
+运行、冷热分解计数、独立解析Fourier末态检查、只读分析与损坏文件拒绝。
+focused测试1 passed；新入口3个Python源文件mypy通过。本次没有数值算法
+修改，未重复此前的314例全套发布检查。
+
+限制：MAC/Channel的N为单元数，Fourier为点数且严格2/3过滤后保留85×85个
+完整波向量，Legendre为模态数（最高多项式次数129，对流/模型诊断使用194×194
+Gauss点）。模型族之间边界与制造解不同，不能把表解释为同精度/同问题排序。
+迭代次数依赖参数与右端，此处只验证光滑短时解的成本；三次计时范围最大跨度
+约中位数的24.9%，小差异不构成稳定的速度排名。早期14例SDIRK3预跑
+`20261005T071310-98ca6982` 单独保留，不替代正式结果。
+
+## 2026-10-10 顶盖方腔启动动画
+
+新增独立 `experiments/cavity/animate.py` 只读渲染入口及
+`configs/animation.json` 展示配置；现有方腔模型、离散、时间格式、运行器和
+原始Re=100配置保持原实现。展示参数：单位方腔、顶盖U=1向右、其他三壁
+静止、nu=0.01（Re=100）、128² MAC、SDIRK2-mr-ccSAV、gamma=1、dt=0.01、
+由静止启动到t=20，每0.1保存一次速度，共201个真实快照。
+
+完整运行 `runs/cavity/20261010T043514-15bb061a-7b6ccf2d` 已接受2000步；
+数值时刻末值20.000000000000327，浮点累加差在快照等间距检查容差内。
+最大完整散度1.06e-11，最大阶段动量残差1.70e-12。终点投影半离散右端
+L2为1.82e-6，此量只作诊断，不据此新增稳态或Ghia数据验收结论。
+
+导出位于
+`reports/cavity_animation/20261010T043514-15bb061a-7b6ccf2d-20261010T043720-113711`。
+MP4为1360×740、H.264、20fps、201帧、10.05秒；GIF预览为960×522、151帧、
+约10.07秒，来源于同一MP4的15fps重采样。时钟显示真实物理时间，播放加速
+不改保存时刻。速度范围固定为[0,1]，内部顶点涡量范围固定为全片绝对值的
+98百分位，以避免顶角剪切掩盖主体流动；超出范围由色条端点标记。
+
+白色示踪粒子为后处理：MAC面双线性插值、移动顶壁/静止侧底壁、保存时刻
+间线性插值、RK2子步<=0.005、固定随机种子20261010。500粒子的本次轨迹
+边界裁剪次数为0。流线为每帧保存速度的瞬时离散流函数等值线，与物质轨迹
+分别绘制；没有计算染料PDE，也未给轨迹误差或插值收敛证明。
+
+运行和导出均完整，输入/输出校验和复核通过。pdffonts确认静态文字层嵌入
+TimesNewRomanPSMT与BoldMT，数学符号由LaTeX排版；动态时钟使用系统Times New
+Roman.ttf。人工查看了第0/100/200帧，确认静止初态、顺时针主涡、边界方向、
+固定色条、真实时钟及标题间距。FFprobe复核两种动画的编码、分辨率及帧数。
+新增2个代表测试覆盖独立Couette插值/移动壁、保存场/只读渲染、字体及损坏
+文件拒绝；与原顶盖独立虚拟点模板测试合跑3 passed。新增动画源文件mypy通过。
+这是启动过程可视化，不替代网格、时间、稳态或参考数据验证；没有新数值算法。
+
+## 2026-10-19 管道流与 Kolmogorov flow 动画
+
+分别交付两组MP4/GIF，汇总目录
+`reports/flow_animations/20261019T050938-b0c1aa09`。
+`collection.json` 保存原运行/动画目录、输入和输出校验和、帧数、实际时间区间
+及预览转换命令。汇总复制不更改原运行场和已有报告。两段MP4均201帧、20fps、
+10.05秒；预览GIF为720像素宽、10fps重采样，时钟仍显示各自物理时间。
+
+管道流复用并重新核验完整记录
+`runs/channel_ns/20261005T034000-fc169e10-7905a5b3` 及同号
+`reports/channel_animation`：6×2区域、192×64 MAC、nu=0.04、均匀流向驱动0.08、
+Poiseuille上叠加epsilon=0.15流函数扰动、SDIRK3、dt=0.01、T=8，每0.04保存
+一次。流向周期、上下壁面无滑移，显示速度/粒子、扰动涡量、平均剖面和扰动
+范数。最大记录散度2.20e-14；本次核验输入及全部原导出校验和、字体、帧数，
+人工查看0/100/200帧。原MP4分辨率1440×900，本次没有重算这组PDE。
+
+Kolmogorov新增独立 `experiments/periodic_ns/animate.py` 只读动画入口与
+`configs/animation.json` 展示配置，不改变求解器或原adaptive配置。域(0,2π)²、
+128² Fourier点、严格2/3频带、nu=0.02、f=(-sin(4y),0)、epsilon=0.1原确定性
+流函数初值，普通SDIRK3、dt=0.005、T=20、每0.1保存一次。完整运行
+`runs/periodic_ns/20261019T050759-247fd535-7a8c2e77` 已接受4000步并保存201帧。
+运行诊断最大散度4.76e-14，读取完整保存场后用未过滤FFT重建的最大散度
+9.49e-14；最大阶段动量残差1.11e-16，两种散度诊断分别保留而非混用。
+
+Kolmogorov导出目录
+`reports/periodic_animation/20261019T050759-247fd535-7a8c2e77-20261019T050845-479a1e`。
+MP4为1360×740、H.264，GIF为960×522、151帧、约10.07秒。人工查看0/100/200
+帧，核对初始扰动、涡旋演化、标题、固定色条及时间；ffprobe核对两个MP4的
+帧数、时长和分辨率。两组全部输出校验和及静态Times New Roman字体检查通过。
+
+周期后处理用谱微分求涡量，psi_hat=omega_hat/k²、零模取0，绘制时补平均速度
+对应的线性流函数。粒子采用保存场的线性时间插值、双周期双线性空间插值及
+不超过0.005的RK2子步，越过周期边界时断开尾迹，不画横贯全图的伪线段。
+它们是重建轨迹，不是染料PDE；涡量颜色使用全片绝对值99百分位固定截色。
+新增代表测试覆盖独立解析受迫剪切解/涡量/流函数、保证跨越两个周期方向的
+匀速粒子轨迹、只读导出和损坏文件拒绝。新周期及既有管道动画测试合跑
+4 passed，增强跨界运动检查后该用例另跑1 passed；新动画源文件mypy通过。
+本次不增加湍流、稳态、参考误差或网格/时间收敛结论，没有修改数值算法。
+
+## 2026-10-21 高雷诺数管道流近壁失稳动画
+
+复用已有、已完成的二维TS非线性记录
+`runs/channel_ns/20261005T041110-beecfb14-e6ab58d0`，本次没有重算PDE或特征值。
+Re=Umax*h/nu=30000，Umax=1、h=H/2=1、nu=1/30000，初始TS扰动的格心速度
+峰值为Umax的2.5%，alpha=0.8。96×192 MAC、普通SDIRK3、dt=0.05、T=400，
+401个等间距真实快照；边界仍是流向周期、上下无滑移。
+
+本次重读父研究的全部保存场并核验输入校验和，重新拟合原网格、半步长、
+128×256网格和Re=1000对照的小扰动增长；全部原2%资格门槛再次通过。
+高Re原网格拟合增长率0.00722073653，低Re对照-0.0510204397；半步长相对
+变化2.58e-7，网格特征值变化0.724%，细网格与保存的连续参照相差0.573%。
+T=400非线性记录的扰动L2幅值从0.0426437003增长到0.462036787，10.8348倍。
+这里的初始峰值比例和L2幅值增益是不同量，没有把末态峰值解释成27.1%。
+
+独立导出目录
+`reports/channel_instability_animation/20261021T073807-4bde709f` 中的
+`qualification.json` 保存此次只读复核及原研究/参考文件校验和。原全通道动画
+保持原文件和校验和；新导出保留上方全管道速度/粒子、右侧平均剖面/幅值曲线，
+将下方面板改为0<=y<=0.4（下壁20%，竖向5倍放大）。
+
+新增 `animate.render(..., near_wall=True, output_directory=...)` 及CLI
+`--near-wall --output`，默认布局/API继续可用。波随动坐标xi=x-ct的c来自原
+离散TS模态，为0.17458155；颜色是实验室系速度或扰动涡量，流线来自相对于
+c的瞬时速度。近壁负流函数从每帧极小值到0细分14层，避免原全高度层级漏掉
+涡核内闭合流线；这是等值线采样规则，不改变保存速度或扰动幅值。
+涡量色标固定为该近壁保存场全时间绝对值的99百分位，约±2.98322；原全场
+最大绝对值7.01555保留在元数据中，色条两端标示截色。
+
+新MP4为1440×900、401帧、20fps、20.05秒；GIF为960×600、301帧、约20.07秒。
+另有720像素宽10fps预览。人工查看0/200/400帧，核对闭合流线随扰动增长
+扩大、近壁范围/坐标、固定色标与时钟；pdffonts核验Times New Roman，
+输入/输出校验和及ffprobe参数复核通过。聚焦动画测试3 passed（含新增TS
+近壁导出、独立目录及保留原报告检查），动画源文件mypy通过。
+本次只改变后处理；短时失稳资格检查不等同于整个T=400非线性末态的网格/
+时间收敛认证。相对波速的闭合瞬时流线也不等同于已证明的物质俘获轨道。
+
+2026-10-05 provisional k=10 report: `reports/no_slip_reference_convergence/20261005T102403-30343770-k10-provisional` uses the completed common reference and all 36 integer trial records. It contains 144 CSV rows, four tables in a two-page landscape PDF, and T=4 PNG/PDF/SVG with verified Times New Roman. All 18 export checksums match remote/local. Independent full-face L2 sums and boundary-weighted MAC H1 differences verified 105 finite snapshot rows, 39 missing snapshots, and 176 finite rate entries; maximum relative norm difference was 2.8e-15. Stored run files were unchanged. `preliminary_reference_unverified` and pending k=11 sensitivity are explicit; no second reference was duplicated or invented. The active campaign/batch and numerical sources were not modified.
+
+2026-10-05 H-valued-force refinement queued after k=11: SDIRK3 families k=3..5 and SDIRK2 families k=5..6, spacing 0.1; 54 new trials, 36 verified integer trials and two references reused. Separate family grids and adjacent ratios are preserved. Short 32² checks and four-file mypy passed. No numerical source changes; earlier integer/provisional reports are checksum-protected. Package: `runs/no_slip_reference_convergence/extensions/20261005T103158-h-force-refinement`.
+
+Refinement started on MAC MINI at 2026-10-05 18:40:43 Asia/Shanghai, PID 54052, after both reference records completed. Parent reference checks pass L2 at all times, but H1 gap/min-error is 5.09% at T=2 and 12.21% at T=4, above the 5% gate. Refinement does not silently change the k=10 error baseline or the k=11 sensitivity reference. Preflight verified 54 new cases, 36 reused trials, two reused references and 90 combined members.
+
+2026-10-05 k=11 error reanalysis: `reports/no_slip_reference_convergence/20261005T142413-cec57910-k11-reference` reuses all 90 integer/fractional trials and takes the completed ordinary SDIRK3 k=11 fields as the error baseline. No solver reruns or numerical changes. Independent full-face L2 and boundary-weighted H1 sums verified 285 finite snapshot rows and 75 missing snapshots in 360 rows; 536 finite adjacent-level rates passed, with maximum relative norm discrepancy 2.31e-15. All 92 numerical inputs and 56 protected old report files remained unchanged; all 20 retrieved report-file hashes match. Four PDF pages and the T=4 figure were visually inspected, with Times New Roman verified in the figure. The k=3..4 nonmonotonicity persists. The k10-k11 comparison is retained as sensitivity evidence, not a finer-reference validation of k11; `finer_reference_unverified` remains explicit in metadata, captions and the figure. No k12 reference is available. One early rendering attempt lacked the TeX PATH and was recorded as failed; the completed derivative uses the established TeX/Homebrew paths.
+
+## 2026-10-23 Molenaar candidate cavity launch
+
+Independent `experiments/molenaar_cavity` streams fixed-step ordinary SDIRK3 runs, probe time series, full-velocity snapshots and per-interval maximum stage residual/full-divergence checks. Focused tests independently check the staggered curl of the source, tensor/direct one-step equivalence, and public run/save/read-only spectrum analysis with double-precision HDF5. Mypy checks the new experiment modules. Remote 128² T=1 smoke checks precede the long campaign; they do not establish long-time stability, grid convergence or paper reproduction. Forcing angular wavenumber 6*pi is supported by source figures, while the Fourier amplitude normalization and Qs=.01/.02 remain unverified. The long scan carries that status, includes two spin branches, and queues separate time/space checks at nu_prime=40/80. No unchanged solver mechanism or manuscript result is newly validated by this launch. Existing workflows and remote working-tree changes are preserved through a separate source snapshot.
+
+### 2026-10-23 user correction to SDIRK3-mr-ccSAV
+
+The ordinary-SDIRK3 Molenaar campaign v1 was stopped at the user's request; existing numerical files were preserved and its metadata marked interrupted. Separate v2 uses explicit scheme=sdirk3_mrsav, gamma=1, r0=0 with the same 24 cases from zero initial velocity. The experiment driver now carries the accepted scalar between steps and saves all per-step stage roots, root residuals, scalar residuals, and velocity residual/divergence diagnostics. Focused workflow coverage includes a nonzero-r initial condition to detect scalar resets and verify stage/final/snapshot scalar persistence, alongside the ordinary path. This does not validate the literature's unresolved forcing normalization or long-time reproduction.

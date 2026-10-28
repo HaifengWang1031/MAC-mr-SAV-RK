@@ -29,8 +29,10 @@ import numpy as np
 from numpy.typing import NDArray
 from ..core import Stage, State
 from ..model import SolveResult
-from . import assembly
 from .assembly import Space
+from .mass import TensorMass
+from .lifting import LidLifting
+from .quadrature import QuadraturePlan
 from .stokes import SpectralStokes
 
 Array = NDArray[np.float64]
@@ -47,7 +49,8 @@ class SpectralSolution:
 class SpectralModel:
     def __init__(self, space: Space, nu: float, *, force: Callable[[float], Array] | None = None,
                  tolerance: float = 1e-10, cache_size: int = 4, dealias: int = 8,
-                 lifting: Any = None) -> None:
+                 lifting: Any = None, stokes_backend: str = 'direct',
+                 krylov_tolerance: float = 1e-12, max_iterations: int = 200) -> None:
         if not np.isfinite(nu) or nu <= 0:
             raise ValueError('nu must be positive and finite')
         if dealias < 3:
@@ -55,15 +58,24 @@ class SpectralModel:
         self.space = space
         self.nu = nu
         self.dealias = dealias
-        self.mass = assembly.velocity_mass(space)
-        self.stiffness = assembly.velocity_stiffness(space)
-        self.divergence_x, self.divergence_y = assembly.divergence_blocks(space)
-        self.stokes = SpectralStokes(space, tolerance=tolerance, cache_size=cache_size)
-        self._mass_factorization: Any = None
+        self.stokes: SpectralStokes
+        if stokes_backend == 'direct':
+            self.stokes = SpectralStokes(space, tolerance=tolerance, cache_size=cache_size)
+        elif stokes_backend == 'tensor':
+            from .tensor_stokes import TensorStokes
+            self.stokes = TensorStokes(space, tolerance=tolerance, cache_size=cache_size,
+                                       krylov_tolerance=krylov_tolerance, max_iterations=max_iterations)
+        else:
+            raise ValueError('Unknown spectral Stokes backend')
+        self.mass, self.stiffness = self.stokes.mass, self.stokes.stiffness
+        self.divergence_x, self.divergence_y = self.stokes.divergence_x, self.stokes.divergence_y
+        self._quadrature = self.stokes.quadrature
+        self._mass_factorization: TensorMass | None = None
         # A nonzero wall value is carried by a known field whose loads are constant in
         # time, so they are assembled once and folded into every solve. See lifting.py.
         self.lifting = lifting
         self._lifting = lifting.loads() if lifting is not None else None
+        self._lid_samples: tuple[QuadraturePlan, Space, Array, tuple[Array, ...]] | None = None
         self.force: Callable[[float], Array] = force if force is not None else lambda t: self.zero_velocity()
 
     @property
@@ -175,9 +187,8 @@ class SpectralModel:
         smooth test field is a 30% error rather than a roundoff one.
         """
         if self._mass_factorization is None:
-            from scipy.sparse.linalg import splu
-            self._mass_factorization = splu(self.mass.tocsc())
-        return self._mass_factorization.solve(np.asarray(load).reshape(-1))
+            self._mass_factorization = TensorMass(self.space)
+        return self._mass_factorization.solve(load)
 
     def project(self, function: Callable[[Array, Array], Array], extra: int = 3) -> Array:
         """Coefficients of a field given analytically, i.e. the load solved against the mass.
@@ -185,10 +196,38 @@ class SpectralModel:
         This is how a forcing or an initial condition is turned into the representation the
         schemes use; `Space.load` alone would return the weak right-hand side instead.
         """
-        return self._mass_solve(self.space.load(function, extra=extra))
+        plan = self._quadrature.get(extra)
+        x, y = np.meshgrid(plan.x, plan.y)
+        return self._mass_solve(plan.project(function(x, y)))
 
     def nonlinear(self, velocity: Array) -> Array:
         return self.nonlinear_with_lifting(velocity)[0]
+
+    def _lifting_fields(self, plan: QuadraturePlan) -> tuple[Array, ...]:
+        """Cache only the built-in fixed lid; custom lifting calls retain their semantics."""
+        if type(self.lifting) is LidLifting:
+            cached = self._lid_samples
+            if cached is None or cached[0] is not plan or cached[1] != self.lifting.space \
+                    or not np.array_equal(cached[2], self.lifting.coefficients):
+                gu, gux, guy, _ = self.lifting.samples(plan.x, plan.y)
+                zero = np.zeros_like(gu)
+                fields = (gu, zero, gux, guy, zero, zero)
+                for field in fields:
+                    field.flags.writeable = False
+                cached = (plan, self.lifting.space, self.lifting.coefficients.copy(), fields)
+                self._lid_samples = cached
+            return cached[3]
+        return (*self.lifting.velocity(plan.x, plan.y),
+                *self.lifting.derivatives(plan.x, plan.y))
+
+    def _sample_velocity(self, velocity: Array, plan: QuadraturePlan) -> tuple[Array, ...]:
+        coefficients = np.asarray(velocity).reshape(2, self.space.size, self.space.size)
+        u, ux, uy = plan.sample(coefficients[0])
+        v, vx, vy = plan.sample(coefficients[1])
+        fields: tuple[Array, ...] = (u, v, ux, uy, vx, vy)
+        if self.lifting is not None:
+            fields = tuple(field+known for field, known in zip(fields, self._lifting_fields(plan)))
+        return fields
 
     def nonlinear_with_lifting(self, velocity: Array) -> tuple[Array, float]:
         """Return N(w) and b(w+g,w+g,g) for a fixed lifting g.
@@ -197,50 +236,32 @@ class SpectralModel:
         integrated directly against g, not against its homogeneous-space projection.
         Both use the same quadrature, so <N(w),w> + lifting_work cancels algebraically.
         """
-        space, modes = self.space, self.modes
-        size = space.size
-        nodes_x, _, nodes_y, _ = space.nodes(extra=self.quadrature_extra)
-        values_x, values_y = space.velocity_values(nodes_x, nodes_y)
-        derivative_x, derivative_y = space.velocity_derivatives(nodes_x, nodes_y)
-        coefficients_x = np.asarray(velocity)[:modes].reshape(size, size)
-        coefficients_y = np.asarray(velocity)[modes:].reshape(size, size)
-        u = space.evaluate(coefficients_x, nodes_x, nodes_y)
-        v = space.evaluate(coefficients_y, nodes_x, nodes_y)
-        du_dx = values_y.T @ coefficients_x.T @ derivative_x
-        du_dy = derivative_y.T @ coefficients_x.T @ values_x
-        dv_dx = values_y.T @ coefficients_y.T @ derivative_x
-        dv_dy = derivative_y.T @ coefficients_y.T @ values_x
-        if self.lifting is not None:
-            g_u, g_v = self.lifting.velocity(nodes_x, nodes_y)
-            dg_u_x, dg_u_y, dg_v_x, dg_v_y = self.lifting.derivatives(nodes_x, nodes_y)
-            u, v = u + g_u, v + g_v
-            du_dx, du_dy = du_dx + dg_u_x, du_dy + dg_u_y
-            dv_dx, dv_dy = dv_dx + dg_v_x, dv_dy + dg_v_y
+        plan = self._quadrature.get(self.quadrature_extra)
+        u, v, du_dx, du_dy, dv_dx, dv_dy = self._sample_velocity(velocity, plan)
+        advection_u, advection_v = u*du_dx+v*du_dy, u*dv_dx+v*dv_dy
+        flux_uv = u*v
         # Assemble half of ((u.grad)u,test) - ((u.grad)test,u).
-        load_u = .5 * (space.project(u * du_dx + v * du_dy, extra=self.quadrature_extra)
-                       - space.stiffness_load(u * u, v * u))
-        load_v = .5 * (space.project(u * dv_dx + v * dv_dy, extra=self.quadrature_extra)
-                       - space.stiffness_load(u * v, v * v))
+        load_u = .5 * (plan.project(advection_u) - plan.stiffness_load(u*u, flux_uv))
+        load_v = .5 * (plan.project(advection_v) - plan.stiffness_load(flux_uv, v*v))
         lifting_work = 0.
         if self.lifting is not None:
-            _, weights_x, _, weights_y = space.nodes(extra=self.quadrature_extra)
-            integrand = ((u * du_dx + v * du_dy) * g_u
-                         + (u * dv_dx + v * dv_dy) * g_v
+            g_u, g_v, dg_u_x, dg_u_y, dg_v_x, dg_v_y = self._lifting_fields(plan)
+            integrand = (advection_u * g_u + advection_v * g_v
                          - (u * dg_u_x + v * dg_u_y) * u
                          - (u * dg_v_x + v * dg_v_y) * v)
-            lifting_work = .5 * float(np.sum(np.outer(weights_y, weights_x) * integrand))
+            lifting_work = .5 * float(np.sum(plan.weight * integrand))
         return np.concatenate([self._mass_solve(load_u), self._mass_solve(load_v)]), lifting_work
 
     def _total_divergence_inf(self, coefficients_x: Array, coefficients_y: Array) -> float:
         """max |div u| in physical space, including the lifting when there is one."""
-        space = self.space
-        nodes_x, _, nodes_y, _ = space.nodes(extra=self.quadrature_extra)
-        values_x, values_y = space.velocity_values(nodes_x, nodes_y)
-        derivative_x, derivative_y = space.velocity_derivatives(nodes_x, nodes_y)
-        divergence = (values_y.T @ coefficients_x.T @ derivative_x
-                      + derivative_y.T @ coefficients_y.T @ values_x)
+        plan = self._quadrature.get(self.quadrature_extra)
+        divergence = plan.divergence(coefficients_x, coefficients_y)
         if self.lifting is not None:
-            divergence = divergence + self.lifting.samples(nodes_x, nodes_y)[3]
+            if type(self.lifting) is LidLifting:
+                _, _, gux, _, _, gvy = self._lifting_fields(plan)
+                divergence = divergence + gux + gvy
+            else:
+                divergence = divergence + self.lifting.samples(plan.x, plan.y)[3]
         return float(np.max(np.abs(divergence)))
 
     def solve(self, rhs: Array, *, mass: float, viscosity: float, with_boundary_data: bool = True) -> SolveResult:
@@ -270,7 +291,7 @@ class SpectralModel:
                                 self._total_divergence_inf(solution.velocity_x, solution.velocity_y))
 
     def solve_columns(self, columns: Sequence[Array], *, mass: float, viscosity: float) -> list[SolveResult]:
-        """One solve per right-hand side; only the first one carries the boundary data.
+        """One batched solve; only the first right-hand side carries the boundary data.
 
         The schemes add the later columns to the first as corrections, so the inhomogeneous
         Dirichlet datum has to survive that combination. Solving every column with the same
@@ -279,8 +300,21 @@ class SpectralModel:
         then exactly the solution of the combined right-hand side. Factorizations are
         reused from the cache either way.
         """
-        return [self.solve(column, mass=mass, viscosity=viscosity, with_boundary_data=index == 0)
-                for index, column in enumerate(columns)]
+        if len(columns) == 0:
+            return []
+        loads_x = [self.mass @ np.asarray(column)[:self.modes] for column in columns]
+        loads_y = [self.mass @ np.asarray(column)[self.modes:] for column in columns]
+        continuity: list[Array | None] = [None]*len(columns)
+        if self._lifting is not None:
+            loads_x[0] -= viscosity*self._lifting[0].reshape(-1)
+            loads_y[0] -= viscosity*self._lifting[1].reshape(-1)
+            continuity[0] = -self._lifting[2].reshape(-1)
+        solutions = self.stokes.solve_columns(loads_x, loads_y, mass=mass, viscosity=viscosity,
+                                              continuities=continuity)
+        return [SpectralSolution(np.r_[s.velocity_x.reshape(-1), s.velocity_y.reshape(-1)],
+                                 s.pressure.reshape(-1), s.residual,
+                                 self._total_divergence_inf(s.velocity_x, s.velocity_y))
+                for s in solutions]
 
     def stage(self, pressure: Array, residual: float, divergence_inf: float, r: float = 0.,
               candidates: Sequence[float] = (), root_residuals: Sequence[float] = (),
@@ -295,26 +329,10 @@ class SpectralModel:
         this is a physical-space rewrite rather than an approximation; with a lifting it is
         also the only form that includes the boundary values.
         """
-        space, modes = self.space, self.modes
         velocity = self.vector(state)
-        nodes_x, weights_x, nodes_y, weights_y = space.nodes(extra=self.quadrature_extra)
-        values_x, values_y = space.velocity_values(nodes_x, nodes_y)
-        derivative_x, derivative_y = space.velocity_derivatives(nodes_x, nodes_y)
-        coefficients_x = np.asarray(velocity)[:modes].reshape(space.size, space.size)
-        coefficients_y = np.asarray(velocity)[modes:].reshape(space.size, space.size)
-        u = space.evaluate(coefficients_x, nodes_x, nodes_y)
-        v = space.evaluate(coefficients_y, nodes_x, nodes_y)
-        du_dx = values_y.T @ coefficients_x.T @ derivative_x
-        du_dy = derivative_y.T @ coefficients_x.T @ values_x
-        dv_dx = values_y.T @ coefficients_y.T @ derivative_x
-        dv_dy = derivative_y.T @ coefficients_y.T @ values_x
-        if self.lifting is not None:
-            g_u, g_v = self.lifting.velocity(nodes_x, nodes_y)
-            dg_u_x, dg_u_y, dg_v_x, dg_v_y = self.lifting.derivatives(nodes_x, nodes_y)
-            u, v = u + g_u, v + g_v
-            du_dx, du_dy = du_dx + dg_u_x, du_dy + dg_u_y
-            dv_dx, dv_dy = dv_dx + dg_v_x, dv_dy + dg_v_y
-        weight = np.outer(weights_y, weights_x)
+        plan = self._quadrature.get(self.quadrature_extra)
+        u, v, du_dx, du_dy, dv_dx, dv_dy = self._sample_velocity(velocity, plan)
+        weight = plan.weight
         kinetic = .5 * float(np.sum(weight * (u ** 2 + v ** 2)))
         return {'kinetic': kinetic, 'modified_energy': kinetic + .5 * (state.r - 1) ** 2,
                 'divergence_inf': float(np.max(np.abs(du_dx + dv_dy))),
@@ -324,6 +342,9 @@ class SpectralModel:
 
     def close(self) -> None:
         self.stokes.cache.clear()
+        self._quadrature.clear()
+        self._lid_samples = None
+        self._mass_factorization = None
 
 
 if TYPE_CHECKING:

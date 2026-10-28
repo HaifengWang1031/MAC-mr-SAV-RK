@@ -34,6 +34,28 @@ def test_smoke_configuration_builds_solvable_model():
     assert np.max(np.abs(model.apply_D(model.vector(initial)))) < 1e-12
 
 
+def test_experiment_factories_preserve_four_scheme_order_and_sav_damping():
+    from experiments.kolmogorov_adaptive import run, benchmark_stokes_backends
+    from solver.schemes.sdirk2 import SDIRK2
+    from solver.schemes.sdirk2_mrsav import SDIRK2MRSAV
+    from solver.schemes.sdirk3 import SDIRK3
+    from solver.schemes.sdirk3_mrsav import SDIRK3MRSAV
+    expected = {'sdirk2': SDIRK2, 'sdirk2_mrsav': SDIRK2MRSAV,
+                'sdirk3': SDIRK3, 'sdirk3_mrsav': SDIRK3MRSAV}
+    for entrypoint in (run, benchmark_stokes_backends):
+        assert tuple(entrypoint.SCHEMES) == tuple(expected)
+        for name, constructor in expected.items():
+            scheme = entrypoint.make_scheme(name, 1000.)
+            assert type(scheme) is constructor
+            if name.endswith('mrsav'):
+                assert scheme.gamma == 1000.
+                with pytest.raises(ValueError, match='gamma'):
+                    entrypoint.make_scheme(name, -1.)
+        for unsupported in ('imex_euler', 'imex_euler_mrsav', 'unknown'):
+            with pytest.raises(KeyError):
+                entrypoint.make_scheme(unsupported, 1.)
+
+
 def test_adaptive_error_uses_mac_velocity_l2():
     from pathlib import Path
     from solver.adaptivity import IController, integrate_adaptive

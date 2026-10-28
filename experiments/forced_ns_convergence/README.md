@@ -1,5 +1,13 @@
 # 带外源 NS：固定步长精度比较
 
+## 已保存结果
+
+- [收敛性结果专题](../convergence-results.md)：显式报告、观察阶及待核验证据。
+- [历史方腔 Notebook 与中文描述](studies/forced_time_convergence/README.md)：保存外力是 `f=(0,sin x)`，不是下文当前生产设置的 `m=2` 外力。
+- [三角涡量 Notebook 与中文描述](studies/trig_time_convergence/README.md)：保留失败及巨大有限误差，并单列细步长区间。
+
+## 当前计算设置
+
 目的：同一128² MAC网格上，对比 SDIRK2 和 SDIRK2-mrSAV 的时间误差，以小步长 SDIRK2 为共同参考，不构造精确解。
 
 生产配置集中在 `configs/production.json`：单位方域、齐次无滑移、nu=0.01、gamma=1、r0=0、零初值（`ic_kind="zero"`）、定常外力 `[0, amplitude*sin(2*pi*m*x)]`，其中 `m=2` 即 `f=(0,sin(4*pi*x))`（`m` 为跨越单位区间的完整波数）。`amplitude` 只缩放外力；x是物理坐标，不含额外2π。步长为 `tau_base*2**(-k)`，k=1,...,8，观测时刻1、1.5、2。每次推进到T=2，只保留指定全场快照、末态和标量/阶段记录，不保存全部速度轨迹。smoke 配置在 16² 上镜像同一套物理参数。
@@ -13,8 +21,8 @@ smoke 配置用 16² 网格并镜像 `m=2`、零初值；若要用各向同性�
 ## 执行
 
 ```sh
-uv run --locked --extra mpi python experiments/forced_ns_convergence/run.py --config experiments/forced_ns_convergence/configs/smoke.json
-uv run --locked --extra mpi python experiments/forced_ns_convergence/run.py --config experiments/forced_ns_convergence/configs/production.json
+uv run --locked python experiments/forced_ns_convergence/run.py --config experiments/forced_ns_convergence/configs/smoke.json
+uv run --locked python experiments/forced_ns_convergence/run.py --config experiments/forced_ns_convergence/configs/production.json
 ```
 
 首轮生产包括16个被测运行和2个参考运行，参考对共有245760步；参考继续细化时成本显著增加。运行保留现有来源/校验和复用机制，显式 `--rerun` 新建运行，不覆盖旧结果，不支持断点续算。失败保留接受前缀，其后观测时刻为NaN。
@@ -27,7 +35,7 @@ uv run --locked --extra mpi python experiments/forced_ns_convergence/run.py --co
 计算入口在显式参考成员保存后调用分析；独立分析入口仅加载指定批次，不触发计算：
 
 ```sh
-uv run --locked --extra mpi python experiments/forced_ns_convergence/analyze.py --batch /absolute/path/to/batch.json
+uv run --locked python experiments/forced_ns_convergence/analyze.py --batch /absolute/path/to/batch.json
 ```
 
 `reports/forced_ns_convergence/<analysis-id>/` 中包含analysis.json、analysis.log、误差CSV、L2.tex、H1.tex和误差/成本/r图。表格按T分组，每组两种格式各Error/Rate，k只取整数。Rate仅从相邻k的有限正误差计算，否则为--；缺失误差写NaN。H1半范数采用差值的离散黏性二次型，不等同于压力或涡量误差。成本含预热、分解和推进，不能直接当作纯时间推进加速比。LaTeX使用booktabs与graphicx。

@@ -33,14 +33,15 @@
 
 ## 精度与控制器研究
 
+[收敛性结果专题](convergence-results.md) 汇总显式报告、完整材料和待核验证据。
 首批制造解和自然节点对照见上表；以下是不同问题，不能仅因 runner 或图形相似就合并。
 
 | 实验研究（计算说明） | 问题简述 | 结果展示 | 论文实验描述 | 材料状态 |
 | --- | --- | --- | --- | --- |
-| [受迫方腔参考细化](forced_ns_convergence/README.md) | 固定网格、给定观测窗口的时间比较，可按敏感性继续细化参考；注意窗口可能处于定常区 | — | — | 待整理 |
-| [三角涡量初值对照](forced_ns_convergence/configs/trig_production.json) | trig_ns 初值与外力的参考解比较，区别于零初值受迫方腔 | — | — | 待整理；共用上述运行入口 |
-| [无滑移格点初值与共同参考](no_slip_reference_convergence/README.md) | 指定格点初值、sin(x) 外力与普通 SDIRK3 双参考的时间比较 | — | — | 待整理 |
-| [H-valued 外力对照](no_slip_reference_convergence/README.md) | 保持初值等条件，使用夹持流函数外力研究粗步失败和时间误差 | — | — | 待整理 |
+| [受迫方腔参考细化](forced_ns_convergence/README.md) | 固定网格时间误差；已展示的是历史 sin(x) 外力，不是当前 m=2 生产配置 | [Notebook](forced_ns_convergence/studies/forced_time_convergence/results.ipynb) | [中文 LaTeX](forced_ns_convergence/studies/forced_time_convergence/description.tex) | 两项齐备；保存的参考敏感性检查通过，非严格误差界 |
+| [三角涡量初值对照](forced_ns_convergence/configs/trig_production.json) | trig_ns 初值与外力的参考解比较，区别于零初值受迫方腔 | [Notebook](forced_ns_convergence/studies/trig_time_convergence/results.ipynb) | [中文 LaTeX](forced_ns_convergence/studies/trig_time_convergence/description.tex) | 两项齐备；保留粗步失败及有限但巨大误差 |
+| [无滑移格点初值与共同参考](no_slip_reference_convergence/README.md) | 指定格点初值、sin(x) 外力与普通 SDIRK3 双参考的时间比较 | 待补原始数据 | — | 已盘点；参考敏感性未全部通过 |
+| [H-valued 外力对照](no_slip_reference_convergence/README.md) | 保持初值等条件，使用夹持流函数外力研究粗步失败和时间误差 | 待补原始数据 | — | 已盘点；k=11 参考无更细验证，不冒充通过 |
 | [Fourier 制造解验证](periodic_ns/README.md) | 双周期模型的时间/空间误差及保存读取，不替代无滑移验证 | — | — | 待整理 |
 | [Channel 制造解验证](channel_ns/README.md#short-verification-study) | 周期流向/无滑移壁面模型的时间细化与连续 Stokes 空间细化 | — | — | 待整理 |
 | [一阶格式验证](imex_euler/README.md) | IMEX Euler 与 IMEX Euler-mr-ccSAV 的六后端精度和约束检查 | — | — | 待整理 |

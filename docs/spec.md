@@ -1,4 +1,36 @@
 # Confirmed implementation specification
+2026-10-05 Legendre performance extension: cached immutable internal quadrature,
+exact 1D closed forms, tensor mass solves, shared weak operators and batched RHS.
+Default direct Stokes retains all equation/physical-divergence checks. Optional
+spectral tensor Stokes uses reusable 1D generalized eigenspaces and true Schur-CG;
+all six schemes and existing I/PI rejection/endpoint rules are exercised separately.
+No spatial, convection, lifting or pressure semantics change. See docs/legendre-optimization.md.
+2026-10-05 illustrative TS instability: `case=ts_wave` adds an experimental initial
+condition, not new solver equations. It stores the linearised MAC eigenvalue/unit
+seed; positive growth is qualified against an independent continuous reference,
+short time/grid refinements and a stable control before nonlinear visualisation.
+The TS movie uses an explicitly labelled moving coordinate frame. Existing cases,
+operator/stage formulas and laboratory-frame saved fields retain their semantics.
+
+2026-10-04 confirmed first-order extension: independent IMEXEuler/IMEXEulerMRSAV
+with old-time explicit convection/forcing and constrained backward Euler viscosity.
+SAV uses G=1-r, Q=1, two common-matrix RHS solves and one unique linear scalar solution.
+One-stage Trial, complete residuals/continuity, fixed and prescribed steps, all four
+Model implementations and public MAC/periodic/channel run/load/analyze paths.
+Registry metadata replaces stage/order guessing in these entry points. Legacy
+methods and default comparison groups retain their conventions. Euler has no
+embedded estimate in this release. See docs/imex-euler.md.
+
+2026-10-04 confirmed channel extension: independent `ChannelGrid/ChannelOperators/ChannelModel`
+under `solver/channel`, periodic-x and stationary no-slip-y second-order MAC. Real full
+face arrays preserve the existing shape convention but identify the duplicated periodic
+u endpoint; packed velocities count only independent faces. Shared DirectStokes uses a
+structural operator protocol with its existing algorithm unchanged. All four schemes,
+fixed/prescribed/adaptive drivers, mean-flow forcing, complete residual checks and dedicated
+run/load/analyze workflows are covered. The subsequent optional FFT/banded backend
+solves the identical MAC discretisation and is compared to direct solves before timing.
+The default remains direct. See docs/channel.md.
+
 Source: user-confirmed design in the current task, 2026-09-20.
 
 - Separate desktop project MAC-mr-SAV-RK; source Stokes_BC.py and Fourier project remain unchanged.
@@ -13,3 +45,5 @@ Source: user-confirmed design in the current task, 2026-09-20.
 - Validate 32²,64²,128² and one non-square grid, algebraic structure, spatial/time convergence and workflows. Separate JIT warmup, factorization and integration timings.
 
 Latest confirmed refinements: place modules directly under solver/ (no nextgen/). Manage the environment with uv, commit uv.lock, and use uv run for all commands.
+
+2026-10-04 confirmed extension: an independent doubly periodic Fourier–Leray model under `solver/fourier/`, reusing all four existing SDIRK/mr-ccSAV methods and I/PI drivers. Real collocated exported fields, internal normalized complex rFFT coefficients, strict 2/3 filtering, unprojected nonlinear/force loads, full shifted velocity-pressure residuals, explicit mean-mode conventions. Dedicated `experiments/periodic_ns` run/load/analyze/validation workflow preserves existing MAC and Legendre APIs. Operator, stage, nonlinear MMS, steady infinite-modal spatial, adaptive and persistence seams are validated separately. See `docs/fourier.md`; no periodic MAC comparison baseline or long-time turbulence claim is included.

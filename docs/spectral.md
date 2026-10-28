@@ -1,5 +1,11 @@
 # Spectral discretisation (single-element Dirichlet-combined Legendre)
 
+2026-10-05 performance extension: model-owned quadrature caching, exact closed-form
+1D assembly, separable mass solves, shared sampling/operators and batched direct solves.
+`SpectralModel(..., stokes_backend="tensor")` additionally selects reusable generalized
+eigenspaces with true pressure Schur-CG; default direct and all discrete equations remain.
+Details and validation are in [legendre-optimization.md](legendre-optimization.md).
+
 Slices S1, S2 and S3 of the plan agreed on 2026-09-21: the basis and the assembly for a
 third discretisation, its `solver/model.py` implementation, and the moving-lid lifting with
 the sharp and regularised lid-driven cavity compared against the validated MAC solutions.

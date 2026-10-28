@@ -68,8 +68,9 @@ def dirichlet_values(size: int, xi: Array) -> Array:
 
 def dirichlet_derivatives(size: int, xi: Array) -> Array:
     """phi_0'..phi_{size-1}' at xi."""
-    derivatives = legendre_derivatives(size + 1, xi)
-    return derivatives[:size] - derivatives[2:size + 2]
+    # P_{k+2}'-P_k'=(2k+3)P_{k+1}, including the endpoints.
+    scale = (2 * np.arange(size) + 3).reshape((size,) + (1,) * np.ndim(xi))
+    return -scale * legendre_values(size, xi)[1:size + 1]
 
 
 def legendre_mass_diagonal(size: int) -> Array:
@@ -79,29 +80,17 @@ def legendre_mass_diagonal(size: int) -> Array:
 
 def mass_reference(size: int) -> Array:
     """int phi_k phi_l dxi on the reference interval, exact."""
-    entries = np.zeros((size, size), dtype=object)
-    entries[:] = Fraction(0)
+    out = np.zeros((size, size))
     for k in range(size):
-        for degree_k, sign_k in combination(k):
-            for l in range(size):
-                for degree_l, sign_l in combination(l):
-                    if degree_k == degree_l:
-                        entries[k, l] += Fraction(2 * sign_k * sign_l, 2 * degree_k + 1)
-    return np.array([[float(value) for value in row] for row in entries])
+        out[k, k] = float(Fraction(2, 2*k+1) + Fraction(2, 2*k+5))
+        if k+2 < size:
+            out[k, k+2] = out[k+2, k] = float(Fraction(-2, 2*k+5))
+    return out
 
 
 def stiffness_reference(size: int) -> Array:
     """int phi_k' phi_l' dxi on the reference interval, exact integer arithmetic."""
-    out = np.zeros((size, size))
-    for k in range(size):
-        for l in range(size):
-            total = 0
-            for degree_k, sign_k in combination(k):
-                for degree_l, sign_l in combination(l):
-                    common = set(derivative_indices(degree_k)) & set(derivative_indices(degree_l))
-                    total += 2 * sign_k * sign_l * sum(2 * j + 1 for j in common)
-            out[k, l] = total
-    return out
+    return np.diag(2. * (2*np.arange(size) + 3))
 
 
 def divergence_reference(size: int) -> Array:
@@ -110,19 +99,18 @@ def divergence_reference(size: int) -> Array:
     Integration by parts drops the boundary term because phi_k vanishes at both ends.
     """
     out = np.zeros((size, size))
-    for m in range(size):
-        indices = set(derivative_indices(m))
-        for k in range(size):
-            out[m, k] = 2 * ((k + 2 in indices) - (k in indices))
+    for k in range(size-1):
+        out[k+1, k] = -2.
     return out
 
 
 def projection_reference(size: int) -> Array:
     """int L_m phi_k dxi, the pressure-to-velocity mass matrix, exact."""
     out = np.zeros((size, size))
-    for m in range(size):
-        for k in range(size):
-            out[m, k] = float(Fraction(2, 2 * m + 1) * ((m == k) - (m == k + 2)))
+    for k in range(size):
+        out[k, k] = float(Fraction(2, 2*k+1))
+        if k+2 < size:
+            out[k+2, k] = float(Fraction(-2, 2*k+5))
     return out
 
 

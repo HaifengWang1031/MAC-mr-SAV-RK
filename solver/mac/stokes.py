@@ -2,12 +2,32 @@
 from collections import OrderedDict
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Protocol
+from typing import Any, Protocol
 import numpy as np
 import scipy.sparse as sp
 from scipy.sparse.linalg import splu
 from .grid import Array
-from .operators import MACOperators
+
+class StokesGrid(Protocol):
+    @property
+    def size(self) -> int: ...
+    @property
+    def np(self) -> int: ...
+    @property
+    def nx(self) -> int: ...
+    @property
+    def ny(self) -> int: ...
+
+class StokesOperators(Protocol):
+    """Sparse coupled operators shared by closed and periodic-channel MAC."""
+    @property
+    def grid(self) -> StokesGrid: ...
+    @property
+    def K(self) -> Any: ...
+    @property
+    def G(self) -> Any: ...
+    @property
+    def D(self) -> Any: ...
 
 @dataclass
 class StokesResult:
@@ -20,7 +40,7 @@ class StokesBackend(Protocol):
     def solve(self, rhs: Array, *, mass: float, viscosity: float) -> StokesResult: ...
 
 class DirectStokes:
-    def __init__(self, operators: MACOperators, cache_size: int = 4, tolerance: float = 1e-9) -> None:
+    def __init__(self, operators: StokesOperators, cache_size: int = 4, tolerance: float = 1e-9) -> None:
         if cache_size < 1 or tolerance <= 0 or not np.isfinite(tolerance): raise ValueError('Invalid solver controls')
         self.ops=operators
         self.cache_size=cache_size

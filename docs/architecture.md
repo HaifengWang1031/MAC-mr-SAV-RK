@@ -1,4 +1,20 @@
 # 架构与记录约定
+2026-10-05 Legendre 优化：模型与直接/张量后端共用空间算子和有界求积缓存；公开 Space 采样方法保持独立返回值。可选张量后端只更换线性求解算法，默认 direct。legendre_optimization 以独立 NPZ/JSON 运行记录保存两版源码、场、阶段压力/根、计时与校验和，报告只读消费显式运行编号；原 HDF5 格式保持兼容。见 docs/legendre-optimization.md。
+
+2026-10-05 TS 算例在 Channel HDF5 中追加 initial_mode 属性及 unit_velocity，不改变既有数组、阶段或根容量。
+channel_instability 的父记录保存配置、连续特征值参照、验证成员和非线性成员的显式运行编号及校验和。
+计算先通过线性增长门槛；分析只重读保存场与参照，不构造模型或重算特征值。
+移动坐标仅在渲染时应用，所有运行场和真实时刻仍保留实验室坐标。
+
+2026-10-04 一阶格式：solver/schemes/registry.py 提供名称、工厂、阶数、阶段数、候选容量及估计器元数据。
+Euler 两格式返回一个阶段；公共写入器接受 n_stages/n_roots，HDF5 schema_version=1 的阶段维为1，候选容量1。
+普通格式 count=0，SAV count=1 保存唯一线性解；旧2/4阶段与3/5容量保持原形状。Euler 新记录使用
+euler_step_multiplier_mean_zero 压力标签，旧数据无需迁移。独立 imex_euler_validation 用带校验和的 NPZ
+保存最终场、参照及内积，JSON/日志保存来源与状态，报告只读重算误差。参见 docs/imex-euler.md。
+
+2026-10-04 Channel 增加第四个 Model 实现。内部为实数周期 MAC 自由度；公开 u 保留重复周期末列，v 的上下壁面零。`experiments/channel_ns` 使用专属 reader 和 `periodic_x_no_slip_y/mac_second_order/staggered_mac_periodic_x` 标签；复用基础 HDF5 并在 pending 文件补齐标签、attempts 后原子更名。Channel runs/reports 与旧实验隔离。DirectStokes 仅泛化算子类型，不改分解、缓存或压力规范公式。默认 direct，可选 FFTStokes 将同一 MAC 系统按流向模式拆成带状耦合系统；缓存系数键及全方程检查保持一致。见 docs/channel.md。
+
+2026-10-04 周期模型增加第三个 Model 实现。`solver/fourier` 的 State.u/v 是实数 collocated_yx 场，Model.vector/内部阶段为复数 rFFT；Core.State、时间格式和旧 MAC/Legendre 布局不改。专属 `periodic_ns` reader 检查配置和 HDF5 的 boundary/discretization/field_layout/fft_norm/dealias 标记，不执行 MAC 面平均。基础 HDF5 沿用 `save_result`；周期写入器先在 pending HDF5 添加表示标签及自适应 attempts，再原子更名和最终化 manifest。周期及验证 runs/reports 单独命名；失败前缀可以诊断，收敛/计时汇总要求完整同源子记录。见 docs/fourier.md 和 experiments/periodic_ns/README.md。
 
 求解器直接位于 `solver/`，没有旧项目的 `nextgen/` 过渡目录。环境由 `uv sync --locked` 建立，所有入口使用 `uv run`。`uv.lock` 与 `.python-version` 属于代码来源身份；`.venv/` 不入库。
 

@@ -1,0 +1,8 @@
+{
+  "backends": ["mac_direct", "mac_tensor", "legendre", "fourier", "channel_direct", "channel_fft"],
+  "schemes": ["imex_euler", "imex_euler_mrsav"],
+  "counts": [80, 160, 320],
+  "gammas": [1.0, 1000.0],
+  "nx": 12, "ny": 10, "legendre_size": 6,
+  "T": 0.4, "amplitude": 0.1
+}

@@ -1,0 +1,16 @@
+{
+  "case": "perturbed",
+  "scheme": "sdirk3_mrsav",
+  "nx": 32,
+  "ny": 24,
+  "nu": 0.1,
+  "driving": 0.1,
+  "epsilon": 0.01,
+  "gamma": 1000.0,
+  "T": 0.5,
+  "mode": "adaptive",
+  "initial_step": 0.02,
+  "controller": {"kind": "PI", "atol": 1e-8, "rtol": 5e-5, "max_step": 0.05},
+  "scalar_atol": 1e-4,
+  "snapshots": [0.0, 0.1, 0.3, 0.5]
+}

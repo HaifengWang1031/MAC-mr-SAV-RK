@@ -23,13 +23,8 @@ from solver.mac.kernels import warmup
 from solver.mac.stokes import DirectStokes
 from solver.mac.tensor_stokes import TensorStokes
 from solver.mac_ns import MACNavierStokes
-from solver.schemes.sdirk2 import SDIRK2
-from solver.schemes.sdirk2_mrsav import SDIRK2MRSAV
+from solver.schemes.registry import DEFAULT_SCHEMES as SCHEMES, make_scheme as registered_scheme
 from solver.schemes.sdirk3 import SDIRK3
-from solver.schemes.sdirk3_mrsav import SDIRK3MRSAV
-
-SCHEMES = {'sdirk2': SDIRK2, 'sdirk2_mrsav': SDIRK2MRSAV,
-           'sdirk3': SDIRK3, 'sdirk3_mrsav': SDIRK3MRSAV}
 
 
 def config_check(config: dict) -> None:
@@ -77,7 +72,8 @@ def model_and_initial(config: dict) -> tuple[MACNavierStokes, State]:
 
 
 def make_scheme(name: str, gamma: float) -> Scheme:
-    return SCHEMES[name](gamma) if name.endswith('mrsav') else SCHEMES[name]()
+    if name not in SCHEMES: raise KeyError(name)
+    return registered_scheme(name, gamma)
 
 
 def output_times(config: dict) -> list[float]:
@@ -122,6 +118,10 @@ def save_member(directory: Path, config: dict, scheme_name: str, controller_name
         values.update(attempt_t=np.asarray([a['t'] for a in attempts],dtype=float),
                       attempt_h=np.asarray([a['step'] for a in attempts],dtype=float),
                       attempt_error=np.asarray([a['error'] for a in attempts],dtype=float),
+                      attempt_error_u=np.asarray([a['error_u'] for a in attempts],dtype=float),
+                      attempt_error_r=np.asarray([a['error_r'] for a in attempts],dtype=float),
+                      attempt_scalar_defect=np.asarray(
+                          [a['scalar_defect'] for a in attempts],dtype=float),
                       attempt_accepted=np.asarray([a['accepted'] for a in attempts],dtype=bool),
                       attempt_boundary_partition=np.asarray(
                           [a.get('boundary_partition', False) for a in attempts], dtype=bool),

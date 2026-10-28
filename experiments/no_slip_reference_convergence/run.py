@@ -1,4 +1,4 @@
-"""Four-scheme, no-slip reference-solution time-convergence campaign."""
+"""Selected SDIRK pairs in a no-slip reference-solution convergence campaign."""
 import argparse
 import json
 import sys
@@ -12,10 +12,7 @@ if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from experiments.workflow import PROJECT, provenance, run_experiment, write_json
-from experiments.no_slip_reference_convergence.analyze import analyze_batch
-
-SCHEMES = ('sdirk2', 'sdirk2_mrsav', 'sdirk3', 'sdirk3_mrsav')
-
+from experiments.no_slip_reference_convergence.analyze import analyze_batch, comparison_pairs
 
 def schedule(times: list[float], nominal_step: float) -> list[float]:
     """Hit every observation time exactly; only interval-end steps are shortened."""
@@ -39,12 +36,15 @@ def validate(config: dict) -> None:
     base = config['base']
     levels = config['k_levels']
     times = base['snapshots']
-    if base['experiment'] != 'forced_ns' or base['ic_kind'] != 'isotropic_beams' \
+    comparison_pairs(config)
+    if not times:
+        raise ValueError('Observation times must increase from zero')
+    if base['experiment'] != 'forced_ns' or base['ic_kind'] not in ('isotropic_beams','lattice_streamfunction') \
             or base['m'] != 1 or base['T'] != times[-1]:
         raise ValueError('Expected the forced, multi-mode no-slip benchmark')
     if not levels or not all(np.isfinite(levels)) or any(b <= a for a, b in zip(levels, levels[1:])):
         raise ValueError('k_levels must be finite, distinct and increasing')
-    if not times or any(b <= a for a, b in zip([0.]+times[:-1], times)):
+    if any(b <= a for a, b in zip([0.]+times[:-1], times)):
         raise ValueError('Observation times must increase from zero')
     if config['reference_k'] <= levels[-1] or config['tau_base'] <= 0:
         raise ValueError('Reference step must be finer than every trial step')
@@ -80,7 +80,7 @@ def run_campaign(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> 
 
         try:
             for level in config['k_levels']:
-                for scheme in SCHEMES:
+                for scheme in (scheme for pair in comparison_pairs(config) for scheme in pair):
                     path = compute(scheme, level, 'trial')
                     batch['members'].append({'k': level, 'scheme': scheme, 'path': str(path),
                                              'status': json.loads((path/'manifest.json').read_text())['status']})

@@ -1,4 +1,4 @@
-"""Read an explicit four-scheme batch and produce two manuscript-style tables."""
+"""Read an explicit SDIRK batch and produce error and rate tables."""
 import argparse
 import csv
 import json
@@ -20,6 +20,16 @@ from solver.mac.operators import MACOperators
 PAIRS = (('sdirk2', 'sdirk2_mrsav'), ('sdirk3', 'sdirk3_mrsav'))
 LABELS = {'sdirk2': 'SDIRK2', 'sdirk2_mrsav': 'SDIRK2-mr-ccSAV',
           'sdirk3': 'SDIRK3', 'sdirk3_mrsav': 'SDIRK3-mr-ccSAV'}
+
+
+def comparison_pairs(config: dict) -> tuple[tuple[str, str], ...]:
+    """Keep the legacy four-scheme batch or select the third-order pair."""
+    schemes = config.get('schemes', [scheme for pair in PAIRS for scheme in pair])
+    if schemes == ['sdirk3', 'sdirk3_mrsav']:
+        return (PAIRS[1],)
+    if schemes == [scheme for pair in PAIRS for scheme in pair]:
+        return PAIRS
+    raise ValueError('Expected the third-order pair or all four schemes')
 
 
 def table(rows: list[dict], times: list[float], pair: tuple[str, str], norm: str,
@@ -54,8 +64,9 @@ def table(rows: list[dict], times: list[float], pair: tuple[str, str], norm: str
 def analyze_batch(batch_path: Path, *, root: Path = PROJECT) -> Path:
     batch = json.loads(batch_path.read_text())
     config = batch['config']
+    pairs = comparison_pairs(config)
     levels = config['k_levels']
-    expected = {(level, scheme) for level in levels for pair in PAIRS for scheme in pair}
+    expected = {(level, scheme) for level in levels for pair in pairs for scheme in pair}
     if {(m['k'], m['scheme']) for m in batch['members']} != expected or \
             len(batch['members']) != len(expected):
         raise ValueError('Incomplete or duplicate comparison members')
@@ -69,6 +80,9 @@ def analyze_batch(batch_path: Path, *, root: Path = PROJECT) -> Path:
             raise ValueError('Mismatched physical or grid configuration')
         if entry['manifest']['source']['code_sha256'] != references[0]['manifest']['source']['code_sha256']:
             raise ValueError('Mixed solver source versions')
+        for key in ('m','force_profile','ic_lattice_cutoff','ic_lattice_amplitude','ic_project'):
+            if entry['config'].get(key) != common.get(key):
+                raise ValueError('Mismatched force or initial-data configuration')
     if any(entry['manifest']['status'] != 'complete' or entry['config']['scheme'] != 'sdirk3'
            for entry in references):
         raise ValueError('Both SDIRK3 references must complete')
@@ -93,7 +107,8 @@ def analyze_batch(batch_path: Path, *, root: Path = PROJECT) -> Path:
                          'scheme': item['scheme'], 'time': time, **values,
                          'status': entry['manifest']['status'],
                          'failure': entry['manifest'].get('error', ''),
-                         'max_abs_r': entry['max_r'], 'run_id': Path(item['path']).name})
+                         'max_abs_r': entry['max_r'], 'max_stage_abs_r': entry['max_stage_r'],
+                         'run_id': Path(item['path']).name})
     for row in rows:
         earlier = next((other for other in rows if other['k'] < row['k'] and
                         other['scheme'] == row['scheme'] and other['time'] == row['time'] and
@@ -109,15 +124,18 @@ def analyze_batch(batch_path: Path, *, root: Path = PROJECT) -> Path:
         for norm in ('L2', 'H1'):
             finite = [row[norm] for row in rows if row['time'] == time and
                       np.isfinite(row[norm]) and row[norm] > 0]
-            ratio = gaps[time][norm]/min(finite) if finite else float('inf')
+            ratio = gaps[time][norm]/min(finite) if finite else None
             checks.append({'time': time, 'norm': norm, 'reference_gap': gaps[time][norm],
-                           'gap_over_min_error': ratio, 'passed': ratio <= config['sensitivity_threshold']})
+                           'gap_over_min_error': ratio,
+                           'passed': ratio is not None and ratio <= config['sensitivity_threshold']})
     folder = root/'reports/no_slip_reference_convergence'/(
         datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')+'-'+uuid4().hex[:8])
     (folder/'tables').mkdir(parents=True)
     write_json(folder/'input_batch.json', batch)
     analysis = {'status': 'running', 'batch': str(batch_path.resolve()),
                 'batch_sha256': digest(batch_path), 'source': provenance(),
+                'inputs': [{'path': entry['path'], 'sha256': entry['manifest']['results_sha256']}
+                           for entry in references+[entry for _, entry in members]],
                 'reference_checks': checks, 'reference_passed': all(c['passed'] for c in checks)}
     write_json(folder/'analysis.json', analysis)
     try:
@@ -125,7 +143,7 @@ def analyze_batch(batch_path: Path, *, root: Path = PROJECT) -> Path:
             writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
             writer.writeheader()
             writer.writerows(rows)
-        for pair in PAIRS:
+        for pair in pairs:
             for norm in ('L2', 'H1'):
                 (folder/f'tables/{pair[0]}_{norm}.tex').write_text(
                     table(rows, times, pair, norm, config['tau_base'],
@@ -133,7 +151,7 @@ def analyze_batch(batch_path: Path, *, root: Path = PROJECT) -> Path:
                           common['nx'], common['ny']))
         document = (r'\documentclass{article}'+'\n'+r'\usepackage{booktabs,graphicx}'+'\n'+
                     r'\begin{document}'+'\n'+
-                    '\n'.join(rf'\input{{tables/{pair[0]}_{norm}.tex}}' for pair in PAIRS
+                    '\n'.join(rf'\input{{tables/{pair[0]}_{norm}.tex}}' for pair in pairs
                               for norm in ('L2', 'H1'))+'\n'+r'\end{document}'+'\n')
         (folder/'convergence.tex').write_text(document)
         import subprocess

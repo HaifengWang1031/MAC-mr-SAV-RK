@@ -1,0 +1,6 @@
+{
+  "case": "mms", "scheme": "sdirk3_mrsav", "nx": 32, "ny": 32,
+  "nu": 0.1, "gamma": 1000.0, "T": 1.0, "mode": "adaptive",
+  "initial_step": 0.01, "controller": {"kind": "PI", "atol": 1e-8, "rtol": 5e-5},
+  "scalar_atol": 1e-5, "snapshots": [0.0, 0.5, 1.0]
+}

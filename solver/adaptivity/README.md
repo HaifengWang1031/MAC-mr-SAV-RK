@@ -20,6 +20,12 @@ are retried from the last accepted state. The main SAV scalar is committed only
 with the accepted third-order state. Failed stage/root solves trigger a smaller
 trial; repeated failure returns the accepted prefix with `status='failed'`.
 
+The last step is clipped to `initial.t + T - current.t`. This terminal alignment
+step may be shorter than `min_step`, including a roundoff-sized remainder, and
+still undergoes the usual stage and error checks. After acceptance, its state,
+time record, endpoint snapshot and callbacks use exactly `initial.t + T`.
+Other steps retain their existing minimum-step and rejection rules.
+
 ```python
 from solver.adaptivity import PIController, integrate_adaptive
 from solver.schemes.sdirk3_mrsav import SDIRK3MRSAV
