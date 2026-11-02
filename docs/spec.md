@@ -1,5 +1,60 @@
 # Confirmed implementation specification
 
+2026-11-01 approved Hele-Shaw airfoil extension: separate pressure-driven MWR
+inertial Brinkman model, fixed full-gap NACA0012, explicit closure coefficients,
+optional zero-default consistent-mass reaction operator and independent scalar
+Darcy reference. Reuse all six stages/root algorithms and existing adaptive drivers.
+Pressure-traction ends differ from Darcy pressure Dirichlet data; no mean gauge.
+Save actual meshes/maps, physical snapshot pressure, force semantics and all failure
+prefixes. Readonly analysis never generates geometry or advances a flow.
+No 3D applicability, unconditional open-boundary stability or grid-independent claim.
+See [model and validation scope](hele-shaw.md).
+
+2026-11-01 wedge-cavity implementation repair: new runs use r0=0, stationary
+shared lid/wall end vertices, and the fixed-lifting skew pairing b(U,U,g) from
+the same quadrature as N(w). Zero normal boundary flux does not eliminate this
+volume pairing. Preserve old recorded r=1/corner conventions when loading legacy
+runs. Fixed-step records and the final snapshot strictly reach T. The new saved-run
+movie path reuses static artists and streams frames to ffmpeg; it never advances
+the flow and does not present stage multipliers as endpoint physical pressures.
+These changes do not establish steady-state or spatial/time-convergence qualification.
+
+2026-10-30 FEM performance goal: retain the exact consistent-mass shifted system,
+all continuity/gauge/coefficient checks and SAV/boundary semantics. The recycled
+path first tries checked multicolumn defect correction, falls back to the existing
+GMRES path, then a fresh robust factorization. Diagonal scaling only screens
+when complete checks may succeed. Linear-response physical divergence contracts
+the required derivatives directly at all quadrature points for multiple RHS; a single
+response retains the full field cache for its next stage evaluation. Existing config keys
+and saved-run identities are unchanged. Frozen-source replay, native adaptivity,
+parallel factor engines, larger linear-system probes and size/format measurements
+have qualified the selected strategies;
+no global optimum or unmeasured acceleration is claimed. See [work and evidence](fem-optimization.md).
+
+The same system now supports cached structural METIS ordering (`auto` at 20000
+unknowns, or explicit `mmd`/`metis`), exact sharing of uncoupled identical mass
+component factors, and optional pinned Linux x86_64 PARDISO with a local thread
+limit. PARDISO's own ordering requires `auto`; it keeps two internal refinements.
+Every path restores original DOF coordinates before all original checks and
+retains robust SuperLU fallback. New options are optional canonical config keys;
+derived adaptive cylinder campaigns preserve the explicit outlet and factor options.
+
+2026-10-28 optional backflow-damped outlet: add half the negative normal speed
+times velocity on natural facets and the identical boundary-work correction in
+SAV. Natural is still the default. New case/boundary/pressure metadata and
+nonnegative dissipation diagnostics separate this changed boundary model from
+the original DFG reference. See [definition and limits](backflow-outlet.md).
+
+2026-10-28 explicit forced minimum-step option: `integrate_adaptive` defaults to
+`min_step_policy=fail`. The user-requested `force` option clamps ordinary step
+proposals to the floor and accepts finite over-tolerance trials at exactly that
+floor, retaining the original errors/acceptance records and complete stage checks.
+Nonfinite states/errors or failed stages/diagnostics are not accepted; short final
+alignment steps keep the existing error check. Cylinder configuration stores this
+option only when explicit, preserving old canonical configuration identities.
+Forcing does not establish that the requested local tolerances or physical
+accuracy have been achieved.
+
 2026-10-28 cylinder/adaptive FEM extension: existing six fixed formats and four
 embedded SDIRK2/3 I/PI formats are reused without changing stages or SAV root
 selection. DFG2D-2 Re100 uses a fixed parabolic inlet, no-slip cylinder/walls and
@@ -76,3 +131,16 @@ Source: user-confirmed design in the current task, 2026-09-20.
 Latest confirmed refinements: place modules directly under solver/ (no nextgen/). Manage the environment with uv, commit uv.lock, and use uv run for all commands.
 
 2026-10-04 confirmed extension: an independent doubly periodic Fourier–Leray model under `solver/fourier/`, reusing all four existing SDIRK/mr-ccSAV methods and I/PI drivers. Real collocated exported fields, internal normalized complex rFFT coefficients, strict 2/3 filtering, unprojected nonlinear/force loads, full shifted velocity-pressure residuals, explicit mean-mode conventions. Dedicated `experiments/periodic_ns` run/load/analyze/validation workflow preserves existing MAC and Legendre APIs. Operator, stage, nonlinear MMS, steady infinite-modal spatial, adaptive and persistence seams are validated separately. See `docs/fourier.md`; no periodic MAC comparison baseline or long-time turbulence claim is included.
+
+2026-11-02 授权范围补充：Hele-Shaw可显式启用energy_stable_pressure入口，方向性动能牵引及SAV边界功采用相同transport；原natural默认及旧运行身份保留。可显式配置velocity_limit/scalar_limit作运行资格终止，不作状态裁剪。独立inlet_recovery从零初值先检查T=1.1，再从零运行Re_D=10000至T=20，生产使用既有backflow_damped出口。时间格式、线性系统及完整残差规则不改。
+
+### Optional FEM scalability comparison (2026-11-02)
+
+Explicit `stokes_backend=petsc`, `mass_backend=cg|metis` and `fem_load_mode=weak` are independent
+optional controls for the shared closed/open/reaction FEM path. Defaults and old run
+identities do not acquire these keys. Six time formats share one momentum adapter; weak
+load storage changes no physical operator, trace, pressure scale or SAV root rule. All
+original residual/continuity/gauge checks remain mandatory. Global LU fallbacks are counted
+and disqualify an AMG-only performance claim. Comparison runs freeze both sources, actual
+meshes and initial states; reports read explicit saved run IDs without launching flow solves.
+Distributed FEM and unmeasured Hypre performance are outside this adapter's qualification.

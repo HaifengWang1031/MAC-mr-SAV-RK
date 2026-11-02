@@ -2,6 +2,7 @@
 import numpy as np
 import sympy as sy
 import pytest
+import scipy.sparse as sp
 
 from experiments.fem_ns.problems import build_model
 from experiments.fem_ns.run import effective_config
@@ -10,6 +11,25 @@ from solver.core import State
 from solver.integrate import integrate
 from solver.schemes.sdirk2 import SDIRK2
 from solver.schemes.sdirk2_mrsav import SDIRK2MRSAV
+from solver.fem.mass import VelocityMassFactor
+
+
+@pytest.mark.parametrize('coupled', [False, True])
+def test_consistent_mass_component_factor_restores_all_coefficients(coupled: bool):
+    # An independently specified SPD form in interleaved vector coordinates.
+    matrix = np.array([[2., 0., 1., 0.], [0., 2., 0., 1.],
+                       [1., 0., 3., 0.], [0., 1., 0., 3.]])
+    if coupled:
+        matrix[0, 1] = matrix[1, 0] = .2
+    factor = VelocityMassFactor(sp.csc_matrix(matrix), [np.array([0, 2]), np.array([1, 3])])
+    known = np.array([[1., 0., -.3], [2., 1., .5], [3., -1., .7], [4., 2., -.9]])
+    for values in (known[:, 0], known):
+        rhs = matrix @ values
+        before = rhs.copy()
+        rhs.flags.writeable = False
+        np.testing.assert_allclose(factor.solve(rhs), values, atol=2e-15)
+        np.testing.assert_array_equal(rhs, before)
+    assert len(factor.components) == (0 if coupled else 2)
 
 
 def test_steady_stokes_linear_pressure_on_rectangle():

@@ -24,6 +24,7 @@ class P2Quadrature:
             'field_evaluations': 0, 'field_cache_hits': 0, 'convection_assemblies': 0,
             'convection_cache_hits': 0, 'load_assemblies': 0,
             'field_wall_seconds': 0., 'convection_wall_seconds': 0., 'load_wall_seconds': 0.}
+        self._stats.update(divergence_evaluations=0, divergence_cache_hits=0, divergence_wall_seconds=0.)
 
     def metrics(self) -> dict[str, float | int]:
         return self._stats.copy()
@@ -51,6 +52,28 @@ class P2Quadrature:
             result[part] = np.bincount(self._dofs.ravel(), weights=local[component].ravel(),
                                        minlength=self._scalar_ndof)
         return result
+
+    def divergence(self, full: Array, *, cache_field: bool = False) -> Array:
+        """All quadrature-point divergence values without unused velocity/cross-gradients.
+
+        Multiple linear responses need only divergence; leave their cache for
+        the combined SAV velocity. A single response is itself the next stage
+        velocity, so prepare its full field once for diagnostics/convection.
+        """
+        start = perf_counter()
+        try:
+            if cache_field:
+                self.evaluate(full)
+            if self._last is not None and np.array_equal(full, self._last):
+                self._stats['divergence_cache_hits'] += 1
+                assert self._field is not None
+                gradient = self._field[1]
+                return gradient[0, 0]+gradient[1, 1]
+            coefficients = np.stack([full[part][self._dofs] for part in self._parts])
+            self._stats['divergence_evaluations'] += 1
+            return np.einsum('ike,kieq->eq', coefficients, self._grad)
+        finally:
+            self._stats['divergence_wall_seconds'] += perf_counter()-start
 
     def load(self, values: Array) -> Array:
         start = perf_counter()

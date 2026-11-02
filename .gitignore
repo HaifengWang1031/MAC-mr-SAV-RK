@@ -9,4 +9,5 @@ reports/
 .scratch/*
 !.scratch/implementation.md
 .venv/
+.venv-fem-mg/
 .DS_Store

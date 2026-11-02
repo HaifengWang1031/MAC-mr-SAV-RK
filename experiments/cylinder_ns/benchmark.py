@@ -88,12 +88,13 @@ def cycle_statistics(time: Array, drag: Array, lift: Array, pressure: Array, *,
 
 
 def reference_comparison(statistics: dict, cfg: dict, *, complete: bool) -> dict:
-    canonical = cfg.get('nu') == .001 and cfg.get('inlet_max') == 1.5 and cfg.get('r0') == 0.
+    canonical = (cfg.get('nu') == .001 and cfg.get('inlet_max') == 1.5 and cfg.get('r0') == 0.
+                 and cfg.get('outlet_treatment', 'natural') == 'natural')
     errors = {key: abs(statistics[key]-value)/abs(value) for key, value in REFERENCE.items() if key in statistics}
     tolerances = {key: .03 if key.startswith('pressure') else .02 for key in REFERENCE}
     passed = (complete and canonical and bool(statistics.get('developed')) and len(errors) == len(REFERENCE)
               and all(errors[key] <= tolerances[key] for key in REFERENCE))
-    return {'passed': passed, 'complete_run': complete, 'canonical_physics': canonical,
+    return {'passed': passed, 'complete_run': complete, 'canonical_physics': canonical, 'applicable': canonical,
             'reference': REFERENCE, 'reference_source': REFERENCE_SOURCE,
             'relative_errors': errors, 'project_relative_tolerances': tolerances,
             'limits': 'Project gates on CD/CL extrema and lift Strouhal (2%), pressure extrema (3%); '

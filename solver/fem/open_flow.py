@@ -22,9 +22,19 @@ class OpenFlowModel(FEMModel):
     """
     def __init__(self, space: FiniteElementSpace, nu: float, *, dirichlet_facets: np.ndarray,
                  boundary_velocity: VectorField, force: Callable[[float], Array] | None = None,
-                 tolerance: float = 1e-9, cache_size: int = 2, stokes_backend: str = 'direct') -> None:
+                 tolerance: float = 1e-9, cache_size: int = 2, stokes_backend: str = 'direct',
+                 outlet_treatment: str = 'natural', stokes_ordering: str = 'auto',
+                 stokes_factor_backend: str = 'superlu', stokes_threads: int | None = None,
+                 reaction_coefficient: float = 0., mass_backend: str = 'direct',
+                 stokes_amg_type: str = 'gamg', fem_load_mode: str = 'riesz') -> None:
+        if outlet_treatment not in ('natural', 'backflow_damped'):
+            raise ValueError('Unknown outlet_treatment')
+        self.outlet_treatment = outlet_treatment
         super().__init__(space, nu, force=force, tolerance=tolerance, cache_size=cache_size,
-                         dirichlet_facets=dirichlet_facets, pressure_gauge=False, stokes_backend=stokes_backend)
+                         dirichlet_facets=dirichlet_facets, pressure_gauge=False, stokes_backend=stokes_backend,
+                         stokes_ordering=stokes_ordering, stokes_factor_backend=stokes_factor_backend,
+                         stokes_threads=stokes_threads, reaction_coefficient=reaction_coefficient,
+                         mass_backend=mass_backend, stokes_amg_type=stokes_amg_type, fem_load_mode=fem_load_mode)
         if np.isin(self.velocity_basis.mesh.boundary_facets(), dirichlet_facets).all():
             raise ValueError('Natural outlet requires unconstrained boundary facets')
         x, y = self.velocity_basis.doflocs
@@ -39,17 +49,25 @@ class OpenFlowModel(FEMModel):
         self._boundary_values[self.free_dofs] = 0.
         self._boundary_values.flags.writeable = False
         self._boundary_K = self._mass_factor.solve(
-            self.full_stiffness[self.free_dofs] @ self._boundary_values)
+            self.full_linear[self.free_dofs] @ self._boundary_values)
         self._boundary_D = np.asarray(self.full_divergence @ self._boundary_values)
         mesh = self.velocity_basis.mesh
         self._facet_order = max(6, space.quadrature_order)
         self._all_facets = FacetBasis(mesh, self.velocity_basis.elem, facets=mesh.boundary_facets(),
                                      intorder=self._facet_order)
         self._boundary_quadrature = P2Quadrature(self._all_facets)
+        self._open_mask = np.isin(self._all_facets.find,
+            np.setdiff1d(mesh.boundary_facets(), dirichlet_facets))[:, None]
         self._named_facets: dict[str, tuple[Any, Any, np.ndarray]] = {}
-        self._pressure_stokes = FEMStokes(self.mass, self.stiffness, self.divergence,
+        self._pressure_stokes = FEMStokes(self.mass, self.linear_stiffness, self.divergence,
                                           self.pressure_weights, tolerance=tolerance,
-                                          cache_size=1, pressure_gauge=False, mass_solve=self._mass_factor.solve)
+                                          cache_size=1, pressure_gauge=False, mass_solve=self._mass_factor.solve,
+                                          ordering=stokes_ordering, factor_backend=stokes_factor_backend,
+                                          threads=stokes_threads,
+                                          backend='petsc' if stokes_backend == 'petsc' else 'direct',
+                                          reaction_coefficient=reaction_coefficient,
+                                          components=[np.flatnonzero(np.isin(self.free_dofs, ids)) for ids in self.component_dofs],
+                                          amg_type=stokes_amg_type)
 
     def performance_metrics(self) -> dict[str, float | int]:
         return {**super().performance_metrics(),
@@ -70,8 +88,9 @@ class OpenFlowModel(FEMModel):
             load = self._convection_load(full)
             field, _ = self._boundary_quadrature.evaluate(full)
             normal_velocity = np.sum(field*self._all_facets.normals, axis=0)
-            load += self._boundary_quadrature.load(.5*normal_velocity[None]*field)
-            boundary_power = .5*float(np.sum(normal_velocity*np.sum(field**2, axis=0)*self._all_facets.dx))
+            transport = self._boundary_transport(normal_velocity)
+            load += self._boundary_quadrature.load(.5*transport[None]*field)
+            boundary_power = .5*float(np.sum(transport*np.sum(field**2, axis=0)*self._all_facets.dx))
             # Known-trace work minus physical convective energy crossing the boundary.
             lifting = float(load @ self._boundary_values)-boundary_power
             coefficients = self._mass_factor.solve(load[self.free_dofs])
@@ -80,6 +99,22 @@ class OpenFlowModel(FEMModel):
             return coefficients, lifting
         finally:
             self._nonlinear_wall_seconds += perf_counter()-start
+
+    def _nonlinear_load_with_lifting(self, velocity: Array) -> tuple[Array, float]:
+        full = self.full_velocity(velocity)
+        load = self._convection_load(full)
+        field, _ = self._boundary_quadrature.evaluate(full)
+        normal_velocity = np.sum(field*self._all_facets.normals, axis=0)
+        transport = self._boundary_transport(normal_velocity)
+        load += self._boundary_quadrature.load(.5*transport[None]*field)
+        boundary_power = .5*float(np.sum(transport*np.sum(field**2, axis=0)*self._all_facets.dx))
+        return load[self.free_dofs], float(load @ self._boundary_values)-boundary_power
+
+    def _boundary_transport(self, normal_velocity: Array) -> Array:
+        """Transport used by both the momentum load and its SAV boundary work."""
+        if self.outlet_treatment == 'backflow_damped':
+            return normal_velocity+np.maximum(-normal_velocity, 0.)*self._open_mask
+        return normal_velocity
 
     def nonlinear(self, velocity: Array) -> Array:
         return self.nonlinear_with_lifting(velocity)[0]
@@ -98,8 +133,7 @@ class OpenFlowModel(FEMModel):
             full = self.full_velocity(solution.velocity) if index == 0 else np.zeros(self.velocity_basis.N)
             if index:
                 full[self.free_dofs] = solution.velocity
-            _, gradient = self._quadrature.evaluate(full)
-            divergence = float(np.max(np.abs(gradient[0, 0]+gradient[1, 1])))
+            divergence = float(np.max(np.abs(self._quadrature.divergence(full, cache_field=len(solutions) == 1))))
             results.append(FEMSolution(solution.velocity, solution.pressure, solution.residual,
                                        divergence, solution.continuity_residual))
         return results
@@ -145,7 +179,7 @@ class OpenFlowModel(FEMModel):
         boundary, _ = self._boundary_quadrature.evaluate(full)
         normal_velocity = np.sum(boundary*self._all_facets.normals, axis=0)
         kinetic = .5*float(full @ (self.full_mass @ full))
-        return {'kinetic': kinetic, 'modified_energy': kinetic+.5*(state.r-1)**2,
+        result = {'kinetic': kinetic, 'modified_energy': kinetic+.5*(state.r-1)**2,
                 'h1_seminorm_squared': float(full @ (self.full_stiffness @ full)),
                 'divergence_inf': float(np.max(np.abs(divergence))),
                 'divergence_l2': float(np.sqrt(np.sum(divergence**2*self.velocity_basis.dx))),
@@ -153,3 +187,7 @@ class OpenFlowModel(FEMModel):
                 'boundary_flux': float(np.sum(normal_velocity*self._all_facets.dx)),
                 'convective_boundary_power': .5*float(np.sum(
                     normal_velocity*np.sum(boundary**2, axis=0)*self._all_facets.dx))}
+        if self.outlet_treatment == 'backflow_damped':
+            result['outlet_backflow_dissipation'] = .5*float(np.sum(np.maximum(-normal_velocity, 0.)
+                *self._open_mask*np.sum(boundary**2, axis=0)*self._all_facets.dx))
+        return result

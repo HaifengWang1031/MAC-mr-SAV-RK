@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 from ..core import Trial
 from ..model import Model, stage_divergences
+from ..momentum import stage_momentum
 
 ETA=1-1/np.sqrt(2.)
 DELTA=-1/np.sqrt(2.)
@@ -18,17 +19,18 @@ class SDIRK2:
 
     def step(self, model: Model, state: Any, dt: float) -> Trial:
         if not np.isfinite(dt) or dt<=0: raise ValueError('Invalid step size')
+        momentum = stage_momentum(model)
         old=model.vector(state)
-        nonlinear_old=model.nonlinear(old)
-        f0=model.force(state.t)
+        nonlinear_old=momentum.nonlinear(old)
+        f0=momentum.force(state.t)
         viscosity=model.nu*ETA*dt
-        first=model.solve(model.combine((1.,old),(ETA*dt,f0),(-ETA*dt,nonlinear_old)),
+        first=momentum.solve(model.combine((1.,momentum.mass(old)),(ETA*dt,f0),(-ETA*dt,nonlinear_old)),
                           mass=1.,viscosity=viscosity)
-        f1=model.force(state.t+ETA*dt)
-        n1=model.nonlinear(first.velocity)
-        rhs=model.combine((1.,first.velocity),(-model.nu*dt*(1-2*ETA),model.apply_K(first.velocity)),
+        f1=momentum.force(state.t+ETA*dt)
+        n1=momentum.nonlinear(first.velocity)
+        rhs=model.combine((1.,momentum.mass(first.velocity)),(-model.nu*dt*(1-2*ETA),momentum.linear(first.velocity)),
                           (-dt,f0),(dt*(1-DELTA),f1),(dt,nonlinear_old),(-dt*(1-DELTA),n1))
-        second=model.solve(rhs,mass=1.,viscosity=viscosity)
+        second=momentum.solve(rhs,mass=1.,viscosity=viscosity)
         # The stage pressure is an increment: divided by dt. Expressed as a scaled copy
         # so the same line works on a vector type that has no division.
         stages=[]

@@ -7,6 +7,7 @@ import sympy as sy
 
 from solver.core import State
 from solver.fem import FEMModel, Space
+from experiments.fem_backends import model_solver_options
 
 
 @lru_cache(maxsize=16)
@@ -35,7 +36,10 @@ def manufactured(lx: float, ly: float, nu: float, amplitude: float) -> tuple[Any
 def build_model(cfg: dict) -> tuple[FEMModel, State]:
     space = Space(cfg['nx'], cfg['ny'], cfg['lx'], cfg['ly'], cfg['quadrature_order'])
     model = FEMModel(space, cfg['nu'], tolerance=cfg['stokes_tolerance'], cache_size=cfg['cache_size'],
-                     stokes_backend=cfg.get('stokes_backend', 'direct'))
+                     stokes_backend=cfg.get('stokes_backend', 'direct'),
+                     stokes_ordering=cfg.get('stokes_ordering', 'auto'),
+                     stokes_factor_backend=cfg.get('stokes_factor_backend', 'superlu'),
+                     stokes_threads=cfg.get('stokes_threads'), **model_solver_options(cfg))
     velocity, _, _, linear, nonlinear = _manufactured(cfg['lx'], cfg['ly'], cfg['nu'], cfg['amplitude'])
     initial = model.solve(model.project(lambda x, y: velocity(x, y, 0.)), mass=1., viscosity=0.).velocity
     linear_coefficients, nonlinear_coefficients = model.project(linear), model.project(nonlinear)

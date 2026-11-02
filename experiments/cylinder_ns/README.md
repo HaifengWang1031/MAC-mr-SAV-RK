@@ -24,6 +24,19 @@ MPLBACKEND=Agg uv run --locked --group notebook python -m experiments.cylinder_n
 数值输出位于 `runs/cylinder_ns/<run-id>/`，分析输出位于 `reports/cylinder_ns/<run-id>/`。
 分析只读取保存的网格、P2/P1 系数和历史，不构造动力学模型或启动 Stokes/时间推进。
 
+Re500加密SAV/回流耗散配置为`configs/re500_backflow_fine_optimized.json`：
+nu=0.0002、resolution=2、96边圆柱、T=12，使用recycled/SuperLU/auto和单线程。
+完整旧版/优化版串行效率对照的当前交接见
+`runs/cylinder_re500_efficiency/20261030T135609-94ce170f/STATUS.md`；提交记录不能代替完成结果。
+
+计算效率选项独立于物理参数与时间格式：`stokes_backend=recycled` 可复用邻近步长的
+因子作预条件器，仍求解当前精确系统。默认 SuperLU 的 `stokes_ordering=auto` 在系统
+未知量不少于20000时使用跨步缓存的METIS排序，小系统使用MMD；也可显式指定
+`mmd` 或 `metis`。Linux x86_64 可安装 `uv sync --locked --extra pardiso`，再设
+`stokes_factor_backend=pardiso, stokes_threads=4`；该后端使用自己的 `auto` 排序。
+并行线程越多不一定越快，应按相同精度的完整步计时选择。所有原始残差检查保留，
+旧配置与已有记录继续读取。基准和限制见 [效率记录](../../docs/fem-optimization.md)。
+
 ## 时间控制与记录
 
 六个注册格式均支持固定/给定步长。普通及 SAV 的 SDIRK2/3 支持已有嵌入估计的 I/PI 自适应；Euler 不虚构嵌入估计器。

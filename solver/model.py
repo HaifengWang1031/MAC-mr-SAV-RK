@@ -66,7 +66,7 @@ class Model(Protocol):
         """
 
     def apply_K(self, velocity: Any) -> Any:
-        """Discrete negative Laplacian acting on the velocity."""
+        """Positive linear dissipation operator; negative Laplacian in NS models."""
 
     def apply_G(self, pressure: Any) -> Any:
         """Discrete gradient: pressure to velocity."""

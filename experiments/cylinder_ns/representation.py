@@ -20,8 +20,19 @@ METADATA = {**FEM_METADATA, 'cylinder_schema_version': 1, 'case': 'dfg2d2',
             'physical_pressure_semantics': 'instantaneous_semidiscrete_natural_outflow'}
 
 
+def representation_metadata(outlet_treatment: str = 'natural') -> dict:
+    if outlet_treatment == 'natural':
+        return dict(METADATA)
+    if outlet_treatment != 'backflow_damped':
+        raise ValueError('Unknown cylinder outlet_treatment')
+    return {**METADATA, 'case': 'dfg2d2_backflow_damped',
+            'boundary': 'fixed_inlet_no_slip_walls_cylinder_backflow_damped_outlet',
+            'outlet_treatment': 'backflow_damped',
+            'physical_pressure_semantics': 'instantaneous_semidiscrete_backflow_damped_outflow'}
+
+
 def save(data: Any, model: OpenFlowModel, cfg: dict, observations: Observations, result: Result) -> None:
-    for key, value in METADATA.items():
+    for key, value in representation_metadata(cfg.get('outlet_treatment', 'natural')).items():
         data.attrs[key] = value
     data.attrs['scikit_fem_version'] = version('scikit-fem')
     expected = maps(model.velocity_basis, model.pressure_basis)
@@ -52,7 +63,7 @@ def validate(data: Any, cfg: dict, manifest: dict) -> tuple[Any, Any]:
 def _validate(data: Any, cfg: dict, manifest: dict) -> tuple[Any, Any]:
     if data.attrs.get('schema_version') != 1 or data.attrs.get('status') != manifest['status']:
         raise ValueError('Cylinder schema/status mismatch')
-    for key, value in METADATA.items():
+    for key, value in representation_metadata(cfg.get('outlet_treatment', 'natural')).items():
         if cfg.get(key) != value or data.attrs.get(key) != value:
             raise ValueError(f'Cylinder representation mismatch: {key}')
     if data.attrs.get('pressure_semantics') != cfg['pressure_semantics']:
@@ -92,6 +103,10 @@ def _validate(data: Any, cfg: dict, manifest: dict) -> tuple[Any, Any]:
     times = data['times'][:]
     for key in ('boundary_flux', 'convective_boundary_power'):
         _array(data, 'diagnostics/'+key, times.shape)
+    if cfg.get('outlet_treatment') == 'backflow_damped':
+        damping = _array(data, 'diagnostics/outlet_backflow_dissipation', times.shape)
+        if np.any(damping < 0.):
+            raise ValueError('Negative outlet backflow dissipation')
     observed_times = np.asarray(data['observations/time'][:])
     count = len(observed_times)
     if observed_times.ndim != 1 or not 1 <= count <= len(times) \

@@ -10,10 +10,23 @@ dependencies = [
     "matplotlib>=3.7",
     "sympy>=1.12",
     "scikit-fem>=12.0.2,<13",
+    "pymetis==2025.2.2",
+]
+
+[project.optional-dependencies]
+pardiso = [
+    "pypardiso==0.4.7; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "mkl==2026.2.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+mesh = [
+    "gmsh==4.15.2",
+]
+multigrid = [
+    "petsc4py==3.25.5",
 ]
 
 [dependency-groups]
-dev = ["pytest>=7", "mypy>=1.10"]
+dev = ["pytest>=7", "mypy>=1.10", "threadpoolctl>=3"]
 notebook = ["ipykernel>=6.29", "nbclient>=0.10", "nbformat>=5.10"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]

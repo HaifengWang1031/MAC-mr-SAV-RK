@@ -2,7 +2,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from time import perf_counter, process_time
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 
@@ -116,7 +116,8 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
                        strict_snapshots: bool = False,
                        progress: Callable[[int, float, float], None] | None = None,
                        on_accept: Callable[[Any], None] | None = None,
-                       scalar_control: ScalarErrorControl | None = None) -> AdaptiveResult:
+                       scalar_control: ScalarErrorControl | None = None,
+                       min_step_policy: Literal['fail', 'force'] = 'fail') -> AdaptiveResult:
     """Advance the order-three state; rejected trials never change the accepted state.
 
     T is a duration from initial.t. Snapshot requests are absolute physical times
@@ -125,7 +126,13 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
     it still passes the same error and stage checks as every other trial.
     With scalar_control, accept max(E_u,E_r)<=1 and take the smaller component
     step proposal. Velocity and scalar use their own orders and PI histories.
+    Explicit force policy clamps ordinary proposals to min_step and permits
+    finite over-tolerance trials exactly at that floor. Nonfinite states/errors,
+    failed stage solves and diagnostics are still rejected. Shorter terminal
+    alignment steps retain their error check; default fail policy is unchanged.
     """
+    if min_step_policy not in ('fail', 'force'):
+        raise ValueError('Unknown min_step_policy')
     if not np.isfinite([T, initial_step, initial.t]).all() or T <= 0 or initial_step <= 0:
         raise ValueError('T and initial_step must be finite and positive')
     if initial_step < controller.min_step:
@@ -193,6 +200,7 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
                 else:
                     step = min(proposed_step, distance_to_output)
         terminal_step = step == remaining
+        force_floor = min_step_policy == 'force' and step == controller.min_step
         if step < controller.min_step and not terminal_step:
             result.status, result.error = 'failed', 'Step below min_step'
             break
@@ -221,7 +229,7 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
                 error = max(error_u, error_r) if np.isfinite(error_r) else float('inf')
             if not np.isfinite(error):
                 reason = 'nonfinite_error'
-            elif error > 1.:
+            elif error > 1. and not force_floor:
                 reason = 'error_exceeded'
             else:
                 diagnostic = model.diagnostics(trial.state)
@@ -262,10 +270,17 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
                 boundary_step = None
                 boundary_steps_remaining = 0
             rejections += 1
-            if rejections > controller.max_rejections or step*factor < controller.min_step:
+            if rejections > controller.max_rejections:
                 result.status, result.error = 'failed', reason or 'Maximum rejections exceeded'
                 break
-            step *= factor
+            proposed = step*factor
+            if proposed < controller.min_step:
+                if min_step_policy == 'force' and step > controller.min_step and not terminal_step:
+                    step = controller.min_step
+                    continue
+                result.status, result.error = 'failed', reason
+                break
+            step = proposed
             continue
         assert trial is not None
         rejections = 0
@@ -316,6 +331,8 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
                 step = min(step*factor, controller.max_step)
         else:
             step = min(step*factor, controller.max_step)
+        if min_step_policy == 'force' and not boundary_steps_remaining:
+            step = max(step, controller.min_step)
     for request, (_, state) in zip(requests, best):
         result.snapshot_requests.append(request)
         result.snapshot_times.append(state.t)

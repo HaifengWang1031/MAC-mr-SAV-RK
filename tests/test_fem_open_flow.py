@@ -8,7 +8,10 @@ from solver.schemes.registry import SCHEMES, make_scheme
 
 
 @pytest.mark.parametrize('scheme', SCHEMES)
-def test_exact_poiseuille_with_natural_outlet_and_fixed_inlet(scheme):
+@pytest.mark.parametrize('factor_backend', ['superlu', 'pardiso'])
+def test_exact_poiseuille_with_natural_outlet_and_fixed_inlet(scheme, factor_backend):
+    if factor_backend == 'pardiso':
+        pytest.importorskip('pypardiso')
     mesh = MeshTri.init_tensor(np.linspace(0., 2., 5), np.linspace(0., 1., 4)).with_boundaries({
         'inlet': lambda x: np.isclose(x[0], 0.),
         'outlet': lambda x: np.isclose(x[0], 2.),
@@ -17,7 +20,9 @@ def test_exact_poiseuille_with_natural_outlet_and_fixed_inlet(scheme):
     assert mesh.boundaries is not None
     fixed = np.concatenate([mesh.boundaries[name] for name in ('inlet', 'walls')])
     model = OpenFlowModel(MeshSpace(mesh), .1, dirichlet_facets=fixed,
-                          boundary_velocity=lambda x, y: (4*y*(1-y), 0.))
+                          boundary_velocity=lambda x, y: (4*y*(1-y), 0.),
+                          stokes_ordering='metis' if factor_backend == 'superlu' else 'auto',
+                          stokes_factor_backend=factor_backend, stokes_threads=2 if factor_backend == 'pardiso' else None)
     steady = model.solve(model.zero_velocity(), mass=0., viscosity=.1)
     points = np.array([[.1, .6, 1.9, 2.], [.2, .7, .4, .5]])
     expected = np.array([4*points[1]*(1-points[1]), np.zeros(points.shape[1])])

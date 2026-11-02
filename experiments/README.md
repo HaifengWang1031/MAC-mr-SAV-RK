@@ -1,5 +1,9 @@
 # 实验成果导航
 
+新增：[Hele–Shaw翼型](hele_shaw_airfoil/README.md)——Darcy参照、MWR惯性Brinkman、SAV启动与数值敏感性检查；三维适用性尚未验证。
+
+[顶盖楔腔](wedge_cavity/README.md)保留独立的启动、弱次涡显示与长时间网格对照入口。
+
 按**独立研究问题**查找，而不是把一个目录、一份配置或一次运行当成一项研究。
 一个研究可包含多个格式、步长和重复运行；下表中的计算说明保留原来的执行入口。
 
@@ -26,6 +30,7 @@
 | --- | --- | --- | --- | --- |
 | [顶盖驱动方腔](cavity/README.md) | 移动顶盖的稳态/启动过程与网格对比，含保存场动画 | — | — | 待整理 |
 | [FEM 圆柱绕流 DFG 2D-2](cylinder_ns/README.md) | Re=100 定常入口、自然出口、六格式与 I/PI 自适应、物理受力和保存场动画 | — | — | 四级自适应周期/空间/几何/时间资格通过；实测优化约2.51倍，范围见记录 |
+| [二维 SAV 圆柱尾流动画对比](cylinder_wake_compare/README.md) | Re100 周期脱涡与 Re1000 二维非定常尾流；显式保存场和独立来源 | — | — | 探索性动画；新低 Re 已完成，高 Re 原批次触及步长下限失败，强制下限重跑另存 |
 | [A/B 外力旋转](forced_rotation/README.md) | 净力矩与零净力矩的长期能量收支、角动量和旋转反转 | — | — | 待整理；历史原始证据有缺失限制 |
 | [周期 Kolmogorov 流](periodic_ns/README.md) | 双周期 Fourier 模型的受迫流及保存场动画，不是无滑移 Kolmogorov 对照 | — | — | 待整理 |
 | [Channel 压力驱动瞬态](channel_ns/README.md) | 离散 Poiseuille、从静止启动及受扰后的松弛，含保存场动画 | — | — | 待整理 |

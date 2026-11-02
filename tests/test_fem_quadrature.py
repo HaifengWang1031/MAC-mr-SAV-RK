@@ -56,3 +56,32 @@ def test_known_mms_force_modes_match_continuous_reference_projection():
         assert model.performance_metrics()['projection_calls'] == before
         expected = model.project(lambda x, y: force(x, y, time))
         np.testing.assert_allclose(actual, expected, rtol=2e-13, atol=2e-13)
+
+
+def test_divergence_only_kernel_preserves_the_full_quadrature_diagnostic():
+    model = FEMModel(Space(4, 3), .1)
+    basis = model.velocity_basis
+    full = np.zeros(basis.N)
+    x, y = basis.doflocs
+    for values, indices in zip((x*x+x*y, y*y+x*y), model.component_dofs):
+        full[indices] = values[indices]
+    before = full.copy()
+    q = model._quadrature
+    actual = q.divergence(full)
+    qx, qy = basis.global_coordinates()
+    np.testing.assert_allclose(actual, 3*(qx+qy), rtol=0., atol=2e-13)
+    assert q.metrics()['field_evaluations'] == 0
+    _, gradient = q.evaluate(full)
+    np.testing.assert_allclose(q.divergence(full), gradient[0, 0]+gradient[1, 1], atol=2e-13)
+    np.testing.assert_array_equal(full, before)
+
+
+def test_single_response_reuses_its_field_for_stage_diagnostics_and_convection():
+    model = FEMModel(Space(4, 3), .1)
+    rhs = model.project(lambda x, y: (y*(1-y), x*(2-x)))
+    result = model.solve(rhs, mass=1., viscosity=.003)
+    assert np.linalg.norm(result.velocity) > .01
+    before = model.performance_metrics()['volume_field_evaluations']
+    model.stage_divergences(result.velocity)
+    model.nonlinear(result.velocity)
+    assert model.performance_metrics()['volume_field_evaluations'] == before

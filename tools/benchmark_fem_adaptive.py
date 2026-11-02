@@ -51,6 +51,19 @@ def _worker(args: argparse.Namespace) -> None:
             options['stokes_backend'] = args.backend
         elif args.backend != 'direct':
             raise ValueError('This source has no recycled backend')
+        if 'stokes_ordering' in inspect.signature(OpenFlowModel).parameters:
+            options['stokes_ordering'] = cfg.get('stokes_ordering', 'auto')
+        elif cfg.get('stokes_ordering', 'auto') not in ('auto', 'mmd'):
+            raise ValueError('This source has no requested Stokes ordering')
+        if 'stokes_factor_backend' in inspect.signature(OpenFlowModel).parameters:
+            options['stokes_factor_backend'] = cfg.get('stokes_factor_backend', 'superlu')
+            options['stokes_threads'] = cfg.get('stokes_threads')
+        elif cfg.get('stokes_factor_backend', 'superlu') != 'superlu' or cfg.get('stokes_threads') is not None:
+            raise ValueError('This source has no requested factor/thread controls')
+        if cfg.get('outlet_treatment', 'natural') != 'natural':
+            if 'outlet_treatment' not in inspect.signature(OpenFlowModel).parameters:
+                raise ValueError('This source has no requested outlet treatment')
+            options['outlet_treatment'] = cfg['outlet_treatment']
         model = OpenFlowModel(MeshSpace(mesh, cfg['quadrature_order']), cfg['nu'], **options)
         assert np.array_equal(model.component_dofs[0], saved['component_u'])
         assert np.array_equal(model.component_dofs[1], saved['component_v'])
@@ -123,6 +136,10 @@ def _worker(args: argparse.Namespace) -> None:
                    max_abs_r=max(abs(d['r']) for d in result.diagnostics),
                    max_physical_divergence=max(d['divergence_inf'] for d in result.diagnostics))
     source = provenance(); source['packages']['scikit-fem'] = version('scikit-fem')
+    if 'stokes_ordering' in inspect.signature(OpenFlowModel).parameters:
+        source['packages']['pymetis'] = version('pymetis')
+    if cfg.get('stokes_factor_backend') == 'pardiso':
+        source['packages'].update({name: version(name) for name in ('pypardiso', 'mkl')})
     write_json(args.output.with_suffix('.json'), {
         'status': result.status, 'error': result.error, 'source': source, 'backend': args.backend,
         'duration': args.duration, 'step': args.step, 'schedule': None if args.schedule is None else str(args.schedule),
@@ -139,7 +156,7 @@ def _campaign(args: argparse.Namespace) -> Path:
     import h5py
     import numpy as np
     from experiments.cylinder_ns.run import load_cylinder
-    from experiments.cylinder_ns.config import DEFAULTS, effective_config
+    from experiments.cylinder_ns.config import DEFAULTS, OPTIONAL, effective_config
     from experiments.cylinder_ns.representation import validate
     from experiments.cylinder_ns.benchmark import cycle_statistics
     from experiments.workflow import digest, write_json
@@ -159,6 +176,7 @@ def _campaign(args: argparse.Namespace) -> Path:
         if not isinstance(controls, dict) or set(controls)-{'controller', 'scalar_atol', 'initial_step'}:
             raise ValueError('Reference control config accepts controller/scalar_atol/initial_step only')
         base = {key: cfg[key] for key in DEFAULTS if key not in ('dt', 'snapshots')}
+        base.update({key: cfg[key] for key in OPTIONAL if key != 'steps' and key in cfg})
         base.update(mode='adaptive', T=args.duration, snapshots=[], initial_step=cfg.get('initial_step') or .001)
         base.update(controls)
         cfg = effective_config(base)
@@ -189,7 +207,8 @@ def _campaign(args: argparse.Namespace) -> Path:
             assert mesh.boundaries is not None and space.mesh.boundaries is not None
             fixed = np.concatenate([space.mesh.boundaries[key] for key in ('inlet', 'walls', 'cylinder')])
             target = OpenFlowModel(space, cfg['nu'], dirichlet_facets=fixed,
-                                    boundary_velocity=lambda x,y: inlet_velocity(x,y,cfg['inlet_max']))
+                                    boundary_velocity=lambda x,y: inlet_velocity(x,y,cfg['inlet_max']),
+                                    outlet_treatment=cfg.get('outlet_treatment', 'natural'))
             old_full = np.zeros(vb.N)
             for values, indices in zip((u, v), parts): old_full[indices] = values
             query = target.velocity_basis.doflocs[:, target.component_dofs[0]]

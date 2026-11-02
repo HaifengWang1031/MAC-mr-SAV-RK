@@ -12,6 +12,7 @@ from ..model import SolveResult
 from .space import Array, FiniteElementSpace
 from .stokes import FEMStokes
 from .quadrature import P2Quadrature
+from .mass import VelocityMassFactor
 
 VectorField = Callable[[Array, Array], tuple[Array | float, Array | float]]
 
@@ -49,9 +50,18 @@ class FEMModel:
     def __init__(self, space: FiniteElementSpace, nu: float, *, force: Callable[[float], Array] | None = None,
                  tolerance: float = 1e-9, cache_size: int = 4,
                  dirichlet_facets: np.ndarray | None = None, pressure_gauge: bool = True,
-                 stokes_backend: str = 'direct') -> None:
+                 stokes_backend: str = 'direct', stokes_ordering: str = 'auto',
+                 stokes_factor_backend: str = 'superlu', stokes_threads: int | None = None,
+                 reaction_coefficient: float = 0., mass_backend: str = 'direct',
+                 stokes_amg_type: str = 'gamg', fem_load_mode: str = 'riesz') -> None:
         if not np.isfinite(nu) or nu <= 0:
             raise ValueError('nu must be positive and finite')
+        if not np.isfinite(reaction_coefficient) or reaction_coefficient < 0.:
+            raise ValueError('reaction_coefficient must be finite and nonnegative')
+        if fem_load_mode not in ('riesz', 'weak'):
+            raise ValueError('fem_load_mode must be riesz or weak')
+        self.fem_load_mode = fem_load_mode
+        self._momentum_adapter: Any = None
         self.space = space
         self.nu = nu
         self.velocity_basis, self.pressure_basis = space.bases()
@@ -69,24 +79,62 @@ class FEMModel:
             raise ValueError('Mesh has too few free velocity DOFs for the pressure constraints')
         self.full_mass = asm(_mass, self.velocity_basis).tocsc()
         self.full_stiffness = asm(_stiffness, self.velocity_basis).tocsc()
+        self.reaction_coefficient = float(reaction_coefficient)
+        # Keep gradient stiffness separate for physical H1/viscous diagnostics.
+        # The zero-reaction branch uses the exact old matrices and operations.
+        self.full_linear = (self.full_stiffness + reaction_coefficient*self.full_mass).tocsc() \
+            if reaction_coefficient else self.full_stiffness
         self.full_divergence = asm(_divergence, self.velocity_basis, self.pressure_basis).tocsr()
         self.mass = self.full_mass[self.free_dofs][:, self.free_dofs].tocsc()
         self.stiffness = self.full_stiffness[self.free_dofs][:, self.free_dofs].tocsc()
+        self.linear_stiffness = self.full_linear[self.free_dofs][:, self.free_dofs].tocsc() \
+            if reaction_coefficient else self.stiffness
         self.divergence = self.full_divergence[:, self.free_dofs].tocsr()
         self.pressure_weights = asm(_integral, self.pressure_basis)
         self._quadrature = P2Quadrature(self.velocity_basis)
-        self._mass_factor = splu(self.mass, permc_spec='MMD_AT_PLUS_A', diag_pivot_thresh=0.)
+        free_components = [np.flatnonzero(np.isin(self.free_dofs, indices)) for indices in self.component_dofs]
+        self._mass_factor = VelocityMassFactor(self.mass, free_components, backend=mass_backend)
         self._nonlinear_calls, self._projection_calls = 0, 0
         self._nonlinear_wall_seconds, self._projection_wall_seconds = 0., 0.
-        self.stokes = FEMStokes(self.mass, self.stiffness, self.divergence, self.pressure_weights,
+        self.stokes = FEMStokes(self.mass, self.linear_stiffness, self.divergence, self.pressure_weights,
                                 tolerance=tolerance, cache_size=cache_size, pressure_gauge=pressure_gauge,
-                                backend=stokes_backend, mass_solve=self._mass_factor.solve)
+                                backend=stokes_backend, mass_solve=self._mass_factor.solve, ordering=stokes_ordering,
+                                factor_backend=stokes_factor_backend, threads=stokes_threads,
+                                reaction_coefficient=reaction_coefficient, components=free_components,
+                                amg_type=stokes_amg_type)
         size = len(self.free_dofs)
         self.force: Callable[[float], Array] = force if force is not None else lambda t: np.zeros(size)
+
+    def stage_momentum(self) -> Any:
+        from ..momentum import Momentum
+        if self.fem_load_mode == 'riesz':
+            return Momentum(self)
+        if self._momentum_adapter is None:
+            from .momentum import FEMMomentum
+            self._momentum_adapter = FEMMomentum(self)
+        return self._momentum_adapter
+
+    def _nonlinear_load_with_lifting(self, velocity: Array) -> tuple[Array, float]:
+        return self._convection_load(self.full_velocity(velocity))[self.free_dofs], 0.
+
+    def nonlinear_load_with_lifting(self, velocity: Array) -> tuple[Array, float]:
+        """Assemble the same convection and SAV work without a mass inverse."""
+        start = perf_counter()
+        self._nonlinear_calls += 1
+        try:
+            load, work = self._nonlinear_load_with_lifting(velocity)
+            if not np.isfinite(load).all() or not np.isfinite(work):
+                raise FloatingPointError('Nonfinite FEM convection load')
+            return load, work
+        finally:
+            self._nonlinear_wall_seconds += perf_counter()-start
 
     def performance_metrics(self) -> dict[str, float | int]:
         return {**{'stokes_'+key: value for key, value in self.stokes.metrics().items()},
                 **{'volume_'+key: value for key, value in self._quadrature.metrics().items()},
+                **{'mass_'+key: value for key, value in self._mass_factor.metrics().items()},
+                'mass_factor_rows': self._mass_factor.rows, 'mass_factor_nonzeros': self._mass_factor.nnz,
+                'mass_shared_components': len(self._mass_factor.components),
                 'nonlinear_calls': self._nonlinear_calls, 'nonlinear_wall_seconds': self._nonlinear_wall_seconds,
                 'projection_calls': self._projection_calls, 'projection_wall_seconds': self._projection_wall_seconds}
 
@@ -224,7 +272,7 @@ class FEMModel:
         return float(np.max(np.abs(field)))
 
     def apply_K(self, velocity: Array) -> Array:
-        return self._mass_factor.solve(self.stiffness @ self._velocity(velocity))
+        return self._mass_factor.solve(self.linear_stiffness @ self._velocity(velocity))
 
     def apply_G(self, pressure: Array) -> Array:
         return self._mass_factor.solve(-self.divergence.T @ self._pressure(pressure))
@@ -250,7 +298,9 @@ class FEMModel:
     def solve_columns(self, columns: Sequence[Array], *, mass: float, viscosity: float) -> list[SolveResult]:
         results = self.stokes.solve_columns([self._velocity(c) for c in columns], mass=mass, viscosity=viscosity)
         return [FEMSolution(result.velocity, result.pressure, result.residual,
-                            self.physical_divergence_inf(result.velocity), result.continuity_residual)
+                            float(np.max(np.abs(self._quadrature.divergence(self.full_velocity(result.velocity),
+                                                                           cache_field=len(results) == 1)))),
+                            result.continuity_residual)
                 for result in results]
 
     def stage_divergences(self, velocity: Array) -> tuple[float, float]:

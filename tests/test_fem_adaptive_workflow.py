@@ -37,7 +37,8 @@ def test_adaptive_fem_run_load_and_readonly_analysis(backend: str, scheme: str, 
 
 def test_old_fixed_effective_configuration_keys_remain_unchanged():
     cfg = effective_config({'nx': 4, 'ny': 3, 'T': .01, 'dt': .005})
-    assert not {'mode', 'controller', 'initial_step', 'scalar_atol', 'stokes_backend'} & set(cfg)
+    assert not {'mode', 'controller', 'initial_step', 'scalar_atol', 'stokes_backend', 'stokes_ordering',
+                'stokes_factor_backend', 'stokes_threads'} & set(cfg)
     np.testing.assert_array_equal(cfg['actual_steps'], [.005, .005])
 
 

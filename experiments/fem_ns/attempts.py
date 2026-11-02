@@ -61,13 +61,15 @@ def validate_attempts(data: Any, cfg: dict, times: np.ndarray) -> None:
         error_u = float(values['error_u'][index])
         error_r = float(values['error_r'][index])
         if accepted:
+            forced_floor = cfg.get('min_step_policy') == 'force' and h == cfg['controller']['min_step']
+            limit = float('inf') if forced_floor else 1.
             if values['reason'][index] or not np.isfinite([error, error_u]).all() \
-                    or not 0. <= error <= 1. or not 0. <= error_u <= 1.:
+                    or not 0. <= error <= limit or not 0. <= error_u <= limit:
                 raise ValueError('Invalid accepted FEM adaptive error')
             expected_error = error_u
             if scalar is not None:
                 defect = float(values['scalar_defect'][index])
-                if not np.isfinite([error_r, defect]).all() or not 0. <= error_r <= 1. \
+                if not np.isfinite([error_r, defect]).all() or not 0. <= error_r <= limit \
                         or not np.isclose(error_r, abs(defect)/scalar, rtol=1e-12, atol=1e-14):
                     raise ValueError('Invalid FEM adaptive scalar defect')
                 expected_error = max(error_u, error_r)

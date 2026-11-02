@@ -1,0 +1,15 @@
+{
+  "lid_speed": 1.0,
+  "dt": 0.01,
+  "scheme": "sdirk2_mrsav",
+  "gamma": 1.0,
+  "snapshot_every": 0.5,
+  "log_every": 2000,
+  "stokes_backend": "direct",
+  "lid_cells": 96,
+  "T": 60.0,
+  "case": "deep",
+  "note": "H/W=1.57",
+  "apex_angle": 35.0,
+  "nu": 0.01
+}

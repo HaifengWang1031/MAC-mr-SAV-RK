@@ -1,4 +1,34 @@
 # 架构与记录约定
+2026-11-01 `solver/fem/hele_shaw.py`实现压力驱动的MWR惯性Brinkman Adapter，
+`airfoil.py`管理可选Gmsh网格生成与保存网格验证，`darcy.py`为独立标量参照。
+FEM保留物理gradient stiffness，另存linear stiffness=A+reaction*M用于阶段/完整残差；
+零反应分支保留原矩阵，非零迹载荷采用同一完整算子。
+`experiments/hele_shaw_airfoil`分离配置、计算、严格加载和只读分析；标准HDF5保留全部根/阶段，
+附加实际网格/DOF、压差边界、瞬时物理压力与模型力，标签不混入圆柱或楔腔。
+reader不依赖Gmsh；控制模型参数和库版本随运行来源保存。见[说明](hele-shaw.md)。
+
+2026-11-01 wedge_cavity：新配置保存r0与lid_corner_policy；旧记录缺失时按真实旧约定
+r0=1/lid读取，不重写旧元数据。固定步时间和终点快照严格对齐T。
+新的animate模块只读完整显式运行，核查配置/结果摘要和实际网格，保留原report.render_frames接口，
+复用版式、三角化与色条并直接编码MP4/GIF；报告独立保存输入摘要、实际时刻和绘图源码摘要。
+数值正确性修正与性能测量分别冻结来源，raw runs与reports保持分离。
+
+2026-10-30 FEM因子排序/并行策略：stokes_ordering、stokes_factor_backend、stokes_threads
+只作为显式可选配置保存，旧记录不增加默认键。METIS结构图包含所有shift的质量/刚度模式，
+以及完整B和适用的积分规范；进程内只共享最多四个只读排列，不共享可变因子。
+主阶段和瞬时物理压力可复用同一结构排列。因子缓存继续使用精确(mass,viscosity)键。
+新FEM来源记录PyMetis版本，选择PARDISO时另记PyPardiso/oneMKL；旧加载器不强制新字段。
+MKL仅在显式选用时导入。质量分量共享和多右端置换只属于线性代数层。
+
+2026-10-28 可选 backflow_damped 出口的模型、参数与表示共用明确的 outlet_treatment。
+旧配置未指定时仍按原身份读取。新 HDF5 标签与物理压力语义单独命名，额外耗散另存，
+参考比较不将其当作自然出口；分析不允许混合两类边界。见 backflow-outlet.md。
+
+2026-10-28 圆柱可选 min_step_policy=force 通过原 attempts 字段保存每次真实误差和接受标志，
+以 manifest.metrics.forced_min_step_acceptances 统计有限超容差下限步；不修改原始误差值或隐去超差。
+读取器只在配置明确为 force 且试步等于 min_step 时允许 accepted=true/error>1。
+旧配置不增加默认键，按原规范重建身份并继续读取，默认 fail 行为不变。
+
 2026-10-05 Legendre 优化：模型与直接/张量后端共用空间算子和有界求积缓存；公开 Space 采样方法保持独立返回值。可选张量后端只更换线性求解算法，默认 direct。legendre_optimization 以独立 NPZ/JSON 运行记录保存两版源码、场、阶段压力/根、计时与校验和，报告只读消费显式运行编号；原 HDF5 格式保持兼容。见 docs/legendre-optimization.md。
 
 2026-10-05 TS 算例在 Channel HDF5 中追加 initial_mode 属性及 unit_velocity，不改变既有数组、阶段或根容量。
@@ -73,3 +103,21 @@ HDF5 的根候选容量对二阶格式为 3，对三阶格式为 5，不足部�
 分析只接受显式运行目录。`reports/diagnostics/<分析编号>/` 下包含 `analysis.json`、`figures/`、`tables/` 和 `analysis.log`，记录输入运行与校验和、分析代码来源、参数及状态。项目内输入路径相对于项目根目录记录，迁移项目后仍可定位。
 
 时间收敛分析要求被测解、参考解和更细参考解同网格、同格式、同物理参数及终止时间，报告参考细化差与最小被测误差的比值。这是参考敏感性检查，不是严格误差上界。分析从保存的最终场计算，不重新推进。失败运行可用于普通诊断，不能用于时间收敛表。
+
+2026-11-02 Hele-Shaw pressure inlet: optional energy_stable_pressure changes only the explicit inlet traction/kinetic work. Momentum and SAV scalar work use the same protected boundary transport; old natural defaults and identities remain. New inlet metadata is validated against the effective config. Explicit velocity/scalar limits abort after an accepted state without clipping. Program-owned progress.json records live accepted-time and corner metrics; release source freezes and run/report separation are retained. inlet_recovery sequences an independent T=1.1 pilot and T=20 run, both from zero; state replay is separately labelled and is not checkpoint continuation.
+
+## Optional FEM block solver and weak momentum
+
+The default FEM Stokes and Riesz paths remain compatible with saved configurations.
+Explicit PETSc selection constructs an exact outer mixed matrix plus reusable velocity
+and pressure block preconditioners. Optional imports stay behind computation interfaces;
+record validation/loading and analysis never require PETSc. COMM_SELF is the supported
+communicator in this adapter.
+
+The shared time schemes obtain a momentum adapter. The legacy adapter preserves existing
+coefficient arithmetic for MAC, spectral and default FEM models. An explicit FEM weak
+adapter carries loads, while physical state/pressure storage stays unchanged. Both use
+the same RK coefficients, SAV polynomial, root enumeration and stage records. Weak loads
+keep the exact consistent mass and original full coefficient/divergence/gauge acceptance
+checks; a smaller normalization denominator is conservative. The fixed trace affects only
+the first Stokes response column. See docs/fem-multigrid.md.

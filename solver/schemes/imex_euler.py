@@ -4,6 +4,7 @@ import numpy as np
 
 from ..core import Trial
 from ..model import Model, stage_divergences
+from ..momentum import stage_momentum
 
 
 class IMEXEuler:
@@ -12,15 +13,16 @@ class IMEXEuler:
     def step(self, model: Model, state: Any, dt: float) -> Trial:
         if not np.isfinite(dt) or dt <= 0 or not np.isfinite(state.t):
             raise ValueError('Invalid step size or state time')
+        momentum = stage_momentum(model)
         old = model.vector(state)
-        convection = model.nonlinear(old)
-        rhs = model.combine((1., old), (dt, model.force(state.t)), (-dt, convection))
-        solved = model.solve(rhs, mass=1., viscosity=model.nu*dt)
+        convection = momentum.nonlinear(old)
+        rhs = model.combine((1., momentum.mass(old)), (dt, momentum.force(state.t)), (-dt, convection))
+        solved = momentum.solve(rhs, mass=1., viscosity=model.nu*dt)
         velocity = solved.velocity
         pressure = model.combine((1/dt, solved.pressure))
-        defect = model.combine((1., velocity), (model.nu*dt, model.apply_K(velocity)),
-                               (dt, model.apply_G(pressure)), (-1., rhs))
-        residual = model.max_abs(defect)/(1+model.max_abs(rhs))
+        defect = model.combine((1., momentum.mass(velocity)), (model.nu*dt, momentum.linear(velocity)),
+                               (dt, momentum.gradient(pressure)), (-1., rhs))
+        residual = momentum.residual(defect, rhs)
         physical_divergence, continuity = stage_divergences(model, velocity)
         if not np.isfinite([residual, physical_divergence, continuity,
                             model.max_abs(velocity), model.max_abs(pressure)]).all() \

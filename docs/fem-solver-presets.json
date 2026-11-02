@@ -1,0 +1,38 @@
+{
+  "default_changed": false,
+  "weak_load": {
+    "options": {
+      "stokes_backend": "recycled",
+      "fem_load_mode": "weak"
+    },
+    "scope": "四类几何的给定变步长与固定步长均通过；原生PI收益依问题，方腔短跑约慢1.2%，其余约快2.7%--6.5%。"
+  },
+  "large_exact_mass": {
+    "options": {
+      "stokes_backend": "recycled",
+      "mass_backend": "metis",
+      "fem_load_mode": "weak"
+    },
+    "scope": "与同批METIS/Riesz对照，四个较大网格完整SAV步通过；最大网格730344速度自由度。"
+  },
+  "large_no_mass_lu": {
+    "options": {
+      "stokes_backend": "recycled",
+      "mass_backend": "cg",
+      "fem_load_mode": "weak"
+    },
+    "scope": "一致质量CG(rtol=1e-13)，四个较大网格完整SAV步通过；避免质量LU，在线成本依问题。"
+  },
+  "amg_selected": false,
+  "amg_reason": "当前单进程更慢，且两个当前候选样本的阶段压力差超过预设门槛；保持显式实验后端。",
+  "limits": [
+    "本机单数值线程，另有此前的 Re=10000 冻结源码计算持续占用约一个核心；未停止或改变该作业。",
+    "给定变步长/固定/原生PI均为短时性能测试，不代表 T=20 或充分发展尾流的总耗时、物理精度。",
+    "最大网格测量一个冷启动的完整四阶段 SAV 步；尚未测大网格长积分的摊销拐点。",
+    "CG 与 METIS 大网格计时分批进行，跨批名次只可探索性阅读，不能宣称全局最优。",
+    "AMG 使用 PETSc GAMG 和 COMM_SELF；未测 Hypre、MPI 分布式装配或 GPU。",
+    "当前 AMG 的少数圆柱阶段增量压力未过预设1e-7一致性门槛；不降低门槛，不选为默认。",
+    "原环境不新增包：最后完整测试以临时 PYTHONPATH 仅提供新声明的 threadpoolctl 开发依赖；生产环境及原作业不变。",
+    "受影响71个源文件mypy通过；全项目仍有3个未改动Kolmogorov文件的6个既有类型错误。"
+  ]
+}

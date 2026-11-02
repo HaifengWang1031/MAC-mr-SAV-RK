@@ -15,10 +15,12 @@ import h5py
 from experiments.fem_ns.attempts import save_attempts
 from experiments.periodic_ns.run import make_controller
 from experiments.workflow import PROJECT, digest, load_record, provenance, save_result, write_json
+from experiments.fem_backends import solver_provenance
 from solver.adaptivity import AdaptiveResult, ScalarErrorControl, integrate_adaptive
+from solver.core import State
 from solver.integrate import Result, integrate
 from solver.schemes.registry import make_scheme, scheme_info
-from .config import DEFAULTS, effective_config
+from .config import DEFAULTS, OPTIONAL, effective_config
 from .observations import Observations
 from .problems import build_model
 from .representation import save, validate
@@ -42,8 +44,9 @@ def load_cylinder(directory: Path, *, require_complete: bool = False) -> tuple[d
                 or not isinstance(source['threads'], dict):
             raise ValueError('Malformed cylinder provenance')
         inputs = {key: cfg.get(key, value) for key, value in DEFAULTS.items()}
-        if 'steps' in cfg:
-            inputs['steps'] = cfg['steps']
+        for key in OPTIONAL:
+            if key in cfg:
+                inputs[key] = cfg[key]
         if effective_config(inputs) != cfg or _identity(cfg, source) != manifest['identity']:
             raise ValueError('Cylinder effective configuration/source identity mismatch')
         with h5py.File(directory/'results.h5', 'r') as data:
@@ -57,7 +60,11 @@ def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
     total_wall, total_cpu = perf_counter(), process_time()
     cfg = effective_config(config)
     source = provenance()
+    solver_provenance(source, cfg)
     source['packages']['scikit-fem'] = version('scikit-fem')
+    source['packages']['pymetis'] = version('pymetis')
+    if cfg.get('stokes_factor_backend') == 'pardiso':
+        source['packages'].update({name: version(name) for name in ('pypardiso', 'mkl')})
     identity = _identity(cfg, source)
     parent = Path(root)/'runs'/'cylinder_ns'
     parent.mkdir(parents=True, exist_ok=True)
@@ -81,12 +88,18 @@ def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
                       'config_sha256': digest(directory/'config.json')}
     write_json(directory/'manifest.json', manifest)
     (directory/'run.log').write_text(f'Started {manifest["started"]}\n')
+    if 'min_step_policy' in cfg:
+        with (directory/'run.log').open('a') as stream:
+            stream.write(f'min_step_policy={cfg["min_step_policy"]}; finite over-tolerance floor steps remain recorded\n')
+    latest_r = cfg['r0']
 
     def progress(count: int, t: float, elapsed: float) -> None:
         if count % cfg['log_every'] == 0 or abs(t-cfg['T']) < 1e-12:
             with (directory/'run.log').open('a') as stream:
                 last = observations.rows[-1]
+                step = last['time']-observations.rows[-2]['time']
                 stream.write(f'accepted={count} t={t:.17g} integration_wall={elapsed:.6f}s '
+                             f'dt={step:.9g} r={latest_r:.9g} '
                              f'CD={last["drag"]:.7f} CL={last["lift"]:.7f} '
                              f'dp={last["pressure_difference"]:.7f}\n')
 
@@ -97,6 +110,10 @@ def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
         observations = Observations(model, cfg['inlet_max'])
         cpu, wall = process_time(), perf_counter()
         observations(initial)
+        def observe(state: State) -> None:
+            nonlocal latest_r
+            observations(state)
+            latest_r = state.r
         observation_setup_cpu, observation_setup_wall = process_time()-cpu, perf_counter()-wall
         selected = make_scheme(cfg['scheme'], cfg['gamma'])
         cpu = process_time()
@@ -106,10 +123,10 @@ def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
             result = integrate_adaptive(model, selected, initial, cfg['T'], cfg['initial_step'],
                                         controller=make_controller(cfg['controller'], cfg['scheme']),
                                         scalar_control=scalar, snapshots=cfg['snapshots'], progress=progress,
-                                        on_accept=observations)
+                                        on_accept=observe, min_step_policy=cfg.get('min_step_policy', 'fail'))
         else:
             result = integrate(model, selected, initial, cfg['actual_steps'], snapshots=cfg['snapshots'],
-                               progress=progress, on_accept=observations)
+                               progress=progress, on_accept=observe)
         metrics = {**model.performance_metrics(),
                    'setup_cpu_seconds': setup_cpu, 'setup_wall_seconds': setup_wall,
                    'integration_cpu_seconds': process_time()-cpu-result.observer_cpu_seconds,
@@ -118,6 +135,8 @@ def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
                    'observer_wall_seconds': observation_setup_wall+result.observer_wall_seconds,
                    'accepted_steps': len(result.times)-1,
                    'rejected_steps': sum(not a['accepted'] for a in result.attempts) if isinstance(result, AdaptiveResult) else 0,
+                   'forced_min_step_acceptances': sum(bool(a['accepted']) and float(a['error']) > 1.
+                        for a in result.attempts) if isinstance(result, AdaptiveResult) else 0,
                    'velocity_dofs': int(len(model.free_dofs)), 'pressure_dofs': int(model.pressure_basis.N),
                    'triangles': int(model.velocity_basis.mesh.t.shape[1]),
                    'peak_rss_bytes': int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)*(1 if sys.platform == 'darwin' else 1024),

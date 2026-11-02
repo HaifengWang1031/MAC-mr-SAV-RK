@@ -19,15 +19,18 @@ PROJECT = Path(__file__).resolve().parents[1]
 
 def test_native_restart_worker_advances_a_duration_not_an_absolute_end(tmp_path: Path) -> None:
     seed = run({'resolution': .25, 'T': .01, 'mode': 'adaptive',
-                'scheme': 'sdirk3_mrsav', 'initial_step': .001}, root=tmp_path)
+                'scheme': 'sdirk3_mrsav', 'initial_step': .001,
+                'outlet_treatment': 'backflow_damped', 'stokes_ordering': 'metis'}, root=tmp_path)
     env = os.environ.copy()
     env.update(OPENBLAS_NUM_THREADS='1', OMP_NUM_THREADS='1', MPLBACKEND='Agg')
     script = PROJECT/'tools/benchmark_fem_adaptive.py'
     prepared = subprocess.run([sys.executable, str(script), 'reference', '--run', str(seed),
-                               '--root', str(tmp_path), '--duration', '.002', '--step', '.001',
+                               '--root', str(tmp_path), '--duration', '.002', '--adaptive',
                                '--prepare-only'], cwd=PROJECT, env=env, text=True,
                               capture_output=True, check=True, timeout=30)
     campaign = Path(prepared.stdout.strip().splitlines()[-1])
+    assert json.loads((campaign/'input/config.json').read_text())['outlet_treatment'] == 'backflow_damped'
+    assert json.loads((campaign/'input/config.json').read_text())['stokes_ordering'] == 'metis'
     output = campaign/'adaptive-test'
     subprocess.run([sys.executable, str(script), 'worker', '--source', str(PROJECT),
                     '--input', str(campaign/'input'), '--output', str(output),

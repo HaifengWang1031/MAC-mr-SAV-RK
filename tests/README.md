@@ -21,10 +21,18 @@
 | Channel 保存场动画、Poiseuille 参照、周期粒子输运与只读导出 | test_channel_animation |
 | 顶盖方腔动画、移动壁插值、保存场与只读导出 | test_cavity_animation |
 | 周期动画、解析受迫剪切、双周期粒子与只读导出 | test_periodic_animation |
+| SAV 圆柱对比、保存网格、短窗重算、只读动画、连续旋度恢复与遮罩平滑 | test_cylinder_wake_compare |
 | Orr–Sommerfeld 独立特征值、MAC TS 初值/约束、增长及移动坐标 | test_channel_instability |
 | 时间序列与失败前缀 | test_integrate |
 | 保存、复用、失败记录与显式分析 | test_workflow、test_forced_convergence |
 | 自适应批次、四分边界、容差选择与固定阶梯 | test_adaptivity、test_kolmogorov_adaptive |
+| 显式强制下限、有限超容差接受、硬失败保留和旧配置身份 | test_min_step_policy |
+| 出口回流独立能量积分、SAV配对、正向Poiseuille及保存标签 | test_backflow_outlet |
+| FEM一致质量分量共享、解析弱式与真实散度 | test_fem_model、test_fem_quadrature |
+| Hele–Shaw Darcy/Brinkman解析参照、反应迹载荷、六格式时间细化与SAV边界功 | test_hele_shaw |
+| Hele–Shaw实际网格、固定/自适应保存与严格终点、只读动画 | test_hele_shaw_workflow（网格生成需可选gmsh） |
+| FEM多右端缺陷校正、跨shift/模型排序、GMRES/鲁棒回退、原生线程恢复 | test_fem_recycled_stokes |
+| FEM六格式开放解析解、固定/自适应保存和只读加载、旧配置身份 | test_fem_open_flow、test_fem_workflow、test_fem_adaptive_workflow、test_cylinder_workflow |
 | 非零初值构造 | test_isotropic_ic |
 | A/B 体力、角动量、反转和能量诊断 | test_forced_rotation |
 
@@ -40,3 +48,11 @@ Channel 首版新增 `test_channel_operators`（周期布局、壁面算子、�
 
 2026-09-27：自适应 campaign 改为 8 个自适应成员加参考解，不再产生 `fixed_step=0.01`；新增四等分输出边界、禁止亚 `min_step` 试步、源码一致性复用和容差推荐规则测试。固定阶梯入口要求基础批次无固定成员，且成员与参考解均完整、同源并通过校验和。
 当前全套为 88 passed；mypy 64 个源文件通过。
+
+Shared FEM scalability seams (2026-11-02): `test_fem_mass_solver.py` uses independent
+SPD references for CG/METIS, component sharing and full SAV stages;
+`test_fem_weak_load.py` checks the conservative normalization and all six formats
+on four trace/reaction models; `test_fem_multigrid.py` checks exact mixed solutions,
+true-defect correction and all four run/load workflows without PETSc during analysis;
+`test_fem_scalability_workflow.py` replays a saved mesh/state and verifies fixed
+representation and native-adaptive record/analysis handling.

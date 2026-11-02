@@ -16,13 +16,21 @@ from experiments.cylinder_ns.analyze import analyze
 from experiments.workflow import digest, write_json
 
 
-def test_cylinder_fixed_run_reconstruction_analysis_reuse_and_rerun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.parametrize('factor_backend', ['superlu', 'pardiso'])
+def test_cylinder_fixed_run_reconstruction_analysis_reuse_and_rerun(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, factor_backend: str):
+    if factor_backend == 'pardiso':
+        pytest.importorskip('pypardiso')
     config = {'resolution': .25, 'T': .01, 'mode': 'fixed', 'dt': .005,
-              'scheme': 'sdirk3_mrsav', 'snapshots': [0., .01]}
+              'scheme': 'sdirk3_mrsav', 'snapshots': [0., .01],
+              'stokes_ordering': 'metis' if factor_backend == 'superlu' else 'auto',
+              'stokes_factor_backend': factor_backend, **({'stokes_threads': 2} if factor_backend == 'pardiso' else {})}
     directory = run(config, root=tmp_path)
     cfg, manifest = load_cylinder(directory, require_complete=True)
     assert manifest['status'] == 'complete' and cfg['reynolds'] == 100.
     assert cfg['pressure_constraint'] == 'natural_outflow'
+    assert cfg['stokes_ordering'] == config['stokes_ordering']
+    if factor_backend == 'pardiso':
+        assert manifest['metrics']['stokes_pardiso_factorizations'] > 0
     points = np.array([[0., .4, 1.8], [.2, .2, .18]])
     fields = reconstruct(directory, points)
     assert fields['time'] == .01 and np.isfinite(fields['velocity']).all()

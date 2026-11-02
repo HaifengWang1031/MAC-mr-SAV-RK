@@ -48,6 +48,14 @@ Do not supply `dt`/`steps` in adaptive mode. Euler has no embedded estimator.
 so existing fixed record identities remain readable. Unknown keys and invalid parameters fail
 before creating a run.
 
+Factor controls (also valid in fixed mode): `stokes_ordering=auto|mmd|metis`,
+`stokes_factor_backend=superlu|pardiso`, and optional positive `stokes_threads`
+for PARDISO only. SuperLU defaults to MMD below 20000 saddle unknowns and shared
+METIS ordering above that threshold. PARDISO uses its own ordering (`auto`),
+requires the optional Linux x86_64 `pardiso` extra, and keeps two internal
+refinement steps. These choices retain the exact equations and all checks.
+Old configs acquire no new default keys. Details: [FEM solver](../../docs/fem.md).
+
 ## Smooth reference problem
 
 The single case is a continuous manufactured Navier–Stokes solution with

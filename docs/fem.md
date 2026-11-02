@@ -7,6 +7,29 @@ The shared time schemes and stepping policies are unchanged; the integrator and
 saved-run reader share pure compensated schedule/snapshot mapping arithmetic.
 Locally installed and locked: scikit-fem 12.0.2, CPython 3.12.14, macOS arm64.
 
+The factor controls are independent of the time method and of `stokes_backend`
+(`direct` or checked `recycled`). `stokes_ordering=auto` uses cached METIS nested
+dissection for SuperLU systems with at least 20000 unknowns, otherwise MMD;
+`mmd` and `metis` force either choice. Ordering uses the union of mass, stiffness,
+all divergence rows and the closed pressure gauge, and restores every solution
+to the original DOF coordinates. Multiple responses use divergence-only quadrature;
+a single response prepares its full field cache once for the next stage.
+The graph/permutation cache is bounded to four
+patterns. Ordering failure falls back to MMD, with checked COLAMD as the robust
+fallback. An identical uncoupled velocity-component mass matrix is factored once
+and applied to both components together; the full consistent mass is unchanged.
+
+On Linux x86_64, `uv sync --locked --extra pardiso` installs the optional pinned
+PyPardiso/oneMKL backend. Select `stokes_factor_backend='pardiso'` and, for example,
+`stokes_threads=4`; its own ordering requires `stokes_ordering='auto'`. If threads
+is omitted, MKL uses its environment setting. An explicit count is local to each
+native operation and the previous setting is restored. The general saddle matrix
+uses `mtype=11`, two internal refinement steps and the same complete external
+checks; unsuccessful factors/solutions fall back to checked SuperLU. Missing
+optional libraries produce an error. Default `superlu` does not load MKL.
+These optional configuration keys are added only when supplied, preserving old
+canonical configs and records. See [measurements and limits](fem-optimization.md).
+
 ## Usage
 
 ```sh
@@ -64,8 +87,12 @@ initial = model.state(0., velocity, r=0.)
   against the configured tolerance (default 1e-9). An additional mass-solved
   momentum-coefficient defect is checked. Default direct MMD ordering falls back
   to robust COLAMD when factorization or true checks fail. Optional `recycled`
-  uses a bounded old LU only as a GMRES preconditioner for the exact new matrix;
-  failed iteration/checks refresh directly. No step quantization or tolerance relaxation.
+  first applies bounded multicolumn defect correction with a nearby old LU to
+  the exact current matrix. Candidates pass all original checks; stagnation or
+  failure falls back to GMRES with the same factor, then checked fresh/robust LU.
+  The diagonal residual only screens when full checks may succeed; it never
+  replaces the consistent-mass coefficient check. No step quantization or
+  tolerance relaxation. See [optimization evidence](fem-optimization.md).
 - Weak continuity `||Bu||_inf` and physical divergence are different diagnostics.
   `divergence_l2` integrates FE gradients; `divergence_inf` is their maximum at
   quadrature points, **not an analytic supremum**. A successful solve need not
@@ -134,3 +161,10 @@ convection; force callbacks evaluate once, and only the known MMS time modes are
 preprojected. Repeated native-state performance results, including setup/observer
 costs and common-schedule fidelity, are recorded separately from accuracy claims.
 Legacy MAC/Legendre/Fourier/Channel APIs and records are unchanged.
+
+### Shared optional solver settings
+
+The completed four-family comparison and opt-in weak-load/recycled-LU, mass CG/METIS
+and experimental PETSc controls are documented in [fem-multigrid.md](fem-multigrid.md).
+Existing defaults remain unchanged; that report distinguishes qualified full-step
+measurements from fallbacks, pressure mismatches and long-run/MPI limits.

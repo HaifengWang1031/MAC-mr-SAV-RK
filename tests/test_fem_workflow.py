@@ -20,10 +20,11 @@ from solver.schemes.registry import SCHEMES, make_scheme, scheme_info
 @pytest.mark.parametrize('schedule', [{'dt': .01}, {'steps': [.007, .013]}], ids=['fixed', 'given'])
 def test_six_scheme_saved_fields_pressure_edges_and_readonly_analysis(tmp_path, monkeypatch, name, schedule):
     config = {'nx': 4, 'ny': 3, 'T': .02, 'scheme': name,
-              'snapshots': [0., .0035, .02], **schedule}
+              'snapshots': [0., .0035, .02], 'stokes_ordering': 'metis', **schedule}
     directory = run(config, root=tmp_path)
     cfg, manifest = load_fem(directory, require_complete=True)
     assert manifest['source']['packages']['scikit-fem'].startswith('12.')
+    assert cfg['stokes_ordering'] == 'metis'
     model, initial = build_model(cfg)
     expected = integrate(model, make_scheme(name), initial, cfg['actual_steps'], snapshots=cfg['snapshots'])
     points = np.array([[.23, 1.31, .67], [.17, .62, .43]])
@@ -243,7 +244,10 @@ def test_failed_integrations_preserve_only_accepted_prefix_and_are_not_reused(tm
 @pytest.mark.parametrize('config', [{'steps': [0., .02]}, {'steps': [.01]}, {'dt': -.1},
     {'steps': [.01, .01], 'dt': .01}, {'nx': 1, 'ny': 1}, {'quadrature_order': 4},
     {'scheme': 'unknown'}, {'r0': .1}, {'snapshots': [np.nan]}, {'boundary': 'periodic'},
-    {'nu': np.inf}, {'cache_size': False}, {'gamma': -1.}])
+    {'nu': np.inf}, {'cache_size': False}, {'gamma': -1.}, {'stokes_ordering': 'unknown'},
+    {'stokes_factor_backend': 'unknown'}, {'stokes_threads': 4},
+    {'stokes_factor_backend': 'pardiso', 'stokes_threads': True},
+    {'stokes_factor_backend': 'pardiso', 'stokes_ordering': 'metis'}])
 def test_invalid_fem_config_is_rejected_before_writing(tmp_path, config):
     with pytest.raises(ValueError):
         run(config, root=tmp_path)

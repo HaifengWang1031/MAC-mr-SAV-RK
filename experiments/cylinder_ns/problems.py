@@ -5,6 +5,7 @@ from solver.core import State
 from solver.fem import CylinderSpace, OpenFlowModel
 from solver.fem.cylinder import HEIGHT
 from solver.fem.space import Array
+from experiments.fem_backends import model_solver_options
 
 
 def inlet_velocity(x: Array, y: Array, maximum: float) -> tuple[Array, float]:
@@ -19,6 +20,9 @@ def build_model(cfg: dict) -> tuple[OpenFlowModel, State]:
     model = OpenFlowModel(space, cfg['nu'], dirichlet_facets=fixed,
                           boundary_velocity=lambda x, y: inlet_velocity(x, y, cfg['inlet_max']),
                           tolerance=cfg['stokes_tolerance'], cache_size=cfg['cache_size'],
-                          stokes_backend=cfg['stokes_backend'])
+                          stokes_backend=cfg['stokes_backend'], outlet_treatment=cfg.get('outlet_treatment', 'natural'),
+                          stokes_ordering=cfg.get('stokes_ordering', 'auto'),
+                          stokes_factor_backend=cfg.get('stokes_factor_backend', 'superlu'),
+                          stokes_threads=cfg.get('stokes_threads'), **model_solver_options(cfg))
     steady = model.solve(model.zero_velocity(), mass=0., viscosity=model.nu)
     return model, model.state(0., steady.velocity, cfg['r0'])

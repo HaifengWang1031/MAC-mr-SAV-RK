@@ -13,6 +13,7 @@ import h5py
 import numpy as np
 
 from experiments.workflow import PROJECT, digest, load_record, provenance, save_result, write_json
+from experiments.fem_backends import FEM_BACKEND_KEYS, STOKES_BACKENDS, validate_solver_options, solver_provenance
 from experiments.periodic_ns.run import make_controller
 from solver.adaptivity import AdaptiveResult, ScalarErrorControl, integrate_adaptive
 from solver.fem import Space
@@ -26,7 +27,8 @@ DEFAULTS = {'nx': 8, 'ny': 4, 'lx': 2., 'ly': 1., 'quadrature_order': 8,
             'nu': .2, 'amplitude': .1, 'T': .02, 'dt': .01, 'scheme': 'sdirk2_mrsav',
             'gamma': 1., 'r0': 0., 'cache_size': 4, 'stokes_tolerance': 1e-9, 'snapshots': None}
 
-OPTIONS = ('mode', 'initial_step', 'controller', 'scalar_atol', 'stokes_backend')
+OPTIONS = ('mode', 'initial_step', 'controller', 'scalar_atol', 'stokes_backend', 'stokes_ordering',
+           'stokes_factor_backend', 'stokes_threads')+FEM_BACKEND_KEYS
 
 
 def effective_config(config: dict) -> dict:
@@ -45,8 +47,15 @@ def effective_config(config: dict) -> dict:
     if type(cfg['cache_size']) is not int or cfg['cache_size'] < 1:
         raise ValueError('Invalid FEM cache_size')
     mode, backend = cfg.pop('mode', 'fixed'), cfg.get('stokes_backend', 'direct')
-    if backend not in ('direct', 'recycled'):
+    if backend not in STOKES_BACKENDS:
         raise ValueError('Unknown FEM Stokes backend')
+    validate_solver_options(cfg)
+    if cfg.get('stokes_ordering', 'auto') not in ('auto', 'mmd', 'metis'):
+        raise ValueError('Unknown FEM Stokes ordering')
+    factor, threads = cfg.get('stokes_factor_backend', 'superlu'), cfg.get('stokes_threads')
+    if factor not in ('superlu', 'pardiso') or (factor == 'pardiso' and cfg.get('stokes_ordering', 'auto') != 'auto') \
+            or (threads is not None and (type(threads) is not int or threads < 1 or factor != 'pardiso')):
+        raise ValueError('Invalid FEM factor backend/thread controls')
     if mode == 'fixed':
         if any(cfg.get(key) is not None for key in ('initial_step', 'controller', 'scalar_atol')):
             raise ValueError('Adaptive FEM options require mode=adaptive')
@@ -54,6 +63,9 @@ def effective_config(config: dict) -> dict:
             cfg.pop(key, None)
         if backend != 'direct':
             cfg['stokes_backend'] = backend
+        for key in ('stokes_ordering', 'stokes_factor_backend', 'stokes_threads')+FEM_BACKEND_KEYS:
+            if key in config:
+                cfg[key] = config[key]
         if 'steps' in config:
             if 'dt' in config:
                 raise ValueError('Use dt or steps, not both')
@@ -129,7 +141,11 @@ def load_fem(directory: Path, *, require_complete: bool = False) -> tuple[dict, 
 def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
     cfg = effective_config(config)
     source = provenance()
+    solver_provenance(source, cfg)
     source['packages']['scikit-fem'] = version('scikit-fem')
+    source['packages']['pymetis'] = version('pymetis')
+    if cfg.get('stokes_factor_backend') == 'pardiso':
+        source['packages'].update({name: version(name) for name in ('pypardiso', 'mkl')})
     identity = _identity(cfg, source)
     parent = Path(root)/'runs'/'fem_ns'
     parent.mkdir(parents=True, exist_ok=True)

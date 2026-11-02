@@ -2,6 +2,413 @@
 
 # 正式验收记录
 
+## 2026-11-01 高Re翼型尾迹实验准备
+
+新增显式尾迹Box网格加密、可选单因子缓存与只读wake_analysis。
+已知纯剪切/刚体旋转分别校验lambda_ci；实际Gmsh面积细化及run/load/movie完整流程通过，
+旧schema0/1记录实际重载通过。专项25 passed；全套586 passed/10 skipped（139.12秒）；
+相关9文件mypy通过，全库仍为原三个Kolmogorov脚本的6项既有错误。
+动画从原始P2数据作一致P1涡量显示恢复，指标来自原始P2梯度；导出视频全片解码、图片人工查看。
+
+本机冻结任务`runs/hele_shaw_wake/20261101T132614-ca907d05/`已启动实际129390三角形的启动期试算。
+T=.1后端/时间/细网格流程验证通过后，程序才自动串行运行Re_D=10000/30000、T=20的
+SDIRK3-mr-ccSAV试验并生成只读报告。r<.05为运行诊断门槛，不是稳定性定理。
+此条记录不表示长算已完成、已出现分离、尾迹已网格收敛或二维闭合已通过三维高Re验证。
+
+## 2026-11-01 Hele–Shaw翼型首版实现与验证
+
+用户批准的独立Darcy参照、MWR惯性Brinkman、可选一致质量反应项、六种已有时间格式、
+压力型端部/SAV边界功、固定/自适应保存和只读分析已实现。全套581 passed/10 skipped，
+新增专项20 passed，本次22源文件mypy通过。全库mypy仍有三个未修改的Kolmogorov脚本的6项错误，
+不将本轮声明为全库类型检查通过。已知半离散解的观测阶约0.989/2.002/3.034；不代替PDE阶数证明。
+
+正式短启动campaign `20261101T124310-91facb8c`六组到T=.06、b/c=.02，
+粗细54882/109380三角形，细网格最小角约22.67°，实际Re_c约99.32、最大|r|约2.74e-7。
+终点粗细速度L2差0.14721%；dt=.0005与普通格式dt=.00025参考的终点差3.96e-8，
+但最大保存节点瞬时相对差4.294%（t=.002、速度很小），按全过程参考峰值归一化为0.03348%。
+原始两档步长的全部指标和finer_reference_unverified标记保留，不能只用终点声称全程精度。
+
+最大阶段弱连续性约1.75e-14；独立库梯度检查物理散度最大约559.38，位置接近尖尾缘，
+物理散度L2相对梯度L2约1.297%。不能解释为逐点无散或网格独立；尖尾缘和三维适用性仍需研究。
+接受节点梯形能量收支归一化诊断约3.30e-5，不声称强迫问题能量逐步下降。
+
+初始开发记录的压力标签误继承registry中的mean_zero文字，实际模型及保存的constraint均为自然压力应力、无零均值。
+原文件不改；新版schema1去除误导文字，明确适配旧记录。另补T=.9/dt=.3严格终点检查和跨运行物理/来源匹配检查。
+六组数值源码归档后未变；当前模型重放前四步与原快照逐位一致。
+证据、源码/结果摘要和6.2秒细网格启动动画见
+`reports/hele_shaw_airfoil/20261101T124310-91facb8c/IMPLEMENTATION.md`。
+
+## 2026-11-01 Hele–Shaw有攻角翼型：初始区域/网格图
+
+`reports/hele_shaw_airfoil_mesh/20261101-alpha10/`绘制闭尾缘NACA0012、攻角10°、
+c=1、b/c=.02、外矩形[-3,6]×[-2,2]，假设固体贯穿窄缝。
+图示三角网格3042单元/1655顶点，180条翼型约束边和88条外边界边全部匹配；
+一个连通分量、Euler示性数0、总面积等于矩形减去翼型多边形（差小于1e-10）。
+网格最小角约4.72°，属于说明区域的粗多边形网格，正式计算仍需质量改进、
+几何/外边界/离散敏感性检查；没有执行PDE求解、建立Hele–Shaw求解器或验证深度平均近似。
+
+## 2026-11-01 25°楔腔T30扫描完成与后处理复核
+
+`20261101T103104-dd08c0e5`于北京时间19:11结束，六组均严格达到T=30；
+五组通过本轮有限性、阶段和辅助变量门槛。Re1000细网格max|r|=0.9968723超过预设0.05，
+虽场值有限、阶段检查通过，仍保留为未合格，不能据此认定物理失稳或完成可信粗细比较。
+Re100/400粗细网格的上/下涡旋转速度零点重验通过；流函数幅值相对差分别为
+0.00969%/0.15807%和0.34766%/0.56546%，仅说明这些观测量的两网格敏感性较小。
+
+状态复核另发现原一次性分析脚本用np.empty_like(DiscreteField)分配临时比较场，
+该环境的基本切片赋值未写回，原两项跨网格速度L2统计失效。冻结脚本和旧报告保持不变；
+只读衍生分析改用普通ndarray。同一真实保存场自比较误差4.21e-16，
+下方正流函数区域1.08e-15；Re100/400更正后全域速度相对L2差8.60764%/8.24082%，
+下方区域0.11627%/0.54027%。四个输入运行和原analysis.json摘要前后不变，
+复核脚本mypy通过。证据与修正差异位于
+`reports/wedge_longtime/20261101T103104-dd08c0e5/comparison_correction/`。
+没有重算时间推进、放松门槛或更改任何原始HDF5。两级网格和单一步长不构成空间/时间收敛证明。
+
+## 2026-11-01 25°楔腔T30/Re扫描：启动时记录
+
+按用户确认，固定SDIRK2-mr-ccSAV/gamma1、r0=0、静止壁角点和dt=.005，将25°计算延长到T=30，
+比较Re100/400/1000和顶盖96/192单元，共6组。每组6000步、601快照；原T=3结果保留。
+本机MacBook Air、数值作业单线程、最多2个独立case并行；先Re100/96基线，再Re400/1000及细网格。
+冻结176源文件及额外FE/排序版本，6组T=.1实际分辨率短程全部完成并通过有限场、阶段/弱连续性和SAV门槛。
+专项7项通过、相关11文件mypy通过；真实下涡视图短导出通过，6组只读分析/3对细网格求积流程通过。
+初次批量定位的高内存后处理已停止并保留失败报告，改为128点分批；221184点二次多项式再现误差约1.1e-14。
+
+北京时间2026-11-01T18:38:57.073778+08:00提交父进程70261，子进程70263、实际源摘要、
+T30/Re100/96/dt.005和数值库单线程已核验，正式run_id=20261101T103857-3dacd2df-f677b779，已有实际接受步日志。
+这只确认启动和短程资格，不宣称T30完成、高Re稳定、网格独立或两个涡随Re单调增强。
+计算后程序自动对显式完整合格记录做时间/两网格敏感性与速度旋转中心分析，并优先用细网格生成下涡放大动画。
+失败/未过门槛的case和未知结论显式保留，无时间步参考。详细计划、日志和状态见
+runs/wedge_longtime/20261101T103104-dd08c0e5/STATUS.md；正式产物位于reports/wedge_longtime/20261101T103104-dd08c0e5/。
+
+## 2026-11-01 楔腔弱次涡的漏显修复
+
+对原25°/Re100、t=3完整保存结果作只读检查：主流函数幅值约8.47e-2，下方正值峰约6.97e-5，
+相差约1200倍。原等间距内部流线全为负，且右图顶盖局部视图未覆盖下涡，不能由旧动画推断其不存在。
+保存P2速度在约(0.1073,-0.2028)和(0.0068,-1.1642)处有旋转型零点，局部旋度分别约-3.92和0.0111。
+默认流线已按正/负分别选取几何间隔，新增回归覆盖强弱相差千倍时仍保留正值流线。
+专项6项通过，相关11文件mypy通过；只读重绘使用全深度对数色标、两个独立线性局部色标及原速度方向箭头。
+新动画631帧（601状态+30停留）、完整解码/时长/字体及输入摘要检查通过，没有重新推进或更改原始速度。
+该检查只说明当前离散场有两个反向旋转中心；未新增空间/时间收敛、物理生成时刻或Moffatt渐近标度资格。
+90°很小的尖角结构仍未作细网格核验。产物与诊断见reports/wedge_eddy_visibility/20261101-re100-apex25/README.md。
+
+## 2026-11-01 顶盖楔腔修正、性能与动画
+
+90°/25°、Re100、96顶盖单元、SDIRK2-mr-ccSAV/gamma1，dt=.005、T=3，两组各601快照完整完成。
+修正r0=0、静止壁角点及同一求积的lifting体积配对；旧记录保持原文件并按legacy约定读取。
+末时刻和最终快照严格为T。新结果的变化含正确性修正，不将其当作性能优化误差。
+
+修正参考与优化版三轮交错同状态/步长对照的速度、压力、r、涡量与流函数数组逐位一致。
+逐步求解没有显著提速（两角度约.94秒/40步），初始化变化不足3%；30帧字段恢复约提高9至10%。
+90°完整601帧MP4单次串行对照56.973→13.636秒，4.18倍；短31帧因固定开销未提速。
+完整动画同快照/30fps/DPI165，旧1880×774、新1882×776，新版包含字体核验，不含GIF计时。
+这是单次完整绘图性能证据，不是统计或全局最优承诺。
+
+专项与相关FEM检查32 passed、3 skipped，楔腔及相关11文件mypy通过。
+两段交付MP4与GIF均631帧（601状态+30末态停留），约21.03秒；完整视频解码、
+时间/输入摘要和字体检查通过。非整数DPI尺寸差由专项媒体测试覆盖。
+未运行新的稳态或空间/时间收敛研究。阶段乘子不在动画中解释为物理压力，流线仅作Poisson恢复。
+记录与交付见reports/wedge_optimization/20261101T094428-deface09/RESULTS.md及analysis.json。
+
+## 2026-10-31 Re500优化版两种涡量动画
+
+只读使用完整运行20261030T140051-57c90bf1-2eff9c7c，输出有网格与平滑无网格两个版本。
+两版均为201个保存接受节点，实际t=9.999845778499至12，15帧/秒，1920×900；无时间插值。
+有网格版叠加原17321三角形的真实网格，显示单元平均涡量；平滑版采用现有连续P1 L2恢复与
+掩膜归一化高斯显示滤波（sigma=0.008=0.08D）。共同无量纲色标[-5,5]，超界仅颜色饱和。
+两版帧时刻/帧数一致、视频完整解码、GIF帧数及Times New Roman嵌入检查通过，导出画面已抽查。
+原始运行文件摘要前后完全一致；没有启动流动计算或改变求解器。显示平滑不证明空间收敛或消除原始场振荡。
+产物与完整检查记录位于reports/cylinder_re500_efficiency/20261030T135609-94ce170f/animations/。
+
+## 2026-10-31 Re500加密网格：优化版完整完成，旧版继续对照
+
+北京时间09:44恢复EIT-WSL连接并核实原任务，未重复启动。
+优化版20261030T140051-57c90bf1-2eff9c7c完成T=12：纯积分19821.524秒，工作流21204.107秒，
+完整进程21207.038秒；30747接受/1拒绝/0强制下限接受，峰值RSS1.382GB。
+实际配置保留Re500、SDIRK3-mr-ccSAV、回流耗散出口和单线程最优预置。
+本地已下载完整结果，通过冻结来源公开load_cylinder(require_complete=True)、文件校验和、
+实际参数、来源及与原加密网格逐项一致检查；最终时间严格12，末态有限。
+最大Stokes系数/连续性残差分别1.000e-10/4.798e-15；不将弱连续性当作点态散度。
+
+旧版20261030T195417-1a281ce6-35615c85正常运行，最后日志9800步、t=4.238670069/12。
+前9800接受步积分20255.207/6528.794秒，部分区间加速3.1024倍，两版物理时间略有差别。
+完整加速比与长程终点差待旧版完成，不能以此部分计时替代完整结论。
+近期步速估计旧版还需12至14小时，依赖后续步数与负载。
+证据与单独完成资格见runs/cylinder_re500_efficiency/20261030T135609-94ce170f/STATUS.md；
+进度报告见reports/cylinder_re500_efficiency/20261030T135609-94ce170f/progress_20261031.md。
+
+## 2026-10-30 Re500加密网格完整效率对照：已提交，启动待核验
+
+按用户要求将已验证最优配置用于Re500：nu=0.0002、T=12、resolution=2、96边圆柱，
+保留SDIRK3-mr-ccSAV/gamma1000、backflow_damped、原PI/标量容差和force下限策略。
+当前已知批次无同参数Re500完整基线，因此安排同机先优化版、再优化前冻结版本的串行完整对照。
+两个来源分别为b2d31fff...和ee840838...，原代码/记录不改写。
+
+两版T=.002短程均完整保存/公开加载通过：17321三角形、68912自由速度DOF、8785压力DOF，
+实际网格/DOF/边界映射与原加密网格完全一致。各5接受/0拒绝/0强制下限接受；
+速度物理L2相对差1.868e-13，物理压力1.029e-12。主系数残差优化版5.337e-13、旧版1.837e-12。
+短程工作流6.352/28.386秒仅作前置门槛，不作为完整计算加速比。
+
+生产父进程于北京时间22:00:50返回PID58292，但首次正式启动检查时本机3001端口连接被拒绝。
+尚未核实正式run_id或数值推进状态，已请求恢复EIT-WSL映射；禁止据提交PID宣称仍在运行或完成，
+也不得重复启动。任务以独立会话提交，计划成功结束后自动写完整对照；当前完整提速结论待定。
+配置见experiments/cylinder_ns/configs/re500_backflow_fine_optimized.json；
+交接、冻结来源和日志定位见runs/cylinder_re500_efficiency/20261030T135609-94ce170f/STATUS.md。
+
+## 2026-10-30 FEM最终优化资格（candidate7）
+
+本轮实现与预定验证完成。保留时间格式/推进器/自适应12个文件原始字节，弱算子和边界
+载荷函数AST不变；新路径仍保留一致质量、完整连续性行、适用压力规范和所有精度检查。
+单右端保留普通格式的完整场缓存，多右端使用散度专用收缩；已修复并实测缓存回归。
+
+最新完整回归539 passed、11 skipped（93.94秒），受影响31文件mypy通过；
+EIT-WSL85项原生PARDISO、六格式、缓存与公开工作流检查全部通过（16.49秒）。
+全项目mypy另有三个既有Kolmogorov脚本的六项错误，未宣称全项目通过。
+最终真实网格原生/共同步长18结果、封闭跨规模/六格式90结果、固定步72结果、
+小网格100步12结果均通过原始摘要、冻结来源、独立物理L2和完整残差门槛。
+
+EIT-WSL真实细网格末态原生PI三轮中位：原版37.192秒、优化单线程11.360秒，
+积分3.274倍；包含数值初始化/观测/保存主体43.082→14.197秒（3.035倍）。
+峰值RSS中位2.062→1.069GB；速度物理L2差最大4.963e-12、物理压力2.713e-11。
+PARDISO四线程20.494秒，因此这组场景选择SuperLU；auto在不少于20000系统未知量
+时缓存METIS，小系统保留MMD。固定64²六格式加速1.399–1.660倍；小网格无统一收益承诺。
+这些是短窗口的同一离散系统证据，不是全局最优证明或新的空间/长轨迹精度资格。
+
+实际加密Re1000从相容初值启动到T=.002、保存、公开重新加载通过：
+`20261030T130714-90f2fae3-510deaa7`，17321三角形，5接受/0拒绝/0强制步，
+最大系数残差2.58e-13、无鲁棒回退。原粗/细完整记录再次加载通过，未修改原始结果。
+完整预置为`experiments/cylinder_ns/configs/re1000_backflow_fine_optimized.json`，
+未自动启动新T=12生产计算。失败原型、来源元数据异常的精确副本和全部旧报告保留。
+详见[最终报告](../reports/fem_optimization/20261030T115147-1be59f9f/final/RESULTS.md)
+与[实现/选择/限制](fem-optimization.md)。
+
+## 2026-10-30 FEM排序、质量共享与可选并行接口
+
+同一精确离散系统加入跨shift结构METIS排列（有界缓存、原坐标还原、MMD/COLAMD回退）、
+无耦合同质量速度分量的精确共享分解，以及独立选择的Linux x86_64 PARDISO后端。
+MKL只在选择时加载，可指定局部线程数并恢复原设置；两次内部改进和全部原检查保留。
+新配置只作为显式可选键保存，不要求旧来源具有新版本字段。原粗/细Re1000完整记录
+均再次通过当前公开加载器，无需修改旧文件。
+
+本机完整回归538 passed、10 skipped（94.07秒）；其中9项需PARDISO本机未安装，
+真实后端检查已排入远端。受影响31文件mypy通过；全项目mypy仍有3个既有Kolmogorov
+脚本中的6项错误，未宣称全项目类型检查通过。聚焦涵盖独立SVD速度/线性压力、
+纯质量/纯刚度及变化shift、多/零右端、排序跨模型复用、排序失败与GMRES/鲁棒回退、
+六格式开放Poiseuille和公开运行/存储/加载/只读分析。
+
+本机同真实细网格末态、三轮交错：最终候选相对冻结原版，8步采样回放积分1.913倍、
+原生PI积分2.100倍；含数值初始化/观测/保存主体1.715/1.935倍。速度物理L2相对差
+不超过4.97e-12，物理压力2.66e-11，标量4.70e-16；PI峰值RSS中位1.827→1.198GB。
+EIT-WSL第一轮43任务也完成核验，PARDISO 1/2/4/8线程的PI积分中位
+24.695/21.750/20.950/23.565秒，对应旧版36.994秒。四线程优于八线程。
+这些是同一离散系统的短窗口等价性和性能证据；不是长程轨迹、新空间精度或全局最优证明。
+后续跨规模和正式PARDISO接口仍在顺序执行，见[完整证据及定位](fem-optimization.md)。
+
+## 2026-10-30 有限元变步长优化第一轮
+
+新增经完整四项检查的多右端批量缺陷校正，停滞回退原GMRES与鲁棒LU；对角残差只作
+筛选，不降低弱连续性、压力规范或一致质量系数残差要求。线性响应的全求积点物理散度
+改为直接收缩所需导数，独立二次速度验证散度3(x+y)，接受态/阶段诊断保留。
+聚焦19 passed；相关7文件mypy通过；全套542 passed（111.54秒）。
+
+冻结源码与真实细网格末态的本机三轮交错8步回放，第一轮积分中位加速1.408/1.255倍，
+数值主体加速1.266/1.191倍；速度物理L2相对差最大2.88e-12，物理压力L2差最大1.60e-11。
+两个计划分别为相邻实际步长和后期抽样变步长。该结果不支持远端、长时间或全局最优结论。
+EIT-WSL对照已独立启动，含原生PI、相同回放与1/2/4/8线程原型；未产生最终结论。
+关闭或仅一次内部改进的PARDISO方案未过物理压力残差，保留失败证据并排除该配置。
+详细证据、剩余工作与原始运行定位见[fem-optimization.md](fem-optimization.md)。
+
+## 2026-10-30 圆柱无网格平滑展示
+
+用户要求基于已完成加密结果绘制无网格、较光滑的动画。独立smooth显示选项先将保存
+P2旋度作连续P1的L2恢复，再采样到1600×298规则栅格；圆柱内部保持遮罩，采用
+物理sigma=0.008（0.08D）的掩膜归一化高斯滤波和双线性色彩显示。仅作用于显示，
+不改变保存速度、压力、标量或诊断；实际时间和升力曲线也不插值或滤波。
+默认原始单元平均涡量预览保持不变，新报告保存于
+`reports/cylinder_wake_smooth/20261028T234732-5cdb446e-6c98f104/`。
+
+独立全局二次速度验证无滤波时的线性旋度2+3x-4y，固体旋转验证有滤波时常旋度2
+不被遮罩边界稀释，圆柱遮罩及输入系数保持不变。公共保存/加载/只读渲染流程中
+禁止构造流动模型，原预览摘要保持不变；聚焦5 passed（8.78秒），类型标注修正后
+两项旋度/遮罩检查再次通过（0.72秒），相关两个源文件mypy通过。
+
+平滑版本201帧、20fps、1600×750、10.05秒。检查t≈11和t=12帧，涡量连续显示，
+没有三角形着色边界，圆柱清楚，等比例坐标和固定色标保留。XeLaTeX/amsmath与
+Times New Roman嵌入、ffprobe、输出摘要、全部原始输入与旧诊断预览摘要复核通过。
+动画使用平滑涡量标记和显示用途说明，不将平滑后的外观解释为振荡已消除或空间精度已通过。
+
+## 2026-10-30 Re1000 加密网格全程完成与振荡比较
+
+原始运行`20261028T234732-5cdb446e-6c98f104`于北京时间08:59:44严格到t=12，
+工作流90732.71秒（25小时12分13秒），52584接受/1拒绝，强制下限接受0次。
+17321三角形，最大|r|=3.64991e-5，完整弱连续性最大1.71749e-13，阶段残差最大9.99625e-11。
+速度/物理压力/诊断有限，远端完成门槛通过。四个原始文件已取回，严格公共加载器通过，
+HDF5本地/远端SHA256一致：`bcaeaaa17463b72ed4a4766a7f1889b1683becac29cdbe6e99e15e9f7cff50c3`。
+
+只读比较与原5480三角形记录的有效配置，仅resolution不同，冻结源码及全部其余控制相同。
+t>=10接受节点的散度L2中位数68.75969→16.96586（下降75.33%），
+散度/梯度范数比中位数0.59524→0.40056；中央尾流单元平均涡量跳变指标中位数
+10.27446→4.86150（下降52.68%）。跳变指标只是描述性网格粗糙度，随网格和物理梯度变化；
+散度中位数是各自非均匀接受节点上的统计，不是时间加权平均。两个网格不构成空间收敛证明。
+全程物理散度积分点最大值仍达1891.38，局部不足并未因弱连续性很小而消除。
+
+已从保存场导出t≈10.00004192至12的201帧诊断预览，20fps、1280×600、10.05秒，
+等比例坐标和与粗网格相同的固定无量纲涡量色标[-5,5]。查看t≈11及t=12帧，
+交替涡结构更清楚，但网格尺度三角形斑块仍明显；结论为振荡减弱、尚未消除。
+末三升力周期稳定只描述该网格上的后期行为，不转移为网格精度或湍流资格。
+字体、ffprobe、输入/输出摘要核验通过；独立固体旋转的旋度/跳变检查在两网格均通过。
+本次没有改数值或绘图代码，没有重算PDE。完整报告：
+`reports/cylinder_mesh_refine/20261028T234434-c3cb0832/comparison/RESULTS.md`，
+诊断动画：`reports/cylinder_wake_preview/20261028T234732-5cdb446e-6c98f104/`。
+
+## 2026-10-29 Re1000 保留回流耗散与SAV的网格加密试算
+
+用户要求测试粗网格涡量振荡是否消除。独立批次
+`runs/cylinder_mesh_refine/20261028T234434-c3cb0832`复用已完成粗网格的冻结源码
+`2c500b805c556822cc96a7e8c7a8278496033c55cffd6cc42e81500b1edf916e`，仅把
+resolution从1改为2：5480→17321三角形、21638→68912自由速度自由度，
+压力8785自由度，第一径向间距0.0025→0.00125。圆柱96边几何、Re1000、
+backflow_damped、SDIRK3-mr-ccSAV/gamma1000、PI速度/标量容差及强制下限策略保持不变。
+各网格从自己的相容稳态Stokes初值t=0重算，未插值带振荡的粗网格末态。
+
+远端锁定依赖、逐文件来源和总代码摘要检查通过。加密网格短程严格到t=0.02：
+28接受/1拒绝、强制下限0次，工作流97.18秒、峰值1.94GiB；严格保存/加载通过，
+速度/物理压力有限，最大|r|=1.19718e-6、弱连续性1.71749e-13、阶段残差7.66724e-11。
+这仅验证流程与资源可用，不是晚期振荡或空间精度证明；短程物理散度L2最大1.39186，
+积分点最大绝对散度229.834。通过后北京时间07:47:31在EIT-WSL持久启动T12正式计算，
+远端`/home/hfwang/mac-mrsav-cylinder-refine-20261028T234434-c3cb0832`，PID45384。
+启动状态不冒充最终完成，最终以原始manifest和result.json为准。
+
+只读`compare.py`保留配对请求时刻及各自实际时刻，比较完整弱连续性、物理散度及
+散度/梯度范数比，并记录相邻单元平均涡量跳变的无量纲描述指标。独立固体旋转场验证
+旋度=2及跳变近零，分析脚本mypy通过。粗网格t>=10的散度L2中位数68.7597、
+散度/梯度范数比0.59524、中央尾流跳变指标10.27446；基线输入摘要未改变。
+加密后的完整结果及指标仍未产生，未声称振荡已减弱或消失；两个网格本身也不能建立空间收敛。
+
+## 2026-10-28 可选回流耗散出口的进一步计算测试
+
+正式接入 `outlet_treatment=backflow_damped`，默认自然出口不变。
+新载荷只作用于开放面，SAV 边界工作使用相同有效边界自功；独立回流多项式的附加能量积分
+1/35、零r配对、正向Poiseuille的非线性/单步/物理压力以及新旧配置保存读取有聚焦验证。
+新 case、边界、压力标签和非负耗散字段严格区分；原 DFG 自然出口参考资格不转移到新模型。
+相关聚焦 **45 passed，7.76s**；全套 **538 passed，126.44s**；
+相关21个源文件 mypy 通过；远端11项机制测试 **2.85s** 通过。
+
+独立计算批次 `runs/cylinder_outlet_validation/20261028T113939-81d3c4c2/`：
+从相同实际P2保存状态 t=1.40003011493、r≈5.9134e-5 出发，在原5480三角形网格上
+用固定步2e-4、1e-4各推进0.2，均到实际t=1.60003011493；保留物理受力观测及完整阶段检查。
+粗/细最大节点速度7.12056/7.12214，最大|r|=1.36775e-4/6.84512e-5，
+完整弱连续性最大2.90046e-15，阶段残差分别2.12811e-15/2.85717e-15。
+最终速度的物理L2相对差0.00184558494788（0.1846%），低于预设1%短窗门槛。
+只读分析从两份保存场和父记录的实际基函数求积独立重算该范数、逐项核验结果摘要。
+这是相同粗网格的局部时间敏感性，不是空间收敛或完整轨迹精度资格。
+
+通过后已启动新T=12测试：`runs/cylinder_backflow_retry/20261028T114139-60ff3b11/`，
+EIT-WSL独立目录 `/home/hfwang/mac-mrsav-cylinder-backflow-20261028T114139-60ff3b11/`，
+源代码SHA256 `2c500b805c556822cc96a7e8c7a8278496033c55cffd6cc42e81500b1edf916e`。
+从原Stokes初值t=0重算，Re1000/gamma1000，PI速度/标量控制和用户指定的强制下限策略保留。
+新边界改变回流时的数学模型，未将其标成原自然出口的成功修复或宣称T=12已完成。
+长时/空间验证及高 Re 动画交付仍未完成，旧失败原始数据保持不变。
+
+## 2026-10-28 用户指定 Re1000 强制下限重跑
+
+后续终态：该重跑在 t=1.43858120 因物理压力/受力观察器的连续性残差1.164e-9超过1e-9退出，
+13539接受步中有3126个有限超容差下限步。原始字段无 NaN/Inf，末态r≈.999239、节点速度约2252.47。
+已下载原始记录并严格加载，HDF5摘要39012b48f527e4976553130107929d03b1a589fec88994f1acf80ab8ca740a6c。
+同一冻结远端环境约3.01s的压力单独重放复现报错；同矩阵同右端的一次残差校正可使连续性检查通过，
+但该线性诊断修正不能消除速度场异常。
+
+局部诊断在同一 t≈1.40003 保存状态、同网格、同固定步1e-4下，只改变出口回流边界项：
+原自然出口在 t≈1.43643 达到节点速度20.10并触发明确的探索性截断；加入回流耗散的版本
+完成600步至t≈1.46003，速度4.303、r≈6.157e-5。新项改变回流时的自然出口数学条件，
+仅在隔离调试进程中使用，未改生产代码或默认边界，也未启动新的完整生产运行。
+配对不变量相对残差约1e-15，小步r/h²趋于常数；单步1.25倍bulk对比包含初态转移，不能称空间收敛。
+结果支持优先检查出口回流，尚不构成唯一根因、长期稳定性或高 Re 精度资格证明。
+原始诊断和短窗字段见 `reports/cylinder_wake_diagnostics/20261028T091327-5ee92573/diagnosis.md`。
+
+显式增加 `min_step_policy=force`，默认 fail 不变。普通步长建议截断至 min_step，
+在下限处允许有限的超容差步接受；实际误差、接受标志及步长原样保存，另统计
+`forced_min_step_acceptances`。非有限状态/误差、阶段求解和诊断失败不接受，
+终点短对齐步仍检查误差。旧圆柱配置不新增默认键，按原配置及来源身份继续读取。
+
+独立已知 ODE 复现了原 PI 在 accepted/error<1 后建议低于下限的退出模式；
+新策略跨过该模式，同时覆盖速度/标量超容差下限接受、严格终点、NaN和阶段失败不接受、
+圆柱保存/加载及默认配置兼容。推进器聚焦38项通过；圆柱/FEM/新策略47项通过（11.39s），
+EIT-WSL 独立环境7项通过（2.08s）；最终全套 **535 passed，109.39s**，
+相关10个源文件 mypy 通过。第一次全套为534通过/1导航链接失败，补齐新家族入口后重跑全套通过。
+
+从原失败保存末态重置 PI 历史的短窗检查达到 t=1.4559810684852488，跨过原结束点1e-5，
+首/末场及 r 为有限数；不称为精确续算或完整尾流验证。字段保存于 floor_probe.npz，
+首次试步列表 JSON 序列化因预期的初始 PI 历史 NaN 未保留，限制已在对应 JSON 中注明。
+
+新生产批次 `runs/cylinder_floor_retry/20261028T091327-5ee92573/`，冻结数值源码 SHA256
+`da7aba7036f31fc088a83425a5dacf94c2f3e189bff84e8d721d5f950a38c43f`。
+已在 EIT-WSL 独立目录 `/home/hfwang/mac-mrsav-cylinder-floor-20261028T091327-5ee92573/`
+启动，成员 `20261028T091648-4b6a33a2-616e9e4d`；实际配置为 Re1000、gamma1000、
+min_step=1e-7/force，原物理、网格与误差控制不变，从原 Stokes 初值 t=0 重算至12。
+增加早期快照及100步日志，不改变原成员或旧失败记录。
+远端锁定环境、源码逐文件及总代码摘要核验通过；启动检查确认运行至 t≈.14375。
+此处只确认已启动，未下载新完整数值场，未声明最终完成、原局部容差满足或精度资格通过。
+
+## 2026-10-28 二维 SAV 圆柱尾流动画（生产计算进行中）
+
+新增独立 `experiments/cylinder_wake_compare`，保持现有求解器、阶段公式和实验入口不变。
+用户确认采用二维 Re100 / Re1000 比较，高 Re 称为“二维非定常尾流”，不称三维湍流。
+两组共同使用 DFG2D-2 几何、相同实际网格、P2/P1、SDIRK3-mr-ccSAV、gamma=1000，
+PI 速度/标量控制；只有黏性改变。计算由冻结源码副本中的持久进程运行，
+原始结果、短窗检查、分析和导出分别保存身份及摘要。
+
+小网格流程覆盖两组 SAV 计算、末态短窗时间/bulk敏感性检查及加权范数独立重算，
+并实际导出 MP4/GIF。只读分析测试禁止构造 FEMModel/OpenFlowModel；
+破坏检查样本校验和会被拒绝。跨网格采样由独立全局二次多项式验证，
+分块限制元素查找器的临时内存。实际 PDF 字体核验通过。
+全套 **528 passed，264.96 s**；之后仅调整显示纵横比、来源核验与页脚，
+新流程聚焦 **3 passed，11.46 s**，新增5个源文件的 mypy 通过。
+全套计时与两个生产作业并发，不能作性能比较；不由此声明旧 Kolmogorov 类型错误已修复。
+
+生产批次 `runs/cylinder_wake_compare/20261028T075552-62cb32db/` 已启动至 T=12，
+计划导出 t=10…12 的201帧。记录本段时尚未完整结束，故不声明动画交付、
+Re100 参考门槛或任一生产敏感性检查通过。resolution=1/N96 为探索网格，
+不继承下面历史细网格的资格；短窗检查也不代表全轨迹网格收敛。
+原始场不做时间插值，每行显示自己的实际接受时刻，圆柱和通道坐标等比例，
+两行使用相同固定无量纲涡量色标。高 Re 若为近周期脱涡，同样按实际结果展示。
+
+本批次启动时，本机未找到先前 FEM 工作树的原始圆柱档案，EIT-WSL 端口连接被拒绝；
+因此本批次独立计算，不将历史报告的“已下载”状态当作当前本机可复核的数据。
+
+### 随后恢复 EIT-WSL 连接并取回低 Re 预览
+
+用户开启端口后，按3001端口成功连接。远端v1目录有两组已完成 Re100 原始记录，
+未发现高 Re 圆柱结果。取回 `20261027T204150-dd47fd10-9ea24b9f` 的四个原文件，
+远端和本地逐文件 SHA256 一致；转移证据独立保存在新批次 `imports/remote_low_re.json`。
+原始 config/manifest/结果及日志保持原编号、原来源和原字节。
+
+该旧记录 resolution=1/N48、SDIRK3-mr-ccSAV、gamma=1，T=12；
+最大 |r|=.00644194、完整弱连续性残差1.11e-16、阶段残差3.38e-15。
+末三个完整周期稳定，St=.29646535；升力最小/最大值的参照误差分别11.14%/10.28%，
+故参考资格**未通过**。逐点物理散度最大值约87.50另行保留，不用弱约束残差代替。
+
+新增只读单组 `preview` 入口，使用实际保存字段/时刻与单元平均旋度，
+原始输入绘图前后摘要不变。实际导出61帧、15fps、1280×600 MP4及两种GIF，
+检查首/中/末帧、等比例圆柱、PDF实际字体和视频帧数/时长；画面明确标出参考门槛未通过。
+聚焦3项 **16.50 s** 通过（包含禁止构造流动模型时的单组与双组只读导出）；
+新增6个源文件 mypy 通过。此次只读绘图不重新计算流场，不用旧档案替换 N96/gamma1000 的新比较。
+
+### 本批次生产计算的实际终态
+
+Re100 成员 `20261028T075552-0a8cec03-ed8d6e48` 已完整至 T=12：
+12368接受/0拒绝，工作流耗时2625.15s，最大 |r|=8.12714e-6。
+末三个完整周期稳定，St=.29592993；升力最小/最大值参照误差12.23%/12.28%，
+因此粗网格参考资格仍未通过。其独立单组动画只用于观察周期脱涡。
+
+Re1000 成员 `20261028T075552-afe3e822-854cdb26` 在 t=1.45597107
+以 `Step below min_step` 结束，10362接受/1拒绝；原始接受前缀完整保存。
+保存的物理字段/诊断无 NaN/Inf，试步原因仅有一次 `error_exceeded`。
+最后接受步 Eu=1.46883e-5、Er=.50016863，PI下一步9.98974e-8小于下限1e-7。
+最终出口节点速度约332.47，异常根因未建立，不能作为可信高 Re 尾流或判定格式理论不稳定。
+双组自动完成程序因该失败退出，`delivery.json` 为 failed；没有完成双组敏感性检查或并排动画。
+聚合 manifest 在异常分支遗留 running，诊断 progress.json 明确记录此状态缺陷，
+不据此声称仍有运行中的计算，也未篡改原始成员身份来掩盖失败。
+
 ## 2026-10-28 main / FEM 受控合并
 
 先按用户要求将主目录全部非忽略改动提交为 `c1fd453`，再将 FEM / 圆柱改动提交为
@@ -1747,6 +2154,28 @@ Refinement started on MAC MINI at 2026-10-05 18:40:43 Asia/Shanghai, PID 54052, 
 
 2026-10-05 k=11 error reanalysis: `reports/no_slip_reference_convergence/20261005T142413-cec57910-k11-reference` reuses all 90 integer/fractional trials and takes the completed ordinary SDIRK3 k=11 fields as the error baseline. No solver reruns or numerical changes. Independent full-face L2 and boundary-weighted H1 sums verified 285 finite snapshot rows and 75 missing snapshots in 360 rows; 536 finite adjacent-level rates passed, with maximum relative norm discrepancy 2.31e-15. All 92 numerical inputs and 56 protected old report files remained unchanged; all 20 retrieved report-file hashes match. Four PDF pages and the T=4 figure were visually inspected, with Times New Roman verified in the figure. The k=3..4 nonmonotonicity persists. The k10-k11 comparison is retained as sensitivity evidence, not a finer-reference validation of k11; `finer_reference_unverified` remains explicit in metadata, captions and the figure. No k12 reference is available. One early rendering attempt lacked the TeX PATH and was recorded as failed; the completed derivative uses the established TeX/Homebrew paths.
 
+## 2026-10-29 Re1000 回流耗散出口全程完成
+
+EIT-WSL冻结源码批次`runs/cylinder_backflow_retry/20261028T114139-60ff3b11`
+已完成，原始运行`20261028T114549-0b171b3b-2a473b7d`严格到达t=12。
+北京时间03:16:32完成，07:38在线核验。SDIRK3-mr-ccSAV/gamma1000，接受112137步、
+拒绝1步，强制最小步长接受0次；完整工作流27043.13秒。
+全部原始四文件已取回，HDF5本地/远端SHA256一致，严格公共加载器通过。
+保存的速度/压力/诊断有限，最大|r|=6.09668e-5，最大接受态弱连续性1.36877e-13，
+最大阶段残差9.32696e-11。实际步长最小6.80960e-5，未触及1e-7下限。
+
+完整运行通过仍不是全轨迹空间精度证明。5480三角形Taylor-Hood网格的逐点散度
+仍很大：积分点最大绝对值1907.18，散度L2范数最大81.46。弱连续性满足不能解释为
+逐点无散或空间收敛。末三周期的周期相对范围5.81%、振幅相对范围3.70%，未达到
+严格周期门槛。回流耗散出口也不继承自然出口的DFG参考资格，不能与旧自然出口
+Re100结果组成同边界受控比较。证据见本批次`completion_check.json`。
+
+只读导出`t≈10…12`的201帧诊断动画，20fps、1280×600、10.05秒；本地原始输入
+与输出摘要复核、字体嵌入和等比例坐标检查通过。检查中间/末帧可见明显网格尺度
+交替涡量振荡，因此保存为诊断证据，不能视为已分辨高Re涡旋或可信物理动画。
+预览补充明确的二维非定常尾流与出口标签；相关流程3 passed（8.12秒），
+该预览文件mypy通过。没有重算PDE、改变原始数据或新增空间精度结论。
+
 ## 2026-10-23 Molenaar candidate cavity launch
 
 Independent `experiments/molenaar_cavity` streams fixed-step ordinary SDIRK3 runs, probe time series, full-velocity snapshots and per-interval maximum stage residual/full-divergence checks. Focused tests independently check the staggered curl of the source, tensor/direct one-step equivalence, and public run/save/read-only spectrum analysis with double-precision HDF5. Mypy checks the new experiment modules. Remote 128² T=1 smoke checks precede the long campaign; they do not establish long-time stability, grid convergence or paper reproduction. Forcing angular wavenumber 6*pi is supported by source figures, while the Fourier amplitude normalization and Qs=.01/.02 remain unverified. The long scan carries that status, includes two spin branches, and queues separate time/space checks at nu_prime=40/80. No unchanged solver mechanism or manuscript result is newly validated by this launch. Existing workflows and remote working-tree changes are preserved through a separate source snapshot.
@@ -1754,3 +2183,51 @@ Independent `experiments/molenaar_cavity` streams fixed-step ordinary SDIRK3 run
 ### 2026-10-23 user correction to SDIRK3-mr-ccSAV
 
 The ordinary-SDIRK3 Molenaar campaign v1 was stopped at the user's request; existing numerical files were preserved and its metadata marked interrupted. Separate v2 uses explicit scheme=sdirk3_mrsav, gamma=1, r0=0 with the same 24 cases from zero initial velocity. The experiment driver now carries the accepted scalar between steps and saves all per-step stage roots, root residuals, scalar residuals, and velocity residual/divergence diagnostics. Focused workflow coverage includes a nonzero-r initial condition to detect scalar resets and verify stage/final/snapshot scalar persistence, alongside the ordinary path. This does not validate the literature's unresolved forcing normalization or long-time reproduction.
+
+## 2026-11-02 高Re翼型长算失败前段核查
+
+任务20261101T132614-ca907d05的Re_D=10000于t=.7409528453因Step below min_step停止，
+496接受/13拒绝；Re_D=30000未启动。末段场有限，但入口下角节点速度约668，物理散度显著异常。
+16个实际不同的快照作只读P2梯度/涡量分析，重复终态不计为后续时刻；原始文件校验和未变。
+t约.7的尾迹检查区没有回流，表面中后段未检出反向剪切，尚无可信持续脱涡证据。
+未改数值格式、未重跑；角点异常的具体原因未通过对照试验确立。
+启动期max_step减半未触及上限，轨迹相同，不能作为有效时间收敛证据。
+分析报告见reports/hele_shaw_wake/20261101T132614-ca907d05/re10000_failed_prefix_20261102/RESULTS.md。
+
+## 2026-11-02 压力入口动能修正
+
+实际129390三角形失败状态，直接求解、同一SDIRK3-mr-ccSAV与h=1e-7：原边界节点峰值668.11增至674.63；新入口降至661.16。最大阶段系数残差分别5.03e-16/3.54e-16。
+独立解析入口功2beta/7、SAV配对、全开放端能量正号、线性极限及SDIRK3阶段、run/load和超限保存前缀通过。
+全套589 passed/10 skipped（151.53秒，诊断工具时长修正后重跑），相关12文件mypy通过；全库仍为三个旧Kolmogorov脚本的6项类型错误。旧schema0/1实际重载通过。
+从t约.7的控制回放中，原入口在t=.740695角点速度达到21.05并触发诊断限；新入口已跨过原失败时刻，最终结果与新长算状态保存于runs/hele_shaw_wake/20261102T071827-ef7aba44。
+新条件改变压力入口的动能应力，旧默认保留；未变更SAV公式或用强制步长越过误差控制。完成短段或T=1.1检查均不等于T=20已完成，也不证明网格独立或三维高Re有效性。
+
+入口恢复最终严格终点回放t=.6999356 -> .75完整通过（36接受步），最终入口角点节点速度.42424、全域峰值.66823、r=-5.42e-6。额外观测到t=.87314保持有界；诊断工具曾把绝对终点当持续时间，多算区间已主动停止，随后调用修正、非零初始时刻回归和完整589项测试重跑通过。
+新独立任务runs/hele_shaw_wake/20261102T071827-ef7aba44已启动；先从零T=1.1，成功后自动独立从零T=20。此记录不表示T=20已完成。
+
+## 2026-11-02 shared FEM solver comparison
+
+Run `runs/fem_multigrid/20261102T083710`; selected settings and full evidence:
+`reports/fem_multigrid/20261102T083710-final/{summary.md,report.json,presets.json,validation.json}`.
+Four geometries, three mesh levels up to 730344 free velocity DOFs; frozen original
+direct/recycled and optional weak-load, CG/METIS mass and PETSc block-AMG candidates.
+296 formal samples, 282 qualified. Matrix tests include five shift regimes/two nonzero RHS;
+whole SAV steps, prescribed/fixed/native PI, initialization, pressure recovery, peak RSS
+and process time are recorded separately. Field comparisons include velocity, stage
+pressure, independently recovered open-boundary physical pressure and r.
+
+Ordinary-environment release: 621 passed/21 skipped, zero exit code. Its missing
+new threadpoolctl dev dependency was supplied through temporary PYTHONPATH only;
+the original environment and running frozen-source Re10000 job were unchanged.
+Isolated PETSc release: 632 passed/10 skipped, zero exit code. Notebook dependencies
+were present. Affected 71 sources pass mypy; full-project mypy retains six preexisting
+errors in three unmodified Kolmogorov scripts. Exact logs and environment receipts
+are in the run's validation directory.
+
+Limits: shared-machine, single-process GAMG only; no Hypre/MPI/GPU claim. The original
+large MMD mass construction exceeded a 90s limit. CG/METIS large timings are separate
+batches and the largest case measures one cold complete SAV step, not long integration.
+Initial AMG fallbacks and two refined AMG cylinder stage-pressure disagreements remain
+disqualified, without weakening acceptance. Missing-history NaN serialization was fixed
+in a separate frozen worker and the native adaptive group rerun; failed records retained.
+See docs/fem-multigrid.md for equations, tolerances, setup and exact interpretation.
