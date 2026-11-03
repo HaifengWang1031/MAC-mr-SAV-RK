@@ -22,7 +22,7 @@ from experiments.kolmogorov_adaptive.run import (
     make_scheme,
     model_and_initial,
 )
-from experiments.workflow import PROJECT, provenance, write_json
+from experiments.records import PROJECT, provenance, write_json
 from solver.adaptivity import IController, PIController, integrate_adaptive
 from solver.mac.kernels import warmup
 from solver.mac.stokes import DirectStokes

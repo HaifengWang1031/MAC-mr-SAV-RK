@@ -3,6 +3,7 @@ from importlib.metadata import version
 from typing import Any
 
 import numpy as np
+from numpy.typing import NDArray
 from skfem import MeshTri
 
 from experiments.fem_ns.representation import METADATA as FEM_METADATA, _array, maps, validate_fields
@@ -137,3 +138,10 @@ def _validate(data: Any, cfg: dict, manifest: dict) -> tuple[Any, Any]:
     if manifest['status'] == 'complete' and not complete_observation:
         raise ValueError('Complete cylinder run lacks final observations')
     return velocity, pressure
+
+
+def decode_velocity(basis: Any, u: NDArray[np.float64], v: NDArray[np.float64]) -> NDArray[np.float64]:
+    full = np.zeros(basis.N)
+    for coefficients, indices in zip((u, v), basis.split_indices()):
+        full[indices] = coefficients
+    return full

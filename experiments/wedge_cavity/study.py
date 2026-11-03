@@ -13,7 +13,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 
-from experiments.workflow import PROJECT
+from experiments.records import PROJECT
 from . import fields, report
 
 INK = '#23231F'

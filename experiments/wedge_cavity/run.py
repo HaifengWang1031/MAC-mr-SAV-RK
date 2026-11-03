@@ -5,17 +5,14 @@ of the animation needs the stage pressure at that time, and the stage pressure i
 only available from the trial that produced the state.
 """
 import argparse
-from datetime import datetime, timezone
-import hashlib
 import json
 from pathlib import Path
 from time import perf_counter
-from uuid import uuid4
 
 import h5py
 import numpy as np
 
-from experiments.workflow import PROJECT, digest, provenance, write_json
+from experiments.records import PROJECT, begin_run, digest, finish_run, provenance, run_identity
 from experiments.fem_backends import model_solver_options, solver_provenance
 from solver.core import State
 from solver.fem.cavity import ClosedCavityModel
@@ -24,10 +21,6 @@ from solver.schemes.registry import make_scheme, scheme_info
 from .config import effective_config
 
 EXPERIMENT = 'wedge_cavity'
-
-
-def _identity(cfg: dict, source: dict) -> str:
-    return hashlib.sha256(json.dumps({'config': cfg, 'source': source}, sort_keys=True).encode()).hexdigest()
 
 
 def build(config: dict) -> tuple[dict, WedgeSpace, ClosedCavityModel]:
@@ -59,7 +52,7 @@ def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
     cfg, space, model = build(config)
     source = provenance()
     solver_provenance(source, cfg)
-    identity = _identity(cfg, source)
+    identity = run_identity(cfg, source)
     parent = Path(root)/'runs'/EXPERIMENT
     parent.mkdir(parents=True, exist_ok=True)
     if not rerun:
@@ -74,15 +67,9 @@ def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
                     return candidate
             except (OSError, ValueError, KeyError):
                 continue
-    run_id = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')+'-'+identity[:8]+'-'+uuid4().hex[:8]
-    directory = parent/run_id
-    directory.mkdir()
-    manifest: dict = {'schema_version': 1, 'run_id': run_id, 'identity': identity, 'experiment': EXPERIMENT,
-                'source': source, 'status': 'running', 'rerun': rerun,
-                'created_utc': datetime.now(timezone.utc).isoformat()}
-    write_json(directory/'config.json', cfg)
-    manifest['config_sha256'] = digest(directory/'config.json')
-    write_json(directory/'manifest.json', manifest)
+    directory, manifest = begin_run(parent, cfg, source,
+        metadata={'schema_version': 1, 'experiment': EXPERIMENT, 'rerun': rerun}, started_key='created_utc')
+    run_id = directory.name
 
     scheme = make_scheme(cfg['scheme'], cfg['gamma'])
     info = scheme_info(cfg['scheme'])
@@ -164,11 +151,9 @@ def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
             data.create_dataset('mesh/wall_left', data=space.mesh.boundaries['wall_left'])
             data.create_dataset('mesh/wall_right', data=space.mesh.boundaries['wall_right'])
         temporary.replace(directory/'results.h5')
-        manifest.update(status=status, error=error, accepted_steps=len(times)-1,
-                        final_time=float(times[-1]), metrics=metrics,
-                        results_sha256=digest(directory/'results.h5'),
-                        finished_utc=datetime.now(timezone.utc).isoformat())
-        write_json(directory/'manifest.json', manifest)
+        finish_run(directory, manifest, status=status, error=error, metrics=metrics,
+                   finished_key='finished_utc', fields={'accepted_steps': len(times)-1,
+                                                       'final_time': float(times[-1])})
         log.write(json.dumps({'status': status, 'error': error, 'metrics': metrics})+'\n')
     return directory
 

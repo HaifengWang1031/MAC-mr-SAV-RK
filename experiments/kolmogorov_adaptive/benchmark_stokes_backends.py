@@ -18,7 +18,7 @@ import numpy as np
 
 from experiments.kolmogorov_adaptive.model import force, initial_velocity
 from experiments.kolmogorov_adaptive.run import SCHEMES, make_scheme
-from experiments.workflow import PROJECT, provenance, write_json
+from experiments.records import PROJECT, provenance, write_json
 from solver.integrate import integrate
 from solver.mac.grid import MACGrid
 from solver.mac.kernels import warmup

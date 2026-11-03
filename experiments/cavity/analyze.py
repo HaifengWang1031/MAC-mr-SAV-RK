@@ -12,7 +12,7 @@ import h5py
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from experiments.workflow import PROJECT,load_record,write_json,provenance
+from experiments.records import PROJECT, load_record, write_json, provenance
 
 
 def analyze(inputs: list[Path]) -> Path:

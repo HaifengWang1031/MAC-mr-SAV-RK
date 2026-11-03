@@ -18,10 +18,10 @@ import h5py
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from experiments.workflow import PROJECT, digest, write_json
+from experiments.records import PROJECT, digest, write_json
 from solver.fourier import FourierSpace
 from solver.fourier.space import RealArray
-from .run import load_periodic
+from .records import load_periodic
 
 
 @dataclass

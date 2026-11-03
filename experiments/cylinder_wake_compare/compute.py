@@ -15,7 +15,7 @@ import sys
 from typing import Any
 from uuid import uuid4
 
-from experiments.workflow import PROJECT, digest, provenance, write_json
+from experiments.records import PROJECT, digest, provenance, write_json
 from experiments.cylinder_ns.config import effective_config
 
 DEFAULTS: dict[str, Any] = {

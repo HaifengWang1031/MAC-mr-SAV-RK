@@ -11,7 +11,8 @@ import numpy as np
 if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from experiments.workflow import PROJECT, provenance, run_experiment, write_json
+from experiments.records import PROJECT, provenance, write_json
+from experiments.workflow import run_experiment
 from experiments.no_slip_reference_convergence.analyze import analyze_batch, comparison_pairs
 
 def schedule(times: list[float], nominal_step: float) -> list[float]:

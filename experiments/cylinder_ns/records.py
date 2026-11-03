@@ -8,11 +8,14 @@ import numpy as np
 from skfem import BilinearForm, MeshTri, asm
 from skfem.helpers import div
 
-from experiments.workflow import digest
+import h5py
+from experiments.records import digest, load_record, run_identity as _identity
+from .config import DEFAULTS, OPTIONAL, effective_config
+from .representation import validate
 from solver.fem.cylinder import validate_cylinder_mesh
 from solver.fem.space import MeshSpace
 from .problems import inlet_velocity
-from .reconstruct import decode_velocity
+from .representation import decode_velocity
 
 
 def fingerprints(directory: Path) -> dict[str, str]:
@@ -129,3 +132,29 @@ def load_reference(directory: Path) -> dict[str, Any]:
             raise ValueError('Reference snapshot violates its fixed trace')
     return {'directory': directory, 'manifest': manifest, 'config': cfg, 'basis': vb, 'pressure_basis': pb,
             'result': result, 'fields': fields, 'native': native}
+
+
+def load_cylinder(directory: Path, *, require_complete: bool = False) -> tuple[dict, dict]:
+    directory = Path(directory)
+    cfg, manifest = load_record(directory, require_complete=require_complete)
+    if manifest.get('experiment') != 'cylinder_ns' or manifest.get('run_id') != directory.name:
+        raise ValueError('Expected cylinder run identity')
+    try:
+        source = manifest['source']
+        packages = ('numpy', 'scipy', 'numba', 'h5py', 'sympy', 'matplotlib', 'scikit-fem')
+        if any(not isinstance(source.get(k), str) or not source[k] for k in ('code_sha256', 'python', 'platform')) \
+                or len(source['code_sha256']) != 64 or any(c not in '0123456789abcdef' for c in source['code_sha256']) \
+                or any(not isinstance(source['packages'].get(k), str) or not source['packages'][k] for k in packages) \
+                or not isinstance(source['threads'], dict):
+            raise ValueError('Malformed cylinder provenance')
+        inputs = {key: cfg.get(key, value) for key, value in DEFAULTS.items()}
+        for key in OPTIONAL:
+            if key in cfg:
+                inputs[key] = cfg[key]
+        if effective_config(inputs) != cfg or _identity(cfg, source) != manifest['identity']:
+            raise ValueError('Cylinder effective configuration/source identity mismatch')
+        with h5py.File(directory/'results.h5', 'r') as data:
+            validate(data, cfg, manifest)
+    except (KeyError, TypeError) as error:
+        raise ValueError(f'Missing cylinder metadata: {error}') from error
+    return cfg, manifest

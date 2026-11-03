@@ -24,7 +24,7 @@ import numpy as np
 
 from experiments.legendre_mac_benchmark.run import micro_cpu, schedules
 from experiments.problems import _expressions
-from experiments.workflow import PROJECT, digest, provenance, write_json
+from experiments.records import PROJECT, digest, provenance, write_json
 from solver.integrate import integrate
 from solver.model import Model
 from solver.schemes.registry import make_scheme, scheme_info

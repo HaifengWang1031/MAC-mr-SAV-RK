@@ -17,7 +17,7 @@ from uuid import uuid4
 import h5py
 import numpy as np
 
-from experiments.workflow import PROJECT, digest, provenance, write_json
+from experiments.records import PROJECT, digest, provenance, write_json
 from .config import effective_config
 
 

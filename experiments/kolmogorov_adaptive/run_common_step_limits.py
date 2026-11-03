@@ -18,7 +18,7 @@ import numpy as np
 if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from experiments.workflow import PROJECT, provenance, write_json
+from experiments.records import PROJECT, provenance, write_json
 from experiments.kolmogorov_adaptive.run import (
     config_check, make_scheme, model_and_initial, output_times, save_member,
 )

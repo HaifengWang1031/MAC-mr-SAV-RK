@@ -9,9 +9,9 @@ import h5py
 import numpy as np
 
 from solver.fourier import FourierSpace
-from experiments.workflow import PROJECT, digest, write_json
+from experiments.records import PROJECT, digest, write_json
 from .problems import Manufactured
-from .run import load_periodic
+from .records import load_periodic
 
 
 def read_fields(directory: Path) -> tuple[dict, dict[str, Any]]:

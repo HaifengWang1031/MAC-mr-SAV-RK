@@ -121,3 +121,21 @@ the same RK coefficients, SAV polynomial, root enumeration and stage records. We
 keep the exact consistent mass and original full coefficient/divergence/gauge acceptance
 checks; a smaller normalization denominator is conservative. The fixed trace affects only
 the first Stokes response column. See docs/fem-multigrid.md.
+
+## Shared experiment records (2026-11-03)
+
+`experiments/records.py` owns canonical identity hashing, provenance, JSON/HDF5
+persistence, the common integrity gate, same-config/source reuse and attempt
+creation/finalization. Experiments keep their representation readers and extra
+HDF5 data. Legacy MAC and wedge reuse adapters retain their existing policies;
+their creation/finalization uses the common record module. Historical manifest
+time-field names, explicit optional config keys, checksums and failure prefixes
+are retained. This does not add checkpoint continuation or transaction guarantees.
+
+Periodic, Channel, closed FEM and cylinder readers live in their experiment's
+`records.py`, alongside the existing Hele-Shaw reader. Closed FEM config has its
+own module, so loading does not import the runner. Readonly consumers import these
+readers directly; the old `workflow` helpers and runner loader names remain
+re-exports for existing users and frozen-source benchmark tools. New source hashes
+still reflect all changed Python files; old records use their saved source when
+checking identity, not the currently installed source hash.

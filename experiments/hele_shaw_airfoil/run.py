@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 from time import perf_counter
 from typing import Any
-from uuid import uuid4
 
 import h5py
 import numpy as np
@@ -14,7 +13,7 @@ import numpy as np
 from experiments.fem_ns.attempts import save_attempts
 from experiments.fem_ns.representation import maps
 from experiments.controllers import make_controller
-from experiments.workflow import PROJECT, digest, provenance, save_result, write_json
+from experiments.records import PROJECT, begin_run, finish_run, provenance, reusable_run, save_result, write_json, fail_run, digest
 from experiments.fem_backends import model_solver_options, solver_provenance
 from solver.adaptivity import AdaptiveResult, ScalarErrorControl, integrate_adaptive
 from solver.core import State, Trial
@@ -26,7 +25,7 @@ from solver.integrate import Result, integrate
 from solver.schedule import schedule_nodes
 from solver.schemes.registry import make_scheme, scheme_info
 from .config import METADATA, effective_config
-from .records import identity, load
+from .records import load
 
 
 class _AlignedFixed:
@@ -46,25 +45,12 @@ def run(config: dict[str, Any], *, root: Path = PROJECT, rerun: bool = False) ->
     source = provenance()
     solver_provenance(source, cfg)
     source['packages'].update({k: version(k) for k in ('scikit-fem', 'gmsh', 'pymetis')})
-    key = identity(cfg, source)
-    parent = Path(root)/'runs/hele_shaw_airfoil'
-    parent.mkdir(parents=True, exist_ok=True)
-    if not rerun:
-        for candidate in sorted(parent.iterdir()):
-            if candidate.is_dir():
-                try:
-                    old, manifest, *_ = load(candidate)
-                    if old == cfg and manifest['identity'] == key:
-                        return candidate
-                except (ValueError, KeyError, OSError):
-                    continue
-    directory = parent/(datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')+'-'+key[:8]+'-'+uuid4().hex[:8])
-    directory.mkdir()
-    write_json(directory/'config.json', cfg)
-    manifest = dict(experiment='hele_shaw_airfoil', run_id=directory.name, identity=key,
-                    source=source, status='running', config_sha256=digest(directory/'config.json'),
-                    started_utc=datetime.now(timezone.utc).isoformat())
-    write_json(directory/'manifest.json', manifest)
+    parent = Path(root)/'runs'/'hele_shaw_airfoil'
+    reused = reusable_run(parent, cfg, source, reader=lambda path: load(path, require_complete=True), rerun=rerun)
+    if reused is not None:
+        return reused
+    directory, manifest = begin_run(parent, cfg, source, metadata={'experiment': 'hele_shaw_airfoil'},
+                                    started_key='started_utc')
     started = perf_counter()
     with (directory/'run.log').open('w', buffering=1) as log:
         log.write(json.dumps(cfg)+'\n')
@@ -165,10 +151,10 @@ def run(config: dict[str, Any], *, root: Path = PROJECT, rerun: bool = False) ->
                 if isinstance(result, AdaptiveResult):
                     save_attempts(data, result.attempts)
             pending.replace(directory/'results.h5')
-            manifest.update(status=result.status, error=result.error, final_time=result.final.t,
-                results_sha256=digest(directory/'results.h5'), metrics=metrics,
-                workflow_wall_seconds=perf_counter()-started, finished_utc=datetime.now(timezone.utc).isoformat())
-            write_json(directory/'manifest.json', manifest)
+            checksum = digest(directory/'results.h5')
+            finish_run(directory, manifest, status=result.status, error=result.error, metrics=metrics, finished_key='finished_utc',
+                       fields={'final_time': result.final.t, 'workflow_wall_seconds': perf_counter()-started},
+                       results_sha256=checksum)
             if observer is not None:
                 live = json.loads((directory/'progress.json').read_text()) if (directory/'progress.json').exists() else {}
                 live.update(status=result.status, error=result.error, t=result.final.t,
@@ -176,9 +162,7 @@ def run(config: dict[str, Any], *, root: Path = PROJECT, rerun: bool = False) ->
                 write_json(directory/'progress.json', live)
             log.write(json.dumps({'status': result.status, 'metrics': metrics, 'error': result.error})+'\n')
         except Exception as error:
-            manifest.update(status='failed', error=f'{type(error).__name__}: {error}',
-                            finished_utc=datetime.now(timezone.utc).isoformat())
-            write_json(directory/'manifest.json', manifest)
+            fail_run(directory, manifest, error, finished_key='finished_utc')
             log.write(manifest['error']+'\n')
             raise
     return directory

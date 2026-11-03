@@ -6,7 +6,7 @@ from pathlib import Path
 
 import h5py
 
-from .workflow import digest, load_record
+from experiments.records import digest, load_record
 
 
 def read_reference_study(root: Path, report: Path, *, analysis_sha256: str,

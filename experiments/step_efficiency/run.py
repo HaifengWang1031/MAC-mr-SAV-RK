@@ -24,7 +24,7 @@ from solver.fourier import FourierModel, FourierSpace
 from solver.spectral.assembly import Space
 from solver.spectral.model import SpectralModel
 from solver.schemes.registry import SCHEMES, make_scheme, scheme_info
-from experiments.workflow import PROJECT, digest, provenance, write_json
+from experiments.records import PROJECT, digest, provenance, write_json
 from experiments.legendre_mac_benchmark.run import build_model as build_mac, schedules
 from experiments.legendre_optimization.run import build_model as build_legendre
 from experiments.channel_ns.problems import build_model as build_channel

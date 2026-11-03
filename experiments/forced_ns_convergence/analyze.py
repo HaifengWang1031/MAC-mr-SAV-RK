@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 import numpy as np
 import h5py
-from experiments.workflow import PROJECT, load_record, write_json, provenance, digest
+from experiments.records import PROJECT, load_record, write_json, provenance, digest
 from solver.mac.grid import MACGrid
 from solver.mac.operators import MACOperators
 

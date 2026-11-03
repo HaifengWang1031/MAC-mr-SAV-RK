@@ -15,7 +15,7 @@ import numpy as np
 
 from solver.channel import ChannelGrid, ChannelModel
 from solver.schemes.registry import DEFAULT_SCHEMES, scheme_info
-from experiments.workflow import PROJECT, digest, provenance, write_json
+from experiments.records import PROJECT, digest, provenance, write_json
 from .analyze import read_fields, velocity_error
 from .problems import Manufactured, SCHEMES
 from .run import load_channel, run

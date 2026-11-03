@@ -29,7 +29,7 @@ import numpy as np
 from experiments.kolmogorov_adaptive.run import (
     config_check, model_and_initial, output_times, reference_schedule, save_member,
 )
-from experiments.workflow import PROJECT, digest, provenance, write_json
+from experiments.records import PROJECT, digest, provenance, write_json
 from solver.adaptivity import IController, ScalarErrorControl, integrate_adaptive
 from solver.mac.kernels import warmup
 from solver.schemes.sdirk3 import SDIRK3

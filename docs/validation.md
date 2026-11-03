@@ -2256,3 +2256,40 @@ representations were exactly unchanged in the selected comparison. Five affected
 sources pass mypy. This is a finite regression check, not a PDE theorem or a
 performance measurement; caching prevents interpreting removed calls as a
 measured speedup. Pressure, trace and complete residual checks remain in place.
+
+### Shared run records and independent readers
+
+Record setup/reuse/completion and common persistence utilities now have a single
+owner. Representation checks and saved mesh/pressure semantics remain local.
+Focused public workflow coverage: 168 passed, 1 skipped; a fresh-process FEM
+reader test additionally blocks experiment computation entry points and PETSc
+imports. Seven tiny records saved before this refactor (MAC, periodic, Channel,
+closed FEM, cylinder, wedge and Hele-Shaw) loaded successfully after it, without
+changing their file checksums. The five dedicated representation readers loaded
+without importing any experiment runner or the old MAC workflow. The wedge's
+common integrity gate was checked separately from its representation reader.
+
+The existing full-project mypy baseline has six errors in three unmodified
+Kolmogorov scripts (analyze_natural_partial, reference_error, run_natural_step_error).
+Those files remain unchanged; release test and affected-source results follow.
+
+Final branch validation: **642 passed, 21 skipped** in 188.88 seconds with
+`uv run --locked pytest -q`. All **85 changed source files** pass mypy; full-project
+mypy remains at the same six existing errors in the three unchanged scripts.
+The skips retain optional-dependency/platform coverage limits; no skipped backend
+is newly qualified by this work.
+
+Independent Standards review found no actionable violations. Spec review caught
+and corrected the FEM `rerun` field omission and frozen-source helper imports.
+The extended FEM reuse/rerun assertion failed before correction and passes after.
+A current comparison worker completed a tiny cylinder run on actual frozen
+pre-refactor source. Three historical `--source-root` entry points passed imports
+and reached the expected missing-input gate, without launching campaigns.
+
+Seven fresh after-refactor records have exactly matching effective configs,
+manifest/metric field sets and **250 identical HDF5 datasets** against the saved
+before-refactor records. These are selected finite regression checks. The first
+full test run also exposed a preexisting missing `fem_scalability/README.md` link
+in the experiment index; the existing family link was added, with no new result
+claim. Focused FEM/navigation coverage then passed all 70 cases before the final
+complete run above. Old records, sources and production runs were not rewritten.

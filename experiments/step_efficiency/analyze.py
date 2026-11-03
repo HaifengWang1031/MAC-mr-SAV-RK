@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from experiments.workflow import PROJECT, digest, provenance, write_json
+from experiments.records import PROJECT, digest, provenance, write_json
 
 LABELS = {'mac_direct': 'MAC sparse LU', 'mac_tensor': 'MAC tensor + Schur-CG',
           'legendre_direct': 'Legendre sparse LU', 'legendre_tensor': 'Legendre tensor + Schur-CG',

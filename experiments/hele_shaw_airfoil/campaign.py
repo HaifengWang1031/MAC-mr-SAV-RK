@@ -16,7 +16,7 @@ from uuid import uuid4
 import h5py
 import numpy as np
 
-from experiments.workflow import PROJECT, digest, write_json
+from experiments.records import PROJECT, digest, write_json
 from .analyze import analyze
 from .records import load
 from .run import run

@@ -1,59 +1,27 @@
 """Run and verify DFG2D-2 records; analysis is a separate readonly entry point."""
 import argparse
-from datetime import datetime, timezone
-import hashlib
 from importlib.metadata import version
 import json
 from pathlib import Path
 import resource
 import sys
 from time import perf_counter, process_time
-from uuid import uuid4
 
 import h5py
 
 from experiments.fem_ns.attempts import save_attempts
 from experiments.controllers import make_controller
-from experiments.workflow import PROJECT, digest, load_record, provenance, save_result, write_json
+from experiments.records import PROJECT, begin_run, finish_run, provenance, reusable_run, save_result, fail_run, digest
 from experiments.fem_backends import solver_provenance
 from solver.adaptivity import AdaptiveResult, ScalarErrorControl, integrate_adaptive
 from solver.core import State
 from solver.integrate import Result, integrate
 from solver.schemes.registry import make_scheme, scheme_info
-from .config import DEFAULTS, OPTIONAL, effective_config
+from .config import effective_config
+from .records import load_cylinder
 from .observations import Observations
 from .problems import build_model
-from .representation import save, validate
-
-
-def _identity(cfg: dict, source: dict) -> str:
-    return hashlib.sha256(json.dumps({'config': cfg, 'source': source}, sort_keys=True).encode()).hexdigest()
-
-
-def load_cylinder(directory: Path, *, require_complete: bool = False) -> tuple[dict, dict]:
-    directory = Path(directory)
-    cfg, manifest = load_record(directory, require_complete=require_complete)
-    if manifest.get('experiment') != 'cylinder_ns' or manifest.get('run_id') != directory.name:
-        raise ValueError('Expected cylinder run identity')
-    try:
-        source = manifest['source']
-        packages = ('numpy', 'scipy', 'numba', 'h5py', 'sympy', 'matplotlib', 'scikit-fem')
-        if any(not isinstance(source.get(k), str) or not source[k] for k in ('code_sha256', 'python', 'platform')) \
-                or len(source['code_sha256']) != 64 or any(c not in '0123456789abcdef' for c in source['code_sha256']) \
-                or any(not isinstance(source['packages'].get(k), str) or not source['packages'][k] for k in packages) \
-                or not isinstance(source['threads'], dict):
-            raise ValueError('Malformed cylinder provenance')
-        inputs = {key: cfg.get(key, value) for key, value in DEFAULTS.items()}
-        for key in OPTIONAL:
-            if key in cfg:
-                inputs[key] = cfg[key]
-        if effective_config(inputs) != cfg or _identity(cfg, source) != manifest['identity']:
-            raise ValueError('Cylinder effective configuration/source identity mismatch')
-        with h5py.File(directory/'results.h5', 'r') as data:
-            validate(data, cfg, manifest)
-    except (KeyError, TypeError) as error:
-        raise ValueError(f'Missing cylinder metadata: {error}') from error
-    return cfg, manifest
+from .representation import save
 
 
 def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
@@ -65,28 +33,12 @@ def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
     source['packages']['pymetis'] = version('pymetis')
     if cfg.get('stokes_factor_backend') == 'pardiso':
         source['packages'].update({name: version(name) for name in ('pypardiso', 'mkl')})
-    identity = _identity(cfg, source)
     parent = Path(root)/'runs'/'cylinder_ns'
-    parent.mkdir(parents=True, exist_ok=True)
-    if not rerun:
-        for candidate in sorted(parent.iterdir()):
-            if not candidate.is_dir():
-                continue
-            try:
-                old, old_manifest = load_cylinder(candidate, require_complete=True)
-                if old == cfg and old_manifest['identity'] == identity and old_manifest['source'] == source:
-                    return candidate
-            except (OSError, KeyError, ValueError):
-                continue
-    directory = parent/(datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')
-                        +'-'+identity[:8]+'-'+uuid4().hex[:8])
-    directory.mkdir()
-    write_json(directory/'config.json', cfg)
-    manifest: dict = {'experiment': 'cylinder_ns', 'run_id': directory.name, 'identity': identity,
-                      'source': source, 'status': 'running', 'rerun': rerun,
-                      'started': datetime.now(timezone.utc).isoformat(),
-                      'config_sha256': digest(directory/'config.json')}
-    write_json(directory/'manifest.json', manifest)
+    reused = reusable_run(parent, cfg, source, reader=lambda path: load_cylinder(path, require_complete=True), rerun=rerun)
+    if reused is not None:
+        return reused
+    directory, manifest = begin_run(parent, cfg, source, metadata={'experiment': 'cylinder_ns', 'rerun': rerun},
+                                    started_key='started')
     (directory/'run.log').write_text(f'Started {manifest["started"]}\n')
     if 'min_step_policy' in cfg:
         with (directory/'run.log').open('a') as stream:
@@ -155,15 +107,11 @@ def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
         checksum = digest(directory/'results.h5')
         metrics['finalization_wall_seconds'] = perf_counter()-finalization
         metrics['workflow_wall_seconds'] = perf_counter()-total_wall
-        manifest.update(status=result.status, error=result.error, metrics=metrics,
-                        finished=datetime.now(timezone.utc).isoformat(), results_sha256=checksum)
-        write_json(directory/'manifest.json', manifest)
+        finish_run(directory, manifest, status=result.status, error=result.error, metrics=metrics, results_sha256=checksum)
         with (directory/'run.log').open('a') as stream:
             stream.write(f'{result.status}: {result.error}\n{json.dumps(metrics, indent=2)}\n')
     except Exception as error:
-        manifest.update(status='failed', error=f'{type(error).__name__}: {error}',
-                        finished=datetime.now(timezone.utc).isoformat())
-        write_json(directory/'manifest.json', manifest)
+        fail_run(directory, manifest, error)
         with (directory/'run.log').open('a') as stream:
             stream.write(manifest['error']+'\n')
         raise

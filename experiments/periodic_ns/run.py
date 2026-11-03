@@ -1,12 +1,9 @@
 """Run periodic NS; preserve the existing no-slip workflow and result schema."""
 import argparse
-from datetime import datetime, timezone
-import hashlib
 import json
 from pathlib import Path
 from time import perf_counter, process_time
 from typing import Any
-from uuid import uuid4
 
 import h5py
 import numpy as np
@@ -16,7 +13,8 @@ from solver.fourier import FourierSpace
 from solver.integrate import Result, integrate, step_sizes
 from solver.schemes.registry import scheme_info
 from experiments.controllers import controller_settings, make_controller
-from experiments.workflow import PROJECT, digest, load_record, provenance, save_result, write_json
+from experiments.records import PROJECT, begin_run, finish_run, provenance, reusable_run, save_result
+from .records import load_periodic
 from .problems import SCHEMES, build_model, scheme
 
 DEFAULTS: dict[str, Any] = {
@@ -86,59 +84,15 @@ def effective_config(config: dict) -> dict:
     return cfg
 
 
-def load_periodic(directory: Path, *, require_complete: bool = False) -> tuple[dict, dict]:
-    cfg, manifest = load_record(directory, require_complete=require_complete)
-    if manifest.get('experiment') != 'periodic_ns':
-        raise ValueError('Expected a periodic_ns record')
-    s = FourierSpace(cfg['nx'], cfg['ny'], cfg['lx'], cfg['ly'])
-    info = scheme_info(cfg['scheme'])
-    for key, value in s.metadata().items():
-        if cfg.get(key) != value:
-            raise ValueError(f'Periodic representation mismatch: {key}')
-    with h5py.File(directory/'results.h5', 'r') as data:
-        if data.attrs.get('status') != manifest['status']:
-            raise ValueError('Periodic status mismatch')
-        for key in ('boundary', 'discretization', 'field_layout', 'fft_norm', 'dealias'):
-            if data.attrs.get(key) != cfg[key]:
-                raise ValueError(f'HDF5 periodic representation mismatch: {key}')
-        if data.attrs.get('pressure_semantics') != cfg.get('pressure_semantics') \
-                or cfg.get('pressure_semantics') != info.pressure_semantics:
-            raise ValueError('Periodic pressure semantics mismatch')
-        if 'final/stage_pressure' in data:
-            pressure = data['final/stage_pressure'][:]
-            if pressure.shape != (info.n_stages, *s.shape) or not np.isfinite(pressure).all():
-                raise ValueError('Invalid periodic stage pressure')
-        for component in ('u', 'v'):
-            if data['final/'+component].shape != s.shape \
-                    or data['final/'+component].dtype.kind != 'f':
-                raise ValueError('Periodic field layout/dtype mismatch')
-    return cfg, manifest
-
-
 def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
     cfg = effective_config(config)
     source = provenance()
-    identity = hashlib.sha256(json.dumps({'config': cfg, 'source': source}, sort_keys=True).encode()).hexdigest()
-    parent = root/'runs'/'periodic_ns'
-    parent.mkdir(parents=True, exist_ok=True)
-    if not rerun:
-        for directory in sorted(parent.iterdir()):
-            if not directory.is_dir():
-                continue
-            try:
-                old, manifest = load_periodic(directory, require_complete=True)
-                if manifest.get('identity') == identity and old == cfg and manifest.get('source') == source:
-                    return directory
-            except (OSError, KeyError, ValueError):
-                continue
-    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')
-    directory = parent/f'{stamp}-{identity[:8]}-{uuid4().hex[:8]}'
-    directory.mkdir()
-    write_json(directory/'config.json', cfg)
-    manifest = {'experiment': 'periodic_ns', 'run_id': directory.name, 'identity': identity,
-                'source': source, 'status': 'running', 'started': datetime.now(timezone.utc).isoformat(),
-                'config_sha256': digest(directory/'config.json')}
-    write_json(directory/'manifest.json', manifest)
+    parent = Path(root)/'runs'/'periodic_ns'
+    reused = reusable_run(parent, cfg, source, reader=lambda path: load_periodic(path, require_complete=True), rerun=rerun)
+    if reused is not None:
+        return reused
+    directory, manifest = begin_run(parent, cfg, source, metadata={'experiment': 'periodic_ns'},
+                                    started_key='started')
     (directory/'run.log').write_text(f'Started {manifest["started"]}\n{json.dumps(cfg, indent=2)}\n')
     def progress(count: int, t: float, elapsed: float) -> None:
         if count % cfg['log_every'] == 0 or abs(t-cfg['T']) < 1e-12:
@@ -174,9 +128,7 @@ def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
                 dtype = h5py.string_dtype('utf-8') if isinstance(values[0], str) else None
                 data.create_dataset('attempts/'+key, data=values, dtype=dtype)
     pending.replace(directory/'results.h5')
-    manifest.update(status=result.status, error=result.error, metrics=metrics,
-                    finished=datetime.now(timezone.utc).isoformat(), results_sha256=digest(directory/'results.h5'))
-    write_json(directory/'manifest.json', manifest)
+    finish_run(directory, manifest, status=result.status, error=result.error, metrics=metrics)
     with (directory/'run.log').open('a') as stream:
         stream.write(f'{result.status}: {result.error}\n{json.dumps(metrics, indent=2)}\n')
     return directory

@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import numpy as np
 
-from experiments.workflow import PROJECT, digest, provenance, write_json
+from experiments.records import PROJECT, digest, provenance, write_json
 from .animate import read_movie
 from .run import load_channel, run
 from .ts_mode import continuous_eigenvalue

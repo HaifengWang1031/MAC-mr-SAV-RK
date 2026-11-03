@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 from skfem import MeshTri
 
-from experiments.workflow import PROJECT, provenance, write_json
+from experiments.records import PROJECT, provenance, write_json
 from solver.fem.space import MeshSpace
 from .plots import plot_performance
 from .records import fingerprints, load_jobs

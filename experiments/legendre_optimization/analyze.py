@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 from numpy.polynomial.legendre import leggauss, legvander
 
-from experiments.workflow import PROJECT, digest, write_json
+from experiments.records import PROJECT, digest, write_json
 
 
 @lru_cache(maxsize=12)

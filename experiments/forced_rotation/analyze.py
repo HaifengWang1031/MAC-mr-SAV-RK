@@ -21,7 +21,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from experiments.plotting import field_figure, history_figure, read_run_fields
-from experiments.workflow import PROJECT, digest, load_record, provenance, write_json
+from experiments.records import PROJECT, digest, load_record, provenance, write_json
 
 
 def load_run(path: Path) -> dict:

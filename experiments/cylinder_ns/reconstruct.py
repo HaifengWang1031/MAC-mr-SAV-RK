@@ -6,15 +6,8 @@ import h5py
 import numpy as np
 from numpy.typing import NDArray
 
-from .representation import validate
-from .run import load_cylinder
-
-
-def decode_velocity(basis: Any, u: NDArray[np.float64], v: NDArray[np.float64]) -> NDArray[np.float64]:
-    full = np.zeros(basis.N)
-    for coefficients, indices in zip((u, v), basis.split_indices()):
-        full[indices] = coefficients
-    return full
+from .representation import decode_velocity, validate
+from .records import load_cylinder
 
 
 def reconstruct(directory: Path, points: NDArray[np.float64], *, snapshot: int | None = None) -> dict[str, Any]:

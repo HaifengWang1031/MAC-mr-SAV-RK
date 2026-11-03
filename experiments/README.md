@@ -65,6 +65,7 @@
 | --- | --- | --- | --- | --- |
 | [Legendre–MAC 精度—成本](legendre_mac_benchmark/README.md) | 同一连续制造解的指定精度总成本，包含初始化 | — | — | 待整理 |
 | [FEM 自适应优化前后](cylinder_ns/README.md#性能对照与独立细化) | 同一充分发展原生状态，交错重复、共同调度重放及建立/观测成本 | — | — | 三次重复实测约2.51倍；范围限于记录的负载 |
+| [FEM 跨规模求解配置对照](fem_scalability/README.md) | 冻结源码、实际网格与初态下的线性求解、完整阶段和原生自适应成本 | — | — | 已保存对照；合格范围与回退限制见家族说明 |
 | [Legendre 优化前后](legendre_optimization/README.md) | 保存的前后源码等价性、总成本、剖析与内存 | — | — | 待整理 |
 | [热启动每步成本](step_efficiency/README.md) | 多模型/格式的编译后每步成本；固定步排除已有分解成本 | — | — | 待整理 |
 | [Channel direct/FFT](channel_ns/README.md#same-discretisation-timing-comparison) | 同一 MAC 离散的两种线性后端等价性与成本 | — | — | 待整理 |
@@ -88,7 +89,7 @@
 ## 使用与保留规则
 
 - 首次计算选 smoke 或短时验证；生产配置可能耗时数小时至数天。计算写入 `runs/`，分析只消费显式保存记录并写入 `reports/`，展示不会自动启动计算。
-- 共享 `workflow.py`、`cli.py`、`analysis.py`、`plotting.py` 负责运行和分析；`problems.py` 仍供测试和性能工具使用，不是废弃的独立实验。
+- `records.py` 负责共同记录流程，`workflow.py` 保留 MAC 计算入口；`cli.py`、`analysis.py`、`plotting.py` 负责批次与分析。`problems.py` 仍供测试和性能工具使用，不是废弃的独立实验。
 - [2026-09-24 记录盘点](../docs/experiment-inventory.md) 是历史证据索引，不是当前研究/材料状态清单。
-- `workflow.provenance()` 将所有求解器、实验和工具 Python 文件的路径及内容纳入身份；项目配置和锁文件也在身份内。新增可选 Notebook 依赖不会修改数值公式，但会产生新的来源身份。
+- `records.provenance()` 将所有求解器、实验和工具 Python 文件的路径及内容纳入身份；`workflow.provenance()` 保留兼容导出。项目配置和锁文件也在身份内。新增可选 Notebook 依赖不会修改数值公式，但会产生新的来源身份。
 - 修改前保留精确源码和环境；旧 `runs/`、`reports/`、配置、校验和及失败前缀保持原样。旧批次扩展/回放仍需匹配原源码，不能用新快照冒充旧来源。

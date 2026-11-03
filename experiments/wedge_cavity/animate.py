@@ -13,7 +13,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from PIL import Image, ImageDraw, ImageFont
 
-from experiments.workflow import digest
+from experiments.records import digest
 from .fields import FieldSampler, streamline_levels
 
 

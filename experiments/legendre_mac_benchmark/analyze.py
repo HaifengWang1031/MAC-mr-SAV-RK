@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from experiments.legendre_mac_benchmark.run import relative_error
-from experiments.workflow import PROJECT, digest, write_json
+from experiments.records import PROJECT, digest, write_json
 
 LABELS = {"mac_direct": "MAC / sparse LU", "mac_tensor": "MAC / tensor Schur-CG",
           "legendre_lu": "Legendre / sparse LU"}

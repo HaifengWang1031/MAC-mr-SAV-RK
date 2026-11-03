@@ -14,7 +14,7 @@ import numpy as np
 if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from experiments.workflow import PROJECT, digest, write_json
+from experiments.records import PROJECT, digest, write_json
 from experiments.kolmogorov_adaptive.analyze import (
     SCHEMES, aligned_output_times, read_member,
 )

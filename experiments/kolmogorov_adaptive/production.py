@@ -6,7 +6,7 @@ from pathlib import Path
 from experiments.kolmogorov_adaptive.analyze_separate import analyze_separate
 from experiments.kolmogorov_adaptive.run import run_campaign
 from experiments.kolmogorov_adaptive.run_fixed_controls import run_fixed_controls
-from experiments.workflow import PROJECT
+from experiments.records import PROJECT
 
 
 def run_production(config_path: Path, *, root: Path = PROJECT,

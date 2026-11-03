@@ -6,7 +6,7 @@ import json
 import os
 import numpy as np
 import h5py
-from .workflow import PROJECT,provenance,write_json,load_record
+from experiments.records import PROJECT, provenance, write_json, load_record
 
 def analyze_runs(inputs: list[Path], *, root: Path = PROJECT) -> Path:
     """Load explicit complete/failed run records. Never invokes integration."""

@@ -25,7 +25,7 @@ import numpy as np
 
 from experiments.kolmogorov_adaptive.run import config_check, model_and_initial, output_times, save_member
 from experiments.kolmogorov_adaptive.search_joint_tolerance import run_reference
-from experiments.workflow import PROJECT, digest, provenance, write_json
+from experiments.records import PROJECT, digest, provenance, write_json
 from solver.adaptivity import IController, ScalarErrorControl, integrate_adaptive
 from solver.integrate import Result, integrate, step_sizes
 from solver.mac.kernels import warmup

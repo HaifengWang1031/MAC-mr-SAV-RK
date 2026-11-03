@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 import h5py
 import numpy as np
-from experiments.workflow import PROJECT, digest, load_record, provenance, write_json
+from experiments.records import PROJECT, digest, load_record, provenance, write_json
 from experiments.manufactured_convergence.model import exact
 from solver.mac.grid import MACGrid
 from solver.mac.operators import MACOperators

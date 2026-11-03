@@ -7,7 +7,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
-from experiments.workflow import PROJECT, provenance, run_experiment, write_json
+from experiments.records import PROJECT, provenance, write_json
+from experiments.workflow import run_experiment
 from experiments.manufactured_convergence.analyze import analyze_batch
 
 SCHEMES=('sdirk2','sdirk2_mrsav','sdirk3','sdirk3_mrsav')

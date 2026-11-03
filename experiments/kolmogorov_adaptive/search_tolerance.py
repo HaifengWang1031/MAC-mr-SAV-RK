@@ -49,7 +49,7 @@ from experiments.kolmogorov_adaptive.run import (
     output_times,
     reference_schedule,
 )
-from experiments.workflow import PROJECT, provenance, write_json
+from experiments.records import PROJECT, provenance, write_json
 from solver.adaptivity import IController, PIController, integrate_adaptive
 from solver.integrate import integrate
 from solver.mac.grid import MACGrid

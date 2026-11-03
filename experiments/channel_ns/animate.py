@@ -17,11 +17,11 @@ import h5py
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from experiments.workflow import PROJECT, digest, write_json
+from experiments.records import PROJECT, digest, write_json
 from solver.channel import ChannelGrid
 from solver.mac.grid import Array
 from .problems import poiseuille
-from .run import load_channel
+from .records import load_channel
 
 
 @dataclass

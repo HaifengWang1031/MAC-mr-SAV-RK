@@ -1,5 +1,4 @@
 """Read actual saved meshes and fields; never generates a mesh or advances a flow."""
-import hashlib
 import json
 from importlib.metadata import version
 from pathlib import Path
@@ -10,16 +9,12 @@ import numpy as np
 from skfem import MeshTri
 
 from experiments.fem_ns.representation import maps, validate_fields
-from experiments.workflow import load_record
+from experiments.records import load_record, run_identity as identity
 from solver.fem.airfoil import airfoil_polygon, validate_airfoil_mesh
 from solver.fem.space import MeshSpace
 from solver.integrate import step_sizes
 from solver.schemes.registry import scheme_info
 from .config import DEFAULTS, OPTIONAL, METADATA, effective_config
-
-
-def identity(cfg: dict[str, Any], source: dict[str, Any]) -> str:
-    return hashlib.sha256(json.dumps({'config': cfg, 'source': source}, sort_keys=True).encode()).hexdigest()
 
 
 def load(directory: Path, *, require_complete: bool = True) -> tuple[dict, dict, MeshTri, Any, Any]:

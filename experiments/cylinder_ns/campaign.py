@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from experiments.workflow import PROJECT, provenance, write_json
+from experiments.records import PROJECT, provenance, write_json
 from .benchmark import REFERENCE, cycle_statistics, reference_comparison
 from .performance import analyze as analyze_performance
 from .plots import animate, plot_cycles, plot_fields, plot_mesh, plot_refinement, plot_reference_steps

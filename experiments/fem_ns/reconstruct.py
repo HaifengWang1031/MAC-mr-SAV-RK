@@ -7,7 +7,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from .representation import validate
-from .run import load_fem
+from .records import load_fem
 
 
 def reconstruct(directory: Path, points: NDArray[np.float64], *, snapshot: int | None = None) -> dict[str, Any]:

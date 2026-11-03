@@ -17,7 +17,7 @@ import numpy as np
 
 from solver.fourier import FourierModel, FourierSpace
 from solver.schemes.registry import DEFAULT_SCHEMES
-from experiments.workflow import PROJECT, digest, provenance, write_json
+from experiments.records import PROJECT, digest, provenance, write_json
 from .analyze import read_fields
 from .problems import Manufactured, SCHEMES, build_model, smooth_stokes
 from .run import effective_config, load_periodic, run

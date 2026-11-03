@@ -22,7 +22,7 @@ from experiments.kolmogorov_adaptive.benchmark_stokes_backends import (
     schedules,
 )
 from experiments.kolmogorov_adaptive.model import force, initial_velocity
-from experiments.workflow import PROJECT, provenance, write_json
+from experiments.records import PROJECT, provenance, write_json
 from solver.integrate import integrate
 from solver.mac.grid import MACGrid
 from solver.mac.kernels import warmup

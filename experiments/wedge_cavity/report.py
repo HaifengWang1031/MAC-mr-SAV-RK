@@ -15,7 +15,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 
-from experiments.workflow import PROJECT, digest
+from experiments.records import PROJECT, digest
 from solver.fem.wedge import WedgeSpace
 from solver.fem.cavity import ClosedCavityModel
 from solver.core import State

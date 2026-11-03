@@ -25,7 +25,7 @@ from scipy.sparse import vstack
 from scipy.sparse.linalg import splu
 from skfem import BilinearForm, FacetBasis, asm
 
-from experiments.workflow import digest, write_json
+from experiments.records import digest, write_json
 from solver.fem.airfoil import airfoil_polygon
 from .records import load
 

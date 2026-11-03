@@ -2,6 +2,8 @@
 import hashlib
 import importlib
 import json
+import subprocess
+import sys
 
 import h5py
 import numpy as np
@@ -14,6 +16,27 @@ from experiments.fem_ns.run import effective_config, load_fem, run
 from experiments.workflow import digest, write_json
 from solver.integrate import integrate
 from solver.schemes.registry import SCHEMES, make_scheme, scheme_info
+
+
+def test_saved_record_can_be_loaded_without_computation_entry_points(tmp_path):
+    directory = run({'nx': 4, 'ny': 3, 'T': .01, 'dt': .01}, root=tmp_path)
+    # A fresh reader process must not need any experiment runner or optional
+    # computation backend, even if a prior process created a PETSc-capable run.
+    script = '''
+import importlib.abc
+from pathlib import Path
+import sys
+class ReadonlyImports(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == 'experiments.workflow' or fullname == 'petsc4py' or (
+            fullname.startswith('experiments.') and fullname.endswith('.run')):
+            raise AssertionError('Reader imported computation entry point: '+fullname)
+sys.meta_path.insert(0, ReadonlyImports())
+from experiments.fem_ns.records import load_fem
+cfg, manifest = load_fem(Path(sys.argv[1]), require_complete=True)
+assert cfg['nx'] == 4 and manifest['status'] == 'complete'
+'''
+    subprocess.run([sys.executable, '-c', script, str(directory)], check=True, capture_output=True, text=True)
 
 
 @pytest.mark.parametrize('name', SCHEMES)
@@ -141,9 +164,11 @@ def test_snapshot_mapping_uses_compensated_schedule_and_earlier_ties(tmp_path, m
 def test_identity_reuse_rerun_and_checksum_gate(tmp_path, monkeypatch):
     config = {'nx': 3, 'ny': 2, 'T': .01}
     directory = run(config, root=tmp_path)
+    assert load_fem(directory)[1]['rerun'] is False
     before = {p.name: p.read_bytes() for p in directory.iterdir()}
     assert run(config, root=tmp_path) == directory
-    assert run(config, root=tmp_path, rerun=True) != directory
+    repeated = run(config, root=tmp_path, rerun=True)
+    assert repeated != directory and load_fem(repeated)[1]['rerun'] is True
     assert {p.name: p.read_bytes() for p in directory.iterdir()} == before
     monkeypatch.setenv('NUMEXPR_NUM_THREADS', '2')
     assert run(config, root=tmp_path) != directory

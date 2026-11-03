@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from experiments.workflow import PROJECT, digest, write_json
+from experiments.records import PROJECT, digest, write_json
 from experiments.cylinder_ns.plots import _vorticity
 from .analyze import read_case
 from .smooth import SmoothVorticityGrid

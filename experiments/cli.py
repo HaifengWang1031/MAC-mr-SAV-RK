@@ -4,7 +4,8 @@ from pathlib import Path
 from datetime import datetime,timezone
 from uuid import uuid4
 import json
-from .workflow import PROJECT,effective_config,run_experiment,write_json,provenance
+from experiments.records import PROJECT, write_json, provenance
+from .workflow import effective_config, run_experiment
 
 def run_batch(batch: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
     base=batch['base']; experiment=base['experiment']

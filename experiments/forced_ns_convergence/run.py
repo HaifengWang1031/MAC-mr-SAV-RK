@@ -7,7 +7,8 @@ import json
 from datetime import datetime, timezone
 from uuid import uuid4
 import numpy as np
-from experiments.workflow import PROJECT, write_json, run_experiment, provenance
+from experiments.records import PROJECT, write_json, provenance
+from experiments.workflow import run_experiment
 from experiments.forced_ns_convergence.analyze import analyze_batch
 
 

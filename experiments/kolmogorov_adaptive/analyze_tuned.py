@@ -13,7 +13,7 @@ import numpy as np
 if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from experiments.workflow import PROJECT, write_json
+from experiments.records import PROJECT, write_json
 from experiments.kolmogorov_adaptive.analyze import aligned_output_times, read_member
 from solver.mac.grid import MACGrid
 

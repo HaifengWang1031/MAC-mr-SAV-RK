@@ -1,12 +1,9 @@
 """Compute channel runs; centralized configuration and atomic result finalization."""
 import argparse
-from datetime import datetime, timezone
-import hashlib
 import json
 from pathlib import Path
 from time import perf_counter, process_time
 from typing import Any
-from uuid import uuid4
 
 import h5py
 import numpy as np
@@ -19,7 +16,8 @@ from solver.mac.stokes import DirectStokes
 from solver.channel import FFTStokes
 from solver.schemes.registry import scheme_info
 from experiments.controllers import controller_settings, make_controller
-from experiments.workflow import PROJECT, digest, load_record, provenance, save_result, write_json
+from experiments.records import PROJECT, begin_run, finish_run, provenance, reusable_run, save_result
+from .records import load_channel
 from .problems import CASES, SCHEMES, build_model, scheme
 
 DEFAULTS: dict[str, Any] = {
@@ -87,60 +85,15 @@ def effective_config(config: dict) -> dict:
     return cfg
 
 
-def load_channel(directory: Path, *, require_complete: bool = False) -> tuple[dict, dict]:
-    cfg, manifest = load_record(directory, require_complete=require_complete)
-    if manifest.get('experiment') != 'channel_ns': raise ValueError('Expected channel_ns record')
-    grid = ChannelGrid(cfg['nx'], cfg['ny'], cfg['lx'], cfg['ly'])
-    if cfg.get('backend') not in ('direct', 'fft'): raise ValueError('Unsupported channel backend')
-    with h5py.File(directory/'results.h5', 'r') as data:
-        if data.attrs.get('status') != manifest['status']: raise ValueError('Channel status mismatch')
-        for key, value in grid.metadata().items():
-            if cfg.get(key) != value or data.attrs.get(key) != value:
-                raise ValueError(f'Channel representation mismatch: {key}')
-        if data.attrs.get('pressure_semantics') != cfg.get('pressure_semantics'):
-            raise ValueError('Channel pressure semantics mismatch')
-        if data['final/u'].dtype.kind != 'f' or data['final/v'].dtype.kind != 'f':
-            raise ValueError('Channel fields must be real')
-        grid.pack(data['final/u'][:], data['final/v'][:])
-        stages = scheme_info(cfg['scheme']).n_stages
-        if 'final/stage_pressure' in data:
-            p = data['final/stage_pressure'][:]
-            if p.shape != (stages, grid.ny, grid.nx) or not np.isfinite(p).all():
-                raise ValueError('Invalid channel stage pressure')
-        times = data['times'][:]
-        if not len(times) or not np.isfinite(times).all() or np.any(np.diff(times) <= 0) \
-                or times[-1] != data['final/t'][()] or not np.isfinite(data['final/r'][()]):
-            raise ValueError('Invalid channel times/final state')
-        if manifest['status'] == 'complete' and not np.isclose(times[-1], cfg['T'], rtol=1e-12, atol=1e-14):
-            raise ValueError('Complete channel run has wrong endpoint')
-        if 'snapshots/u' in data:
-            for u, v in zip(data['snapshots/u'], data['snapshots/v']): grid.pack(u, v)
-    return cfg, manifest
-
-
 def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
     cfg = effective_config(config)
     source = provenance()
-    identity = hashlib.sha256(json.dumps({'config': cfg, 'source': source}, sort_keys=True).encode()).hexdigest()
-    parent = root/'runs'/'channel_ns'
-    parent.mkdir(parents=True, exist_ok=True)
-    if not rerun:
-        for directory in sorted(parent.iterdir()):
-            if not directory.is_dir(): continue
-            try:
-                old, saved = load_channel(directory, require_complete=True)
-                if saved.get('identity') == identity and old == cfg and saved.get('source') == source:
-                    return directory
-            except (OSError, KeyError, ValueError):
-                continue
-    directory = parent/(datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')
-                        +'-'+identity[:8]+'-'+uuid4().hex[:8])
-    directory.mkdir()
-    write_json(directory/'config.json', cfg)
-    manifest = {'experiment': 'channel_ns', 'run_id': directory.name, 'identity': identity,
-                'source': source, 'status': 'running', 'started': datetime.now(timezone.utc).isoformat(),
-                'config_sha256': digest(directory/'config.json')}
-    write_json(directory/'manifest.json', manifest)
+    parent = Path(root)/'runs'/'channel_ns'
+    reused = reusable_run(parent, cfg, source, reader=lambda path: load_channel(path, require_complete=True), rerun=rerun)
+    if reused is not None:
+        return reused
+    directory, manifest = begin_run(parent, cfg, source, metadata={'experiment': 'channel_ns'},
+                                    started_key='started')
     (directory/'run.log').write_text(f'Started {manifest["started"]}\n{json.dumps(cfg, indent=2)}\n')
     def progress(count: int, t: float, elapsed: float) -> None:
         if count % cfg['log_every'] == 0 or abs(t-cfg['T']) < 1e-12:
@@ -189,9 +142,7 @@ def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
                 dtype = h5py.string_dtype('utf-8') if isinstance(values[0], str) else None
                 data.create_dataset('attempts/'+key, data=values, dtype=dtype)
     pending.replace(directory/'results.h5')
-    manifest.update(status=result.status, error=result.error, metrics=metrics,
-                    finished=datetime.now(timezone.utc).isoformat(), results_sha256=digest(directory/'results.h5'))
-    write_json(directory/'manifest.json', manifest)
+    finish_run(directory, manifest, status=result.status, error=result.error, metrics=metrics)
     with (directory/'run.log').open('a') as stream:
         stream.write(f'{result.status}: {result.error}\n{json.dumps(metrics, indent=2)}\n')
     return directory

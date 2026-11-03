@@ -20,7 +20,7 @@ from experiments.kolmogorov_adaptive.benchmark_matrix_free_stokes import (
     relative_error,
     run_solver,
 )
-from experiments.workflow import PROJECT, provenance, write_json
+from experiments.records import PROJECT, provenance, write_json
 from solver.mac.grid import MACGrid
 from solver.mac.kernels import warmup
 from solver.mac.operators import MACOperators

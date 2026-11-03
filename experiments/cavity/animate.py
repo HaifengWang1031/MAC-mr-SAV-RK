@@ -18,7 +18,7 @@ import h5py
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from experiments.workflow import PROJECT, digest, load_record, write_json
+from experiments.records import PROJECT, digest, load_record, write_json
 from solver.mac.grid import Array, MACGrid
 
 

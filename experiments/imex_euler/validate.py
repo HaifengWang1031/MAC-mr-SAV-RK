@@ -13,7 +13,7 @@ from uuid import uuid4
 
 import numpy as np
 
-from experiments.workflow import PROJECT, digest, provenance, write_json
+from experiments.records import PROJECT, digest, provenance, write_json
 from experiments.manufactured_convergence.model import spatial_velocity
 from experiments.channel_ns.problems import DiscreteManufactured
 from experiments.periodic_ns.problems import Manufactured

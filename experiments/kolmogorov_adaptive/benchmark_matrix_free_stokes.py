@@ -17,7 +17,7 @@ from uuid import uuid4
 import numpy as np
 from scipy.fft import set_workers
 
-from experiments.workflow import PROJECT, provenance, write_json
+from experiments.records import PROJECT, provenance, write_json
 from solver.mac.grid import MACGrid
 from solver.mac.kernels import warmup
 from solver.mac.operators import MACOperators

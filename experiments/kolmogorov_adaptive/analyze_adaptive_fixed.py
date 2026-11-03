@@ -18,7 +18,7 @@ if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from experiments.kolmogorov_adaptive.analyze import read_member
-from experiments.workflow import PROJECT, digest, provenance, write_json
+from experiments.records import PROJECT, digest, provenance, write_json
 from solver.mac.grid import MACGrid
 
 

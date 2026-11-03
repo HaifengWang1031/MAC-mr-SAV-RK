@@ -20,7 +20,7 @@ from PIL import Image, ImageDraw, ImageFont
 from scipy.sparse import vstack
 from scipy.spatial import cKDTree
 
-from experiments.workflow import digest, write_json
+from experiments.records import digest, write_json
 from solver.fem.airfoil import airfoil_polygon
 from .records import load
 

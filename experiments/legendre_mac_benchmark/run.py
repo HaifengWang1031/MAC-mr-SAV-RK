@@ -19,7 +19,7 @@ from numpy.typing import NDArray
 from scipy.interpolate import RegularGridInterpolator
 
 from experiments.problems import _expressions, initial_velocity
-from experiments.workflow import PROJECT, digest, provenance, write_json
+from experiments.records import PROJECT, digest, provenance, write_json
 from solver.core import Scheme, State
 from solver.integrate import integrate
 from solver.mac.grid import MACGrid

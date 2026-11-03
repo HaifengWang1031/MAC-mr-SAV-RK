@@ -9,9 +9,9 @@ import h5py
 import numpy as np
 
 from solver.channel import ChannelGrid
-from experiments.workflow import PROJECT, digest, provenance, write_json
+from experiments.records import PROJECT, digest, provenance, write_json
 from .problems import DiscreteManufactured, Manufactured, poiseuille, startup
-from .run import load_channel
+from .records import load_channel
 
 
 def read_fields(directory: Path) -> tuple[dict, dict[str, Any]]:

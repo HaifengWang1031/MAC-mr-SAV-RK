@@ -13,7 +13,7 @@ import numpy as np
 if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from experiments.workflow import PROJECT, provenance, write_json
+from experiments.records import PROJECT, provenance, write_json
 from experiments.kolmogorov_adaptive.model import force, initial_velocity
 from solver.adaptivity import IController, PIController, integrate_adaptive
 from solver.core import Scheme, State

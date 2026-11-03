@@ -12,7 +12,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
-from .workflow import load_record
+from experiments.records import load_record
 from solver.mac.grid import MACGrid, Array
 
 FIELD_CMAPS={'speed':('magma',False),'vorticity':('RdBu_r',True)}

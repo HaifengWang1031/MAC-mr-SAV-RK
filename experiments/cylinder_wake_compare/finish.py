@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import time
 
-from experiments.workflow import PROJECT, digest, write_json
+from experiments.records import PROJECT, digest, write_json
 from .checks import verify
 from .analyze import analyze
 
