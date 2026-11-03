@@ -2243,3 +2243,16 @@ workflow/integration coverage: 93 passed, 1 skipped. A before/after comparison o
 mypy. The migrated diagnostic tool also passed its 3 inlet-work/workflow tests. Historical
 source benchmark workers retain the old re-export for frozen-source compatibility.
 No new flow, performance or PDE accuracy claim follows from this refactor.
+
+### FEM convection and SAV work ownership
+
+The shared Riesz conversion and each model's physical load/work assembly now
+serve both momentum representations. Hele-Shaw scaling remains after the mass
+inverse in the Riesz path and before it in weak momentum. The focused stage,
+independent boundary-work and public workflow tests passed before and after:
+38 passed each time. All 64 saved nonlinear/load/work and SDIRK3-mr-ccSAV
+velocity/scalar/stage-pressure outputs across four model families and both
+representations were exactly unchanged in the selected comparison. Five affected
+sources pass mypy. This is a finite regression check, not a PDE theorem or a
+performance measurement; caching prevents interpreting removed calls as a
+measured speedup. Pressure, trace and complete residual checks remain in place.

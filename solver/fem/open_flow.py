@@ -1,6 +1,5 @@
 """Fixed Dirichlet inflow and gradient-traction outlet behind the existing Model."""
 from collections.abc import Callable, Sequence
-from time import perf_counter
 from typing import Any
 
 import numpy as np
@@ -80,27 +79,7 @@ class OpenFlowModel(FEMModel):
     def apply_D(self, velocity: Array) -> Array:
         return super().apply_D(velocity)+self._boundary_D
 
-    def nonlinear_with_lifting(self, velocity: Array) -> tuple[Array, float]:
-        start = perf_counter()
-        self._nonlinear_calls += 1
-        try:
-            full = self.full_velocity(velocity)
-            load = self._convection_load(full)
-            field, _ = self._boundary_quadrature.evaluate(full)
-            normal_velocity = np.sum(field*self._all_facets.normals, axis=0)
-            transport = self._boundary_transport(normal_velocity)
-            load += self._boundary_quadrature.load(.5*transport[None]*field)
-            boundary_power = .5*float(np.sum(transport*np.sum(field**2, axis=0)*self._all_facets.dx))
-            # Known-trace work minus physical convective energy crossing the boundary.
-            lifting = float(load @ self._boundary_values)-boundary_power
-            coefficients = self._mass_factor.solve(load[self.free_dofs])
-            if not np.isfinite(coefficients).all() or not np.isfinite(lifting):
-                raise FloatingPointError('Nonfinite open-flow convection')
-            return coefficients, lifting
-        finally:
-            self._nonlinear_wall_seconds += perf_counter()-start
-
-    def _nonlinear_load_with_lifting(self, velocity: Array) -> tuple[Array, float]:
+    def _convection_load_with_lifting(self, velocity: Array) -> tuple[Array, float]:
         full = self.full_velocity(velocity)
         load = self._convection_load(full)
         field, _ = self._boundary_quadrature.evaluate(full)
@@ -115,9 +94,6 @@ class OpenFlowModel(FEMModel):
         if self.outlet_treatment == 'backflow_damped':
             return normal_velocity+np.maximum(-normal_velocity, 0.)*self._open_mask
         return normal_velocity
-
-    def nonlinear(self, velocity: Array) -> Array:
-        return self.nonlinear_with_lifting(velocity)[0]
 
     def solve_columns(self, columns: Sequence[Array], *, mass: float, viscosity: float) -> list[SolveResult]:
         if not len(columns):

@@ -104,14 +104,9 @@ class ClosedCavityModel(FEMModel):
     def apply_D(self, velocity: Array) -> Array:
         return super().apply_D(velocity)+self._boundary_D
 
-    def nonlinear_with_lifting(self, velocity: Array) -> tuple[Array, float]:
+    def _convection_load_with_lifting(self, velocity: Array) -> tuple[Array, float]:
         # Tangential driving removes boundary flux, but not the volume pairing
         # b(w+g,w+g,g). Use the same skew quadrature as N(w), so <N(w),w>+b(U,U,g)=0.
-        nonlinear = self.nonlinear(velocity)
-        load = self._convection_load(self.full_velocity(velocity))
-        return nonlinear, float(load @ self._boundary_values)
-
-    def _nonlinear_load_with_lifting(self, velocity: Array) -> tuple[Array, float]:
         load = self._convection_load(self.full_velocity(velocity))
         return load[self.free_dofs], float(load @ self._boundary_values)
 

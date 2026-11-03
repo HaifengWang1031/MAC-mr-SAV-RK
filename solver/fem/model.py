@@ -114,8 +114,14 @@ class FEMModel:
             self._momentum_adapter = FEMMomentum(self)
         return self._momentum_adapter
 
-    def _nonlinear_load_with_lifting(self, velocity: Array) -> tuple[Array, float]:
+    def _convection_load_with_lifting(self, velocity: Array) -> tuple[Array, float]:
+        """Physical assembly, before momentum representation or model scaling."""
         return self._convection_load(self.full_velocity(velocity))[self.free_dofs], 0.
+
+    def _nonlinear_load_with_lifting(self, velocity: Array) -> tuple[Array, float]:
+        # Weak momentum may apply model scaling before returning loads. Riesz
+        # momentum keeps that scaling after the mass inverse, as before.
+        return self._convection_load_with_lifting(velocity)
 
     def nonlinear_load_with_lifting(self, velocity: Array) -> tuple[Array, float]:
         """Assemble the same convection and SAV work without a mass inverse."""
@@ -200,19 +206,19 @@ class FEMModel:
         return self._quadrature.convection_load(full)
 
     def nonlinear(self, velocity: Array) -> Array:
+        return self.nonlinear_with_lifting(velocity)[0]
+
+    def nonlinear_with_lifting(self, velocity: Array) -> tuple[Array, float]:
         start = perf_counter()
         self._nonlinear_calls += 1
         try:
-            load = self._convection_load(self.full_velocity(velocity))[self.free_dofs]
+            load, work = self._convection_load_with_lifting(velocity)
             coefficients = self._mass_factor.solve(load)
-            if not np.isfinite(coefficients).all():
+            if not np.isfinite(coefficients).all() or not np.isfinite(work):
                 raise FloatingPointError('Nonfinite FEM convection')
-            return coefficients
+            return coefficients, work
         finally:
             self._nonlinear_wall_seconds += perf_counter()-start
-
-    def nonlinear_with_lifting(self, velocity: Array) -> tuple[Array, float]:
-        return self.nonlinear(velocity), 0.
 
     def vector(self, state: State) -> Array:
         if not np.isfinite([state.t, state.r]).all():
