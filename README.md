@@ -37,7 +37,8 @@ uv run python tools/plot_speed_snapshots.py --run runs/forced_ns/<运行编号>
 ```text
 solver/
   core.py                 State、History、Trial、Stage 与格式接口
-  model.py                模型接缝：格式只通过它取算子、求解与诊断（15 个成员）
+  model.py                空间离散模型接缝：算子、求解与诊断协议
+  momentum.py             共享阶段动量表示，默认使用模型系数
   mac_ns.py               MAC 速度形式 NS 模型（接缝实现之一）
   integrate.py            固定/给定序列共同推进
   mac/
@@ -64,7 +65,12 @@ solver/
   channel/                流向周期、法向无滑移的 MAC 网格、算子、对流与 Model
   fem/                    scikit-fem P2/P1 空间、一致质量 Model 与无罚项 Stokes
   adaptivity/             I/PI 接受/拒绝、速度误差与可选标量缺陷控制
-experiments/              各实验的配置、计算与分析入口
+experiments/
+  controllers.py          共同 I/PI 构建、校验与 JSON 配置表示
+  records.py              共同运行身份、来源、保存、复用与完整性检查
+  workflow.py             MAC 实验计算入口及历史工具名兼容导出
+  <实验名>/               各实验的配置、计算、表示校验与只读分析
+    records.py            periodic_ns/channel_ns/fem_ns/cylinder_ns/hele_shaw_airfoil 专属读取
 runs/                     配置、manifest、HDF5、日志与批次记录
 reports/                  分析来源、图、表和日志
 tests/                    数值和工作流回归检查
@@ -80,7 +86,7 @@ uv run pytest
 ```
 
 - [数学实现](docs/numerics.md)：MAC 边界处理、压力规范、阶段公式及三次方程。
-- [架构和存储](docs/architecture.md)：缓存、内存、运行身份与失败行为。
+- [当前架构与修改导航](docs/architecture.md)：模块归属、依赖方向、扩展点、记录兼容与测试入口；修改模块分工时同步维护。
 - [验证结果](docs/validation.md)：实际网格、收敛阶和局限。
 - [确认的范围](docs/spec.md)、[领域约定](CONTEXT.md)。
 

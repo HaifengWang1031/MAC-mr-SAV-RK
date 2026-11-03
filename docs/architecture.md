@@ -1,141 +1,188 @@
-# 架构与记录约定
-2026-11-01 `solver/fem/hele_shaw.py`实现压力驱动的MWR惯性Brinkman Adapter，
-`airfoil.py`管理可选Gmsh网格生成与保存网格验证，`darcy.py`为独立标量参照。
-FEM保留物理gradient stiffness，另存linear stiffness=A+reaction*M用于阶段/完整残差；
-零反应分支保留原矩阵，非零迹载荷采用同一完整算子。
-`experiments/hele_shaw_airfoil`分离配置、计算、严格加载和只读分析；标准HDF5保留全部根/阶段，
-附加实际网格/DOF、压差边界、瞬时物理压力与模型力，标签不混入圆柱或楔腔。
-reader不依赖Gmsh；控制模型参数和库版本随运行来源保存。见[说明](hele-shaw.md)。
+# 当前架构与修改导航
 
-2026-11-01 wedge_cavity：新配置保存r0与lid_corner_policy；旧记录缺失时按真实旧约定
-r0=1/lid读取，不重写旧元数据。固定步时间和终点快照严格对齐T。
-新的animate模块只读完整显式运行，核查配置/结果摘要和实际网格，保留原report.render_frames接口，
-复用版式、三角化与色条并直接编码MP4/GIF；报告独立保存输入摘要、实际时刻和绘图源码摘要。
-数值正确性修正与性能测量分别冻结来源，raw runs与reports保持分离。
+本文件描述当前实现，是修改模块归属、依赖、控制器配置、存储和分析时的阅读入口。
+改变这些约定时，在同一提交中更新相应章节及测试入口。数值范围与用户确认事项见
+[CONTEXT](../CONTEXT.md)、[规格](spec.md)；术语见 [GLOSSARY](../GLOSSARY.md)；
+已验证结果、跳过项和未覆盖场景见[验证记录](validation.md)。历史说明中的首期限制
+应结合后续扩展阅读，不能用旧范围推断当前能力。
 
-2026-10-30 FEM因子排序/并行策略：stokes_ordering、stokes_factor_backend、stokes_threads
-只作为显式可选配置保存，旧记录不增加默认键。METIS结构图包含所有shift的质量/刚度模式，
-以及完整B和适用的积分规范；进程内只共享最多四个只读排列，不共享可变因子。
-主阶段和瞬时物理压力可复用同一结构排列。因子缓存继续使用精确(mass,viscosity)键。
-新FEM来源记录PyMetis版本，选择PARDISO时另记PyPardiso/oneMKL；旧加载器不强制新字段。
-MKL仅在显式选用时导入。质量分量共享和多右端置换只属于线性代数层。
+## 修改从哪里开始
 
-2026-10-28 可选 backflow_damped 出口的模型、参数与表示共用明确的 outlet_treatment。
-旧配置未指定时仍按原身份读取。新 HDF5 标签与物理压力语义单独命名，额外耗散另存，
-参考比较不将其当作自然出口；分析不允许混合两类边界。见 backflow-outlet.md。
+| 修改对象 | 归属与阅读入口 | 修改时保留的约定 |
+| --- | --- | --- |
+| 时间格式、阶段和根选择 | [schemes](../solver/schemes/registry.py)、[Model 协议](../solver/model.py)、[数值说明](numerics.md) | 六种格式共用空间离散模型接缝，不在格式中复制 FEM/MAC 专属公式 |
+| 动量表示或 FEM 对流/SAV 功 | [共同动量 adapter](../solver/momentum.py)、[FEM 弱载荷 adapter](../solver/fem/momentum.py)、下文 FEM 章节 | 物理装配和表示转换分别维护；完整残差与约束检查保留 |
+| I/PI 配置与序列化 | [controllers.py](../experiments/controllers.py) | 实验默认值与启用策略留在各实验配置中 |
+| 运行身份、保存、复用、完成状态 | [records.py](../experiments/records.py)、下文记录章节 | 来源与校验和、旧可选键、失败前缀、专属表示校验保留 |
+| 网格、布局、压力标签、读取重建 | 各实验 `records.py` / `representation.py` / `reconstruct.py` | 读取实际保存网格；区分阶段乘子与瞬时半离散压力 |
+| 绘图与结果分析 | 各实验 `analyze.py` / `animate.py`，MAC 通用 [analysis.py](../experiments/analysis.py) | 只接受显式记录，输出到 `reports/`，不启动计算 |
+| 实验参数、物理观测或计算调度 | 各实验 `config.py` / `problems.py` / `run.py`，见[实验导航](../experiments/README.md) | 共用已有推进与记录机制；实验特有物理内容留在实验内 |
 
-2026-10-28 圆柱可选 min_step_policy=force 通过原 attempts 字段保存每次真实误差和接受标志，
-以 manifest.metrics.forced_min_step_acceptances 统计有限超容差下限步；不修改原始误差值或隐去超差。
-读取器只在配置明确为 force 且试步等于 min_step 时允许 accepted=true/error>1。
-旧配置不增加默认键，按原规范重建身份并继续读取，默认 fail 行为不变。
+这些文件名是常见归属，不要求每个实验机械地复制整套文件。周期与 Channel 配置目前
+仍在各自 `run.py`；封闭 FEM、圆柱和 Hele–Shaw 有独立 `config.py`。楔腔还保存逐帧
+阶段压力，计算循环有专属实现。
 
-2026-10-05 Legendre 优化：模型与直接/张量后端共用空间算子和有界求积缓存；公开 Space 采样方法保持独立返回值。可选张量后端只更换线性求解算法，默认 direct。legendre_optimization 以独立 NPZ/JSON 运行记录保存两版源码、场、阶段压力/根、计时与校验和，报告只读消费显式运行编号；原 HDF5 格式保持兼容。见 docs/legendre-optimization.md。
+## 调用关系
 
-2026-10-05 TS 算例在 Channel HDF5 中追加 initial_mode 属性及 unit_velocity，不改变既有数组、阶段或根容量。
-channel_instability 的父记录保存配置、连续特征值参照、验证成员和非线性成员的显式运行编号及校验和。
-计算先通过线性增长门槛；分析只重读保存场与参照，不构造模型或重算特征值。
-移动坐标仅在渲染时应用，所有运行场和真实时刻仍保留实验室坐标。
+下图表示职责间的调用方向。新代码沿已有接缝扩展，不通过分析入口反向调用计算入口。
 
-2026-10-04 一阶格式：solver/schemes/registry.py 提供名称、工厂、阶数、阶段数、候选容量及估计器元数据。
-Euler 两格式返回一个阶段；公共写入器接受 n_stages/n_roots，HDF5 schema_version=1 的阶段维为1，候选容量1。
-普通格式 count=0，SAV count=1 保存唯一线性解；旧2/4阶段与3/5容量保持原形状。Euler 新记录使用
-euler_step_multiplier_mean_zero 压力标签，旧数据无需迁移。独立 imex_euler_validation 用带校验和的 NPZ
-保存最终场、参照及内积，JSON/日志保存来源与状态，报告只读重算误差。参见 docs/imex-euler.md。
+```mermaid
+flowchart TD
+    Run[实验计算入口] --> Config[实验配置与物理设置]
+    Config --> Controls[experiments/controllers.py]
+    Run --> Driver[固定或自适应共同推进器]
+    Driver --> Schemes[六种时间格式]
+    Schemes --> Momentum[阶段动量 adapter]
+    Momentum --> Model[空间离散模型 Model]
+    Model --> Linear[具体线性求解后端]
+    Run --> Records[experiments/records.py]
+    Run --> Extra[实验专属表示与附加数据写入]
+    Analysis[只读分析和绘图] --> Reader[实验专属 reader]
+    Reader --> Records
+    Reader --> Reconstruct[表示校验与保存网格重建]
+```
 
-2026-10-04 Channel 增加第四个 Model 实现。内部为实数周期 MAC 自由度；公开 u 保留重复周期末列，v 的上下壁面零。`experiments/channel_ns` 使用专属 reader 和 `periodic_x_no_slip_y/mac_second_order/staggered_mac_periodic_x` 标签；复用基础 HDF5 并在 pending 文件补齐标签、attempts 后原子更名。Channel runs/reports 与旧实验隔离。DirectStokes 仅泛化算子类型，不改分解、缓存或压力规范公式。默认 direct，可选 FFTStokes 将同一 MAC 系统按流向模式拆成带状耦合系统；缓存系数键及全方程检查保持一致。见 docs/channel.md。
+模型、阶段推进、持久化和绘图分别拥有自己的职责。MAC、Legendre 谱、Fourier、Channel
+和 FEM 是真实的空间离散选择；Riesz 与弱载荷也是实际存在的表示差异，保留相应 adapter。
 
-2026-10-04 周期模型增加第三个 Model 实现。`solver/fourier` 的 State.u/v 是实数 collocated_yx 场，Model.vector/内部阶段为复数 rFFT；Core.State、时间格式和旧 MAC/Legendre 布局不改。专属 `periodic_ns` reader 检查配置和 HDF5 的 boundary/discretization/field_layout/fft_norm/dealias 标记，不执行 MAC 面平均。基础 HDF5 沿用 `save_result`；周期写入器先在 pending HDF5 添加表示标签及自适应 attempts，再原子更名和最终化 manifest。周期及验证 runs/reports 单独命名；失败前缀可以诊断，收敛/计时汇总要求完整同源子记录。见 docs/fourier.md 和 experiments/periodic_ns/README.md。
+## 时间推进、状态与线性求解
 
-2026-10-28 FEM 圆柱与自适应：`solver/fem` 的 mesh-backed space / `OpenFlowModel` 保留共享格式接缝，固定入口仿射 lifting、自然出口无压力规范；封闭矩形模型仍保留积分均值规范。完整弱连续性和真正质量逆动量系数残差不因直接/复用后端而削弱。P2 求积缓存与有界旧 LU 预条件器只加速相同离散系统，不近似步长或变更控制器。
+- [core.py](../solver/core.py) 定义 `State`、`History`、`Trial`、`Stage` 与格式协议。
+  单步格式不改写输入状态，返回试算结果；共同推进器负责接受状态与历史记录。
+- [registry.py](../solver/schemes/registry.py) 是格式名称、工厂、阶数、估计器阶数、阶段数
+  和根容量的归属。增加格式时修改注册信息，调用方从中取得存储容量，不按名称猜阶数。
+- [integrate.py](../solver/integrate.py) 管理固定/给定步长；[adaptivity](../solver/adaptivity/controller.py)
+  管理 I/PI 接受、拒绝、速度误差与可选标量缺陷控制。[schedule.py](../solver/schedule.py)
+  管理给定序列的累计节点和最近快照节点选择。
+- `Model` 隐藏空间布局。MAC 的交错面、Channel 的重复周期末列、Fourier 的实数输出/
+  内部复系数和 FEM 的完整 P2 分量系数不能互相当作相同数组使用。
+- 移位 Stokes 缓存使用精确系数键；改变网格需要新建模型。直接、张量、recycled、PETSc
+  等后端按各空间离散的约定实现，不能用近似步长或较弱的残差检查冒充等价加速。
+- 弱不可压约束残差与物理散度分别保存和检查；压力零均值按物理积分定义。自然流出压力
+  不沿用封闭域规范。具体矩阵、缓存、残差及可选依赖见各模型文档。
 
-`experiments/cylinder_ns` 单独拥有配置、物理观测和 HDF5 表示；真实网格/边界/DOF 映射保存后读取不重新三角化。阶段增量压力和独立瞬时约束速度率的物理压力分开命名。固定/自适应共同推进器的接受观测计时独立；观测失败仍保留已接受状态/快照。`fem_ns` 共享严格 attempts 契约，并保留旧固定有效配置的身份。
+共同推进器保留当前状态、每步标量诊断、最后接受步的阶段压力及指定快照，不默认保存
+每一步全场。诊断、阶段和根历史随步数增长。快照保存请求与实际时刻；最近节点同距时
+取较早节点。失败试算不成为接受结果；已接受状态及允许保存的前缀保留。自适应终点可
+用短于最小步长的对齐步，但仍执行原有误差和阶段检查。显式 `min_step_policy=force`
+另有允许有限超容差下限步的规则，见[规格](spec.md)，不据此声明原容差已满足。
 
-`tools/benchmark_fem_adaptive.py` 是显式计算入口：保存原生网格/状态重启、独立空间/几何及时间参考、交错重复与共同调度重放。原生细化先插值/固体零延拓、施加固定迹并弱 Leray 投影，记录种子和实际起止时间；不是 checkpoint 续算。其 NPZ/JSON campaign 命名空间与标准 HDF5 运行分离。`cylinder_ns.records/performance/campaign` 只验证已完成显式记录及所有输入/工作器摘要，重建基函数、周期量和图像；不构造动力学模型或启动任何求解。报告均写入独立 reports 命名空间。详见 [圆柱使用说明](../experiments/cylinder_ns/README.md)。
+## 控制器配置只在共同入口实现
 
-2026-10-27 FEM 增加第五个 Model：`solver/fem` 分离确定性 P2/P1 空间、一致质量模型与无罚项直接 Stokes；时间格式和共同推进器不改。内部为自由速度系数，State.u/v 为含边/壁自由度的完整标量 P2 分量系数，按库映射拆装而非连续两半。
+[experiments/controllers.py](../experiments/controllers.py) 拥有：
 
-`experiments/fem_ns` 使用专属 reader，沿用基础 HDF5 schema_version=1 并增加 fem_schema_version=1、FEM 布局/元素/边界/压力规范/库版本标签，以及 mesh、dofs 数据集。保存完整速度和最后接受步各阶段 P1 压力；快照只含速度/r，不含压力历史。pending 文件补齐元数据后更名并最终化 manifest。来源身份单独纳入 scikit-fem，不改变旧记录；加载需保存/安装库版本一致，复用另需同配置/源码/环境、完整状态和校验通过。rerun 新建尝试，失败保留接受前缀；不支持恢复或持久化事务保证。
+- `make_controller`：I/PI 构建、嵌入估计器阶数匹配、`max_step=null` 到内部无穷的转换。
+  `max_steps`、`max_rejections` 必须是整数，布尔值和浮点数不作为整数接受。
+- `controller_settings`：将实际控制器转成可保存的配置，无穷最大步长写为 JSON `null`。
 
-重建/分析只从已存网格和基函数评估，不构造动力模型或积分；显式运行目录输入，`runs/fem_ns` 与 `reports/fem_ns` 分离。报告 JSON/CSV/日志区分弱连续性、物理积分点散度与阶段乘子。见 [FEM](fem.md) 和 [运行记录说明](../experiments/fem_ns/README.md)。
+每个实验仍拥有默认容差、初始步长、快照规则及是否允许联合标量控制。新增当前源码调用方
+直接导入共同模块，不依赖周期实验的 `run.py`。控制器的数值更新公式仍在 `solver/adaptivity`。
 
-2026-10-05 Legendre 优化：模型与直接/张量后端共用空间算子和有界求积缓存；公开 Space 采样方法保持独立返回值。可选张量后端只更换线性求解算法，默认 direct。legendre_optimization 以独立 NPZ/JSON 运行记录保存两版源码、场、阶段压力/根、计时与校验和，报告只读消费显式运行编号；原 HDF5 格式保持兼容。见 docs/legendre-optimization.md。
+## FEM 物理装配与表示转换
 
-2026-10-05 TS 算例在 Channel HDF5 中追加 initial_mode 属性及 unit_velocity，不改变既有数组、阶段或根容量。
-channel_instability 的父记录保存配置、连续特征值参照、验证成员和非线性成员的显式运行编号及校验和。
-计算先通过线性增长门槛；分析只重读保存场与参照，不构造模型或重算特征值。
-移动坐标仅在渲染时应用，所有运行场和真实时刻仍保留实验室坐标。
+每种 FEM 物理模型通过 `_convection_load_with_lifting` 集中计算对流弱载荷与 SAV 功。
 
-2026-10-04 一阶格式：solver/schemes/registry.py 提供名称、工厂、阶数、阶段数、候选容量及估计器元数据。
-Euler 两格式返回一个阶段；公共写入器接受 n_stages/n_roots，HDF5 schema_version=1 的阶段维为1，候选容量1。
-普通格式 count=0，SAV count=1 保存唯一线性解；旧2/4阶段与3/5容量保持原形状。Euler 新记录使用
-euler_step_multiplier_mean_zero 压力标签，旧数据无需迁移。独立 imex_euler_validation 用带校验和的 NPZ
-保存最终场、参照及内积，JSON/日志保存来源与状态，报告只读重算误差。参见 docs/imex-euler.md。
+| 归属 | 职责 |
+| --- | --- |
+| [FEMModel](../solver/fem/model.py) | 默认齐次封闭装配；共同 Riesz 质量逆、有限性检查与计时；共同弱载荷返回入口 |
+| [ClosedCavityModel](../solver/fem/cavity.py) | 固定顶盖迹和同一体积求积下的 lifting 配对，保留封闭压力规范 |
+| [OpenFlowModel](../solver/fem/open_flow.py) | 同一体积对流、边界 transport、对流边界能量通量与 SAV 边界功 |
+| [HeleShawModel](../solver/fem/hele_shaw.py) | MWR 系数、反应项、压力入口和可选入口动能修正；沿用开放流动装配 |
+| [FEMMomentum](../solver/fem/momentum.py) | 弱动量表示、载荷配对与求解；物理状态仍为同一速度系数 |
 
-2026-10-04 Channel 增加第四个 Model 实现。内部为实数周期 MAC 自由度；公开 u 保留重复周期末列，v 的上下壁面零。`experiments/channel_ns` 使用专属 reader 和 `periodic_x_no_slip_y/mac_second_order/staggered_mac_periodic_x` 标签；复用基础 HDF5 并在 pending 文件补齐标签、attempts 后原子更名。Channel runs/reports 与旧实验隔离。DirectStokes 仅泛化算子类型，不改分解、缓存或压力规范公式。默认 direct，可选 FFTStokes 将同一 MAC 系统按流向模式拆成带状耦合系统；缓存系数键及全方程检查保持一致。见 docs/channel.md。
+修改物理装配时，让 Riesz 与弱载荷共用同一公式。`_nonlinear_load_with_lifting` 是弱载荷
+表示的缩放扩展点；Hele–Shaw 的 beta 在弱载荷路径中先缩放载荷，Riesz 路径保持质量逆后
+再缩放的既有运算顺序。不要因复用装配而重复缩放或改变顺序。
 
-2026-10-04 周期模型增加第三个 Model 实现。`solver/fourier` 的 State.u/v 是实数 collocated_yx 场，Model.vector/内部阶段为复数 rFFT；Core.State、时间格式和旧 MAC/Legendre 布局不改。专属 `periodic_ns` reader 检查配置和 HDF5 的 boundary/discretization/field_layout/fft_norm/dealias 标记，不执行 MAC 面平均。基础 HDF5 沿用 `save_result`；周期写入器先在 pending HDF5 添加表示标签及自适应 attempts，再原子更名和最终化 manifest。周期及验证 runs/reports 单独命名；失败前缀可以诊断，收敛/计时汇总要求完整同源子记录。见 docs/fourier.md 和 experiments/periodic_ns/README.md。
+一致质量、固定迹、SAV 根选择和完整残差检查保持原义。多右端 Stokes 的第一列携带已知
+边界/连续性载荷，SAV 修正列为齐次响应；物理散度检查覆盖完整场。弱载荷残差仍使用一致
+质量逆，较保守的归一化不能替代原方程检查。开放流动配对与压力约定见
+[ADR0001](adr/0001-open-flow-sav-boundary-work.md)；性能配置见
+[FEM 优化](fem-optimization.md)及[多重网格对照](fem-multigrid.md)。
 
-求解器直接位于 `solver/`，没有旧项目的 `nextgen/` 过渡目录。环境由 `uv sync --locked` 建立，所有入口使用 `uv run`。`uv.lock` 与 `.python-version` 属于代码来源身份；`.venv/` 不入库。
+## 运行记录的共同流程与专属读取
 
-`MACNavierStokes` 管理网格、黏性、离散算子和外力函数。时间格式只执行单步试算，返回 `Trial`；共同推进器在试算成功后更新 `History`。每个状态含具名 u、v 面数组、时间和 r。格式不会改写传入状态数组。当前历史只需一个接受节点；未来自适应控制可使用现有试算接口，但首版没有接受/拒绝控制器。
+[experiments/records.py](../experiments/records.py) 拥有共同机制：
 
-`DirectStokes` 使用相同系数矩阵求一个或多个右端，以 `(mass, viscosity)` 为精确缓存键，LRU 默认保留 4 个分解。固定步长通常只分解一次；给定序列按实际系数复用。修改网格必须新建模型。线性后端可通过 `StokesBackend` 接口注入。Numba 只覆盖数组核，SciPy 负责稀疏矩阵和分解；没有 fastmath。预热、LU 分解、线性求解、推进及总耗时分别记录，预热耗时可能包含已有 JIT 缓存的加载。
+| 函数 | 职责 |
+| --- | --- |
+| `run_identity` / `provenance` | 有效配置与来源的身份编码；代码、依赖、平台、线程环境记录 |
+| `write_json` / `save_result` | 临时文件写入并替换；公共 HDF5 结果布局 |
+| `load_record` | 配置/结果校验和及完成状态的共同检查，不替代专属表示校验 |
+| `reusable_run` | 经专属 reader 查找同配置、同来源、同身份的完整结果 |
+| `begin_run` | 新建尝试，保存配置、配置摘要和 running manifest |
+| `finish_run` / `fail_run` | 已发布结果的完成状态，或无法产生结果时的设置/存储失败记录 |
 
-推进器只保留当前状态、每步标量诊断、最后一次的阶段压力和指定快照；不自动保存每步全场。诊断及根记录随步数线性增长。指定快照映射到最近接受节点，理论距离相同选择较早节点；请求与实际时刻分别保存。失败时保留接受前缀，不把失败试算当作接受结果。
+计算入口先解析有效配置、补齐计算所需的来源信息，再查找可复用记录或新建尝试；模型
+构造和积分仍由计算入口负责。公共结果先写入 pending 文件，实验补齐网格、标签、物理
+观测及 attempts 后发布 `results.h5`，再最终化 manifest。MAC 与楔腔保留各自原有写入/
+复用流程中的专属策略，建立和完成记录使用共同函数。保留各家族 `started`、`created_utc`、
+`finished_utc` 等原字段约定，不为统一外观重命名旧字段。
 
-## 计算记录
+| 记录家族 | 当前读取入口 | 校验或重建扩展 |
+| --- | --- | --- |
+| 通用 MAC | [load_record](../experiments/records.py) | [plotting.py](../experiments/plotting.py) 等 MAC 读取处理 |
+| 周期 Fourier | [periodic_ns/records.py](../experiments/periodic_ns/records.py) 的 `load_periodic` | Fourier 表示、布局与压力标签 |
+| Channel | [channel_ns/records.py](../experiments/channel_ns/records.py) 的 `load_channel` | 周期面布局、壁面与阶段压力 |
+| 封闭 FEM | [fem_ns/records.py](../experiments/fem_ns/records.py) 的 `load_fem` | 独立配置、网格/DOF、系数与阶段/根检查 |
+| 圆柱 FEM | [cylinder_ns/records.py](../experiments/cylinder_ns/records.py) 的 `load_cylinder` | 专属表示与物理观测；同文件还拥有 native benchmark 读取 |
+| Hele–Shaw | [hele_shaw_airfoil/records.py](../experiments/hele_shaw_airfoil/records.py) 的 `load` | 实际网格、MWR 压力/力与 Darcy 参照 |
+| 楔腔 | [wedge_cavity/report.py](../experiments/wedge_cavity/report.py) 的 `load` | 专属快照和逐帧阶段压力布局、旧配置约定 |
 
-`runs/<实验名>/<运行编号>/` 包含：
+新只读代码直接导入专属 reader 与共同记录工具，不从计算入口取得读取函数。读取可按
+保存网格重建基函数、插值和表示检查，不构造动力模型、重生成网格或启动积分。PETSc、
+Gmsh 等计算依赖保持按需导入；已有保存网格的读取不要求这些依赖。
 
-- `config.json`：默认值展开后的参数及 `actual_steps`。
-- `manifest.json`：运行身份、代码 SHA256、依赖版本、平台、线程环境、开始/完成时间、状态和结果校验和。
-- `results.h5`：时间、步长、诊断、最终 u/v/r、阶段压力、快照、每阶段实根候选/数目/所选 r/残差。
-- `run.log`：结果与异常摘要。
+### 历史兼容与冻结源码
 
-身份由实际配置、代码和环境构成。计算前查找同身份完整记录并校验配置与 HDF5；损坏或失败记录不复用。`--rerun` 创建新运行编号，不覆盖旧结果。不支持恢复中断计算。阶段异常由推进器转成失败记录，保存最后有效节点。进程被强制终止或机器掉电时可能留下 `running` 或临时文件，它们不会被复用。
+- `experiments/workflow.py` 保留 MAC 计算入口和公共工具旧名的兼容导出；各实验 `run.py`
+  保留 `load_*` 旧名导出。新当前源码调用方使用新的归属，旧调用路径不承载另一份实现。
+- 冻结源码可能没有 `experiments.records` 或 `experiments.controllers`。在指定旧源码中
+  运行的 worker/脚本保留该源码支持的导入路径。已存在的兼容入口包括圆柱对比 `WORKER`、
+  三个 Kolmogorov `--source-root` 入口，以及 [FEM benchmark worker](../tools/benchmark_fem_adaptive.py)。
+  修改这类入口时检查其实际解释器、工作目录和选定源码，不能只验证当前源码导入。
+- 新配置不自动给旧可选参数补默认键；读取旧记录使用记录自带的来源计算身份。修改代码
+  会改变新运行的来源哈希，不把新代码标记成旧来源，也不重写旧配置或结果。
+- 实验表示标签明确区分自然出口、回流耗散出口及压力入口修正；瞬时半离散物理压力与
+  阶段增量乘子分别命名。旧楔腔缺少字段时保留真实的 `r0=1`、移动角点解释；当前默认
+  `r0=0`、静止角点不回填到旧记录。
 
-HDF5 的根候选容量对二阶格式为 3，对三阶格式为 5，不足部分填 NaN，计数说明有效位置。普通格式计数为 0；SAV 计数保留数值求根器给出的重数。实际节点、阶段离散方程的残差和每阶段 r 都保存。`final/stage_pressure` 保存最后接受步的两阶段或四阶段乘子（定常 Stokes 则只有一个物理压力场）。
+## 保存布局与分析约定
 
-批次配置为 `base` 加显式 `cases` 列表，记录位于 `runs/<实验名>/batches/<批次编号>/`，含配置、成员、状态和日志。批次不隐藏成员失败。
+`runs/<实验名>/<运行编号>/` 保存有效 `config.json`、含来源/状态/校验和的 `manifest.json`、
+公共工作流的 `results.h5` 和 `run.log`。专属研究也有 NPZ/JSON 命名空间，以对应家族说明为准。
+公共 HDF5 保存时间/步长、诊断、最终状态、请求/实际快照节点、阶段残差与 SAV 根候选。
+阶段数和候选容量由 registry 指定：Euler 为 1/1，SDIRK2 为 2/3，SDIRK3 为 4/5；普通格式
+的实际根计数为零，不使用的候选位置填 NaN。`final/stage_pressure` 是最后接受步的阶段乘子。
 
-## 分析记录
+FEM 保存实际网格、DOF 映射和完整 P2/P1 系数；压力规范及所需库版本随表示检查。快照中
+是否存在物理压力以专属标签为准，不能从阶段乘子推定同阶端点压力。更具体的布局见
+[FEM](fem.md)、[Channel](channel.md)、[Fourier](fourier.md)、[谱方法](spectral.md)、
+[Hele–Shaw](hele-shaw.md)和[回流出口](backflow-outlet.md)。
 
-分析只接受显式运行目录。`reports/diagnostics/<分析编号>/` 下包含 `analysis.json`、`figures/`、`tables/` 和 `analysis.log`，记录输入运行与校验和、分析代码来源、参数及状态。项目内输入路径相对于项目根目录记录，迁移项目后仍可定位。
+`--rerun` 新建尝试，失败或损坏记录不当作完整结果复用。设置/存储失败可能只有 manifest
+和日志，读取仍需具备完整性检查所要求的文件。强制结束可能留下 running 或临时文件；
+没有 checkpoint 续算或持久化事务保证。
 
-时间收敛分析要求被测解、参考解和更细参考解同网格、同格式、同物理参数及终止时间，报告参考细化差与最小被测误差的比值。这是参考敏感性检查，不是严格误差上界。分析从保存的最终场计算，不重新推进。失败运行可用于普通诊断，不能用于时间收敛表。
+分析只消费显式运行/批次编号，输出到 `reports/<分析名>/<分析编号>/`，记录输入路径、
+校验和、分析代码来源、参数与状态。项目内输入使用可迁移的项目相对路径。失败前缀可
+作诊断，精度/收敛表要求完整且兼容的记录。参考细化差是敏感性证据，不是严格误差上界。
 
-2026-11-02 Hele-Shaw pressure inlet: optional energy_stable_pressure changes only the explicit inlet traction/kinetic work. Momentum and SAV scalar work use the same protected boundary transport; old natural defaults and identities remain. New inlet metadata is validated against the effective config. Explicit velocity/scalar limits abort after an accepted state without clipping. Program-owned progress.json records live accepted-time and corner metrics; release source freezes and run/report separation are retained. inlet_recovery sequences an independent T=1.1 pilot and T=20 run, both from zero; state replay is separately labelled and is not checkpoint continuation.
+## 修改后的验证与文档维护
 
-## Optional FEM block solver and weak momentum
+| 修改内容 | 优先运行的已有测试 |
+| --- | --- |
+| 共同控制器配置 | `tests/test_controller_config.py` 及受影响家族的 workflow 测试 |
+| FEM 装配或动量表示 | `tests/test_fem_weak_load.py`；边界功另查 `test_backflow_outlet.py`、`test_wedge_cavity.py`、`test_hele_shaw_inlet.py` 的独立参照 |
+| 保存、复用、只读加载 | 各家族 workflow 测试；`tests/test_fem_workflow.py` 含独立进程读取与 rerun/损坏检查 |
+| 自适应接受、终点、失败观测 | `tests/test_adaptivity.py`、`test_min_step_policy.py`、`test_accepted_observers.py` |
+| 线性后端或可选依赖 | 对应算子/求解器测试和完整阶段测试；单独报告跳过项的覆盖限制 |
 
-The default FEM Stokes and Riesz paths remain compatible with saved configurations.
-Explicit PETSc selection constructs an exact outer mixed matrix plus reusable velocity
-and pressure block preconditioners. Optional imports stay behind computation interfaces;
-record validation/loading and analysis never require PETSc. COMM_SELF is the supported
-communicator in this adapter.
+每次数值修改后运行相关测试，持续运行 `uv run --locked mypy`；发布/合并代码前运行
+`uv run --locked pytest -q`。仅文档变动检查链接、描述与源码的一致性，不把上一次完整测试
+写成本次重跑。验证结果与限制写入 [validation.md](validation.md)，不在本文件复制容易
+过期的测试数量或性能排名。新增测试验证公开行为和独立参照，不复制内部函数的实现。
 
-The shared time schemes obtain a momentum adapter. The legacy adapter preserves existing
-coefficient arithmetic for MAC, spectral and default FEM models. An explicit FEM weak
-adapter carries loads, while physical state/pressure storage stays unchanged. Both use
-the same RK coefficients, SAV polynomial, root enumeration and stage records. Weak loads
-keep the exact consistent mass and original full coefficient/divergence/gauge acceptance
-checks; a smaller normalization denominator is conservative. The fixed trace affects only
-the first Stokes response column. See docs/fem-multigrid.md.
-
-## Shared experiment records (2026-11-03)
-
-`experiments/records.py` owns canonical identity hashing, provenance, JSON/HDF5
-persistence, the common integrity gate, same-config/source reuse and attempt
-creation/finalization. Experiments keep their representation readers and extra
-HDF5 data. Legacy MAC and wedge reuse adapters retain their existing policies;
-their creation/finalization uses the common record module. Historical manifest
-time-field names, explicit optional config keys, checksums and failure prefixes
-are retained. This does not add checkpoint continuation or transaction guarantees.
-
-Periodic, Channel, closed FEM and cylinder readers live in their experiment's
-`records.py`, alongside the existing Hele-Shaw reader. Closed FEM config has its
-own module, so loading does not import the runner. Readonly consumers import these
-readers directly; the old `workflow` helpers and runner loader names remain
-re-exports for existing users and frozen-source benchmark tools. New source hashes
-still reflect all changed Python files; old records use their saved source when
-checking identity, not the currently installed source hash.
+修改归属或接缝时更新本文件对应章节；用户确认范围改变时更新 [spec.md](spec.md) 与
+[CONTEXT](../CONTEXT.md)；领域术语和有实质取舍的决定分别进入 GLOSSARY 与 ADR。
+保留模型、推进、持久化和分析的分工，避免在新的计算入口或 reader 中重新复制共同机制。
