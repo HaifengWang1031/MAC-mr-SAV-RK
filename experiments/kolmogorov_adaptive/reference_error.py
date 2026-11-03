@@ -7,13 +7,14 @@ import numpy as np
 
 from solver.core import State
 from solver.mac.grid import MACGrid
+from solver.model import Model
 from solver.schemes.sdirk3 import SDIRK3
 
 
 @dataclass
 class ReferenceTrack:
     """A fine SDIRK3 trajectory independently advanced to accepted nodes."""
-    model: object
+    model: Model
     state: State
     max_step: float
     min_substeps: int
@@ -45,8 +46,8 @@ class ReferenceTrack:
 class ReferenceErrorObserver:
     """Compare one adaptive trajectory against two nested reference resolutions."""
 
-    def __init__(self, grid: MACGrid, coarse_model: object, coarse_initial: State,
-                 fine_model: object, fine_initial: State, *, max_step: float,
+    def __init__(self, grid: MACGrid, coarse_model: Model, coarse_initial: State,
+                 fine_model: Model, fine_initial: State, *, max_step: float,
                  min_substeps: int = 8):
         if not np.isfinite(max_step) or max_step <= 0 or min_substeps < 2:
             raise ValueError('Invalid reference refinement controls')

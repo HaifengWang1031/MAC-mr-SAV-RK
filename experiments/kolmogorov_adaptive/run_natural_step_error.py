@@ -64,11 +64,12 @@ def run(path: Path, smoke: bool = False) -> Path:
     directory.mkdir(parents=True)
     record_path = directory/'campaign.json'
     source = provenance()
+    members: list[dict[str, object]] = []
     record = {
         'status': 'running', 'purpose': __doc__.strip(), 'created_utc':
         datetime.now(timezone.utc).isoformat(), 'source': source,
         'smoke': smoke, 'specification': specification, 'base_config': config,
-        'members': [],
+        'members': members,
     }
     write_json(record_path, record)
     print(f'CAMPAIGN={record_path}', flush=True)
@@ -169,15 +170,15 @@ def run(path: Path, smoke: bool = False) -> Path:
                         entry.update(observer.summary(diagnostic['verification_fraction']))
                         if not entry['reference_verified']:
                             log(f'WARNING {label} reference refinement check did not pass')
-                record['members'].append(entry)
+                members.append(entry)
                 write_json(record_path, record)
                 log(f'END {label} status={entry["status"]} '
                     f'adaptive_cpu_s={integration_cpu:.2f} '
                     f'reference_cpu_s={entry.get("reference_cpu_seconds", 0.):.2f} '
                     f'max_error={entry.get("max_relative_l2")} '
                     f'reference_verified={entry.get("reference_verified")}')
-            all_complete = all(item['status'] == 'complete' for item in record['members'])
-            all_verified = all(item.get('reference_verified', True) for item in record['members'])
+            all_complete = all(item['status'] == 'complete' for item in members)
+            all_verified = all(item.get('reference_verified', True) for item in members)
             record['status'] = ('complete' if all_complete and all_verified else
                                 'complete_with_unverified_reference' if all_complete else
                                 'complete_with_failures')

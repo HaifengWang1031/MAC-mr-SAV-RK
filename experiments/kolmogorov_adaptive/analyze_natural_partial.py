@@ -85,8 +85,8 @@ def main(campaign_path: Path, selection_path: Path) -> Path:
                 raise ValueError(f'Adaptive error times differ: {scheme}-{controller}')
             fig, panels = plt.subplots(2, 3, figsize=(18, 10))
             axes = panels.ravel()
-            entries = [(f'{scheme} {controller}', adaptive, 'C0', '-', 'o', True,
-                        actual, error)]
+            entries: list[tuple[str, dict, str, str, str, dict, dict | None]] = [
+                (f'{scheme} {controller}', adaptive, 'C0', '-', 'o', actual, error)]
             for j, (control, marker) in enumerate(zip(
                     fixed_controls(selection, scheme), ('*', 'd', 's', '^')), start=1):
                 fixed_config, fixed_manifest, data = read_member(Path(control['path']))
@@ -94,8 +94,8 @@ def main(campaign_path: Path, selection_path: Path) -> Path:
                         fixed_config, config):
                     raise ValueError(f'Fixed control is incompatible: {control["path"]}')
                 entries.append((rf'Fixed $\tau={control.get("step", .005):g}$', data,
-                                f'C{j}', '--', marker, False, fixed_config, None))
-            for label, data, color, linestyle, marker, is_adaptive, settings, errors in entries:
+                                f'C{j}', '--', marker, fixed_config, None))
+            for label, data, color, linestyle, marker, settings, errors in entries:
                 t, h = data['attempt_t'], data['attempt_h']
                 accepted = data['attempt_accepted']
                 node_times = (t+h)[accepted]
@@ -112,7 +112,7 @@ def main(campaign_path: Path, selection_path: Path) -> Path:
                                  np.r_[0., cpu[valid_cpu]], **style)
                 if 'mrsav' in scheme:
                     axes[3].plot(data['times'], np.abs(data['diagnostic_r']), **style)
-                if is_adaptive:
+                if errors is not None:
                     accepted_error = data['attempt_error'][accepted]
                     kinetic = data['diagnostic_kinetic']
                     if len(kinetic) != len(accepted_error)+1:

@@ -2293,3 +2293,26 @@ full test run also exposed a preexisting missing `fem_scalability/README.md` lin
 in the experiment index; the existing family link was added, with no new result
 claim. Focused FEM/navigation coverage then passed all 70 cases before the final
 complete run above. Old records, sources and production runs were not rewritten.
+
+## 2026-11-03 Kolmogorov legacy type errors resolved
+
+The six earlier mypy errors in three Kolmogorov scripts are now fixed in a
+separate follow-up to the architecture cleanup. Reference trajectories use the
+existing Model protocol; plotting entries distinguish adaptive error data from
+fixed controls with an optional value; campaign members use a typed list shared
+with the unchanged JSON record. Numerical formulas, controls and saved schemas
+are unchanged.
+
+`uv run --locked mypy`: **201 source files passed**, with no remaining errors.
+Focused adaptive/observer/workflow tests: **20 passed**. Full suite:
+**642 passed, 21 skipped** in 196.11 seconds. Optional-dependency/platform skips
+retain their existing coverage limits. Independent Standards and Spec reviews
+found no actionable issues.
+
+Before/after tiny natural-node calculations covered I/PI, ordinary/SAV and
+reference diagnostics enabled/disabled: all four trajectories completed, with
+70 selected array comparisons exactly unchanged, along with accepted/rejected
+counts and reference summaries. Readonly analysis produced both six-panel
+figures from saved inputs without changing their checksums. Timing measurements
+were excluded from equality comparisons. These finite regression checks add no
+new production-run, performance or PDE accuracy qualification.
