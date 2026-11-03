@@ -2231,3 +2231,15 @@ Initial AMG fallbacks and two refined AMG cylinder stage-pressure disagreements 
 disqualified, without weakening acceptance. Missing-history NaN serialization was fixed
 in a separate frozen worker and the native adaptive group rerun; failed records retained.
 See docs/fem-multigrid.md for equations, tolerances, setup and exact interpretation.
+
+## 2026-11-03 architecture cleanup: controller configuration
+
+Common I/PI construction and canonical JSON settings now belong to
+`experiments/controllers.py`. Experiment defaults and scalar eligibility remain
+local. The approved behavior correction rejects noninteger (including boolean)
+`max_steps` and `max_rejections` uniformly. Regression: 20 passed; related public
+workflow/integration coverage: 93 passed, 1 skipped. A before/after comparison of
+15 valid effective configurations was identical; all 10 affected sources passed
+mypy. The migrated diagnostic tool also passed its 3 inlet-work/workflow tests. Historical
+source benchmark workers retain the old re-export for frozen-source compatibility.
+No new flow, performance or PDE accuracy claim follows from this refactor.

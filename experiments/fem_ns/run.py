@@ -1,7 +1,6 @@
 """Compute, finalize, verify and reuse independent FEM records."""
 import argparse
 from datetime import datetime, timezone
-from dataclasses import asdict
 import hashlib
 from importlib.metadata import version
 import json
@@ -14,7 +13,7 @@ import numpy as np
 
 from experiments.workflow import PROJECT, digest, load_record, provenance, save_result, write_json
 from experiments.fem_backends import FEM_BACKEND_KEYS, STOKES_BACKENDS, validate_solver_options, solver_provenance
-from experiments.periodic_ns.run import make_controller
+from experiments.controllers import controller_settings, make_controller
 from solver.adaptivity import AdaptiveResult, ScalarErrorControl, integrate_adaptive
 from solver.fem import Space
 from solver.integrate import Result, integrate, step_sizes
@@ -81,9 +80,7 @@ def effective_config(config: dict) -> dict:
         if isinstance(initial_step, bool) or not isinstance(initial_step, (int, float)) \
                 or not np.isfinite(initial_step) or initial_step < controller.min_step:
             raise ValueError('Invalid FEM adaptive initial_step')
-        values = asdict(controller)
-        values['max_step'] = None if np.isinf(controller.max_step) else controller.max_step
-        cfg.update(mode='adaptive', controller={'kind': options['kind'], **values}, initial_step=initial_step,
+        cfg.update(mode='adaptive', controller=controller_settings(controller), initial_step=initial_step,
                    scalar_atol=cfg.get('scalar_atol'), stokes_backend=backend, actual_steps=None, dt=None)
         if cfg['scalar_atol'] is not None:
             if not cfg['scheme'].endswith('_mrsav'):

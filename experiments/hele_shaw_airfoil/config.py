@@ -1,11 +1,10 @@
 """One configuration for geometry, physical closure, stepping and output."""
-from dataclasses import asdict
 from typing import Any
 
 import numpy as np
 from experiments.fem_backends import FEM_BACKEND_KEYS, STOKES_BACKENDS, validate_solver_options
 
-from experiments.periodic_ns.run import make_controller
+from experiments.controllers import controller_settings, make_controller
 from solver.adaptivity import ScalarErrorControl
 from solver.integrate import step_sizes
 from solver.schedule import schedule_nodes
@@ -98,9 +97,7 @@ def effective_config(config: dict[str, Any]) -> dict[str, Any]:
         options = {'kind': 'PI', 'atol': 1e-9, 'rtol': 1e-4,
                    'max_step': .01, **(cfg['controller'] or {})}
         control = make_controller(options, cfg['scheme'])
-        values = asdict(control)
-        values['max_step'] = None if np.isinf(control.max_step) else control.max_step
-        cfg['controller'] = {'kind': options['kind'], **values}
+        cfg['controller'] = controller_settings(control)
         if not np.isfinite(cfg['initial_step']) or cfg['initial_step'] < control.min_step:
             raise ValueError('Invalid initial step')
         if cfg['scalar_atol'] is not None:

@@ -13,7 +13,7 @@ from uuid import uuid4
 import h5py
 
 from experiments.fem_ns.attempts import save_attempts
-from experiments.periodic_ns.run import make_controller
+from experiments.controllers import make_controller
 from experiments.workflow import PROJECT, digest, load_record, provenance, save_result, write_json
 from experiments.fem_backends import solver_provenance
 from solver.adaptivity import AdaptiveResult, ScalarErrorControl, integrate_adaptive

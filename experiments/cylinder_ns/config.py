@@ -1,10 +1,9 @@
 """Explicit DFG2D-2 physics and fixed/adaptive controller configuration."""
-from dataclasses import asdict
 
 import numpy as np
 from experiments.fem_backends import FEM_BACKEND_KEYS, STOKES_BACKENDS, validate_solver_options
 
-from experiments.periodic_ns.run import make_controller
+from experiments.controllers import controller_settings, make_controller
 from solver.adaptivity import ScalarErrorControl
 from solver.fem.cylinder import RADIUS, mesh_parameters
 from solver.integrate import step_sizes
@@ -81,9 +80,7 @@ def _effective_config(config: dict) -> dict:
         controller = make_controller(options, cfg['scheme'])
         if not np.isfinite(cfg['initial_step']) or cfg['initial_step'] < controller.min_step:
             raise ValueError('Invalid cylinder adaptive initial_step')
-        values = asdict(controller)
-        values['max_step'] = None if np.isinf(controller.max_step) else controller.max_step
-        cfg['controller'] = {'kind': options['kind'], **values}
+        cfg['controller'] = controller_settings(controller)
         cfg['dt'], cfg['actual_steps'] = None, None
         if cfg['scalar_atol'] is not None:
             if not cfg['scheme'].endswith('_mrsav'):

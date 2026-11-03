@@ -13,7 +13,7 @@ import numpy as np
 
 from experiments.fem_ns.attempts import save_attempts
 from experiments.fem_ns.representation import maps
-from experiments.periodic_ns.run import make_controller
+from experiments.controllers import make_controller
 from experiments.workflow import PROJECT, digest, provenance, save_result, write_json
 from experiments.fem_backends import model_solver_options, solver_provenance
 from solver.adaptivity import AdaptiveResult, ScalarErrorControl, integrate_adaptive

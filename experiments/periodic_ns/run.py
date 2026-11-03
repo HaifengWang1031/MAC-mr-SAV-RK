@@ -1,6 +1,5 @@
 """Run periodic NS; preserve the existing no-slip workflow and result schema."""
 import argparse
-from dataclasses import asdict
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -12,10 +11,11 @@ from uuid import uuid4
 import h5py
 import numpy as np
 
-from solver.adaptivity import AdaptiveResult, IController, PIController, ScalarErrorControl, integrate_adaptive
+from solver.adaptivity import AdaptiveResult, ScalarErrorControl, integrate_adaptive
 from solver.fourier import FourierSpace
 from solver.integrate import Result, integrate, step_sizes
 from solver.schemes.registry import scheme_info
+from experiments.controllers import controller_settings, make_controller
 from experiments.workflow import PROJECT, digest, load_record, provenance, save_result, write_json
 from .problems import SCHEMES, build_model, scheme
 
@@ -29,25 +29,6 @@ DEFAULTS: dict[str, Any] = {
     'boundary': 'periodic_xy', 'discretization': 'fourier_leray',
     'field_layout': 'collocated_yx', 'fft_norm': 'forward', 'dealias': 'strict_2_3',
 }
-
-
-def make_controller(config: dict, name: str) -> IController:
-    options = dict(config)
-    kind = options.pop('kind', 'PI')
-    if kind not in ('I', 'PI'):
-        raise ValueError('Controller kind must be I or PI')
-    order = scheme_info(name).estimator_order
-    if order is None:
-        raise ValueError('IMEX Euler requires a separate step-doubling estimator; use fixed mode')
-    if 'estimator_order' in options and options['estimator_order'] != order:
-        raise ValueError('Estimator order must match the embedded scheme')
-    options['estimator_order'] = order
-    if options.get('max_step', 1.) is None:
-        options['max_step'] = float('inf')
-    try:
-        return (IController if kind == 'I' else PIController)(**options)
-    except TypeError as error:
-        raise ValueError(f'Invalid controller configuration: {error}') from error
 
 
 def effective_config(config: dict) -> dict:
@@ -87,9 +68,7 @@ def effective_config(config: dict) -> dict:
         controller = make_controller(options, cfg['scheme'])
         if not np.isfinite(cfg['initial_step']) or cfg['initial_step'] < controller.min_step:
             raise ValueError('Invalid adaptive initial_step')
-        values = asdict(controller)
-        values['max_step'] = None if np.isinf(controller.max_step) else controller.max_step
-        cfg['controller'] = {'kind': options['kind'], **values}
+        cfg['controller'] = controller_settings(controller)
         cfg['dt'], cfg['actual_steps'] = None, None
         if cfg['scalar_atol'] is not None:
             if cfg['scheme'] != 'sdirk3_mrsav':

@@ -1,6 +1,5 @@
 """Compute channel runs; centralized configuration and atomic result finalization."""
 import argparse
-from dataclasses import asdict
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -12,13 +11,14 @@ from uuid import uuid4
 import h5py
 import numpy as np
 
-from solver.adaptivity import AdaptiveResult, IController, PIController, ScalarErrorControl, integrate_adaptive
+from solver.adaptivity import AdaptiveResult, ScalarErrorControl, integrate_adaptive
 from solver.channel import ChannelGrid
 from solver.channel.kernels import warmup
 from solver.integrate import Result, integrate, step_sizes
 from solver.mac.stokes import DirectStokes
 from solver.channel import FFTStokes
 from solver.schemes.registry import scheme_info
+from experiments.controllers import controller_settings, make_controller
 from experiments.workflow import PROJECT, digest, load_record, provenance, save_result, write_json
 from .problems import CASES, SCHEMES, build_model, scheme
 
@@ -30,25 +30,6 @@ DEFAULTS: dict[str, Any] = {
     'snapshots': None, 'log_every': 100, 'cache_size': 4, 'stokes_tolerance': 1e-10,
     'backend': 'direct', **ChannelGrid(3, 3).metadata(),
 }
-
-
-def make_controller(config: dict, name: str) -> IController:
-    options = dict(config)
-    kind = options.pop('kind', 'PI')
-    if kind not in ('I', 'PI'): raise ValueError('Controller kind must be I or PI')
-    order = scheme_info(name).estimator_order
-    if order is None: raise ValueError('IMEX Euler requires a separate step-doubling estimator; use fixed mode')
-    if options.get('estimator_order', order) != order:
-        raise ValueError('Estimator order must match scheme')
-    options['estimator_order'] = order
-    if options.get('max_step', 1.) is None: options['max_step'] = float('inf')
-    for key in ('max_steps', 'max_rejections'):
-        if key in options and type(options[key]) is not int:
-            raise ValueError(f'{key} must be an integer')
-    try:
-        return (IController if kind == 'I' else PIController)(**options)
-    except TypeError as error:
-        raise ValueError(f'Invalid controller configuration: {error}') from error
 
 
 def effective_config(config: dict) -> dict:
@@ -85,9 +66,7 @@ def effective_config(config: dict) -> dict:
         control = make_controller(options, cfg['scheme'])
         if not np.isfinite(cfg['initial_step']) or cfg['initial_step'] < control.min_step:
             raise ValueError('Invalid initial_step')
-        values = asdict(control)
-        values['max_step'] = None if np.isinf(control.max_step) else control.max_step
-        cfg['controller'] = {'kind': options['kind'], **values}
+        cfg['controller'] = controller_settings(control)
         cfg['dt'], cfg['actual_steps'] = None, None
         if cfg['scalar_atol'] is not None:
             if cfg['scheme'] != 'sdirk3_mrsav': raise ValueError('Scalar control requires sdirk3_mrsav')

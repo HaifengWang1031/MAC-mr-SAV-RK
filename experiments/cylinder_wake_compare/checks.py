@@ -11,7 +11,7 @@ from experiments.cylinder_ns.run import load_cylinder
 from experiments.cylinder_ns.representation import validate
 from experiments.cylinder_ns.reconstruct import decode_velocity
 from experiments.cylinder_ns.problems import inlet_velocity
-from experiments.periodic_ns.run import make_controller
+from experiments.controllers import make_controller
 from experiments.workflow import digest, write_json
 from solver.adaptivity import ScalarErrorControl, integrate_adaptive
 from solver.core import State

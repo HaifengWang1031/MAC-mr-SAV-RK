@@ -15,7 +15,7 @@ import numpy as np
 
 from experiments.hele_shaw_airfoil.records import load
 from experiments.workflow import PROJECT, digest, write_json
-from experiments.periodic_ns.run import make_controller
+from experiments.controllers import make_controller
 from solver.adaptivity import ScalarErrorControl, integrate_adaptive
 from solver.core import State
 from solver.fem.hele_shaw import HeleShawModel
