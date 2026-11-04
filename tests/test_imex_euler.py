@@ -45,7 +45,7 @@ def test_sav_matches_independent_coupled_linear_system_and_energy_balance(gamma)
     np.testing.assert_allclose(np.r_[u, r], expected, atol=1e-15)
     np.testing.assert_array_equal(initial.velocity, old)
     stage = trial.stages[0]
-    assert len(trial.stages) == 1 and stage.candidates == [r]
+    assert len(trial.stages) == 1 and stage.candidates == [] and stage.corrections == [r]
     assert stage.residual < 1e-14 and stage.scalar_residual < 1e-14
     assert trial.embedded_velocity is None
     energy_change = .5*(u@u-old@old+(r-1)**2-(initial.r-1)**2)

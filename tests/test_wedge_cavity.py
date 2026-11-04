@@ -64,6 +64,8 @@ def test_startup_records_zero_sav_initial_value_exact_endpoint_and_final_snapsho
         np.testing.assert_array_equal(data['snapshots/times'][:], [0., .02, .03])
         assert np.max(data['stage_residual'][:, 0]) < 1e-9
         assert np.max(data['stage_residual'][:, 3]) < 1e-11
+        assert data.attrs['scalar_solver'] == 'fixed_count_frozen_factor'
+        assert np.all(data['corrections/count'][:] == 1)
         _, _, model = build(config)
         final = model.state(.03, model.zero_velocity())
         final = type(final)(.03, data['snapshots/u'][-1], data['snapshots/v'][-1],

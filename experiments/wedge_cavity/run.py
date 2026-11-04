@@ -12,9 +12,9 @@ from time import perf_counter
 import h5py
 import numpy as np
 
-from experiments.records import PROJECT, begin_run, digest, finish_run, provenance, run_identity
+from experiments.records import PROJECT, begin_run, digest, finish_run, provenance, run_identity, save_scalar_corrections
 from experiments.fem_backends import model_solver_options, solver_provenance
-from solver.core import State
+from solver.core import State, stage_diagnostics
 from solver.fem.cavity import ClosedCavityModel
 from solver.fem.wedge import WedgeSpace
 from solver.schemes.registry import make_scheme, scheme_info
@@ -81,6 +81,7 @@ def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
     pressures: list[np.ndarray | None] = [None]
     recent: list[tuple[float, State]] = [(0., state)]
     stage_rows: list[list[float]] = []
+    scalar_stages: list[list[dict]] = []
     status, error = 'complete', ''
     with (directory/'run.log').open('w', buffering=1) as log:
         log.write(f'run_id={run_id}\nidentity={identity}\n')
@@ -94,6 +95,7 @@ def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
                 times.append(state.t)
                 diagnostics.append(model.diagnostics(state))
                 stage = trial.stages[-1]
+                scalar_stages.append([stage_diagnostics(item) for item in trial.stages])
                 stage_rows.append([stage.residual, stage.divergence_inf, stage.scalar_residual,
                                    float(getattr(stage, 'continuity_residual', float('nan')))])
                 if (stride and (step+1) % stride == 0) or step+1 == cfg['steps']:
@@ -130,6 +132,7 @@ def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
             data.attrs['experiment'] = EXPERIMENT
             data.attrs['scheme'] = cfg['scheme']
             data.attrs['n_stages'] = info.n_stages
+            save_scalar_corrections(data, scalar_stages, info.n_stages)
             data.create_dataset('times', data=np.asarray(times))
             data.create_dataset('diagnostics/kinetic', data=[item['kinetic'] for item in diagnostics])
             data.create_dataset('diagnostics/divergence_inf', data=[item['divergence_inf'] for item in diagnostics])

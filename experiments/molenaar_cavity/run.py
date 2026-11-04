@@ -20,7 +20,7 @@ from typing import Any
 import h5py
 import numpy as np
 import scipy
-from solver.schemes.registry import make_scheme
+from solver.schemes.registry import make_scheme, scheme_info
 from .model import make_model, probe_vorticity
 
 
@@ -100,16 +100,21 @@ def run_case(config: dict, output: str) -> dict:
                  'dissipation','divergence_inf','max_stage_residual','max_stage_divergence','cfl','r','max_stage_scalar_residual','max_stage_root_residual']
         residual = divergence = scalar_residual = root_residual = 0.
         stage_records = []
+        correction_records = []
         last_log = started
         with h5py.File(path/'results.h5','w') as h:
             h.attrs.update(schema_version=2,status='running',config_json=json.dumps(c),
                            code_sha256=manifest['code_sha256'],field_layout='staggered_mac_yx',
                            boundary='stationary_no_slip',pressure='incremental_stage_multiplier_mean_zero')
+            h.attrs['scalar_solver'] = 'fixed_count_frozen_factor' if scheme_info(c['scheme']).n_corrections else 'none'
             data = h.create_dataset('diagnostics',(0,len(names)),maxshape=(None,len(names)),chunks=(256,len(names)),dtype='f8')
             data.attrs['columns'] = json.dumps(names)
             stage_data = h.create_dataset('stage_records',(0,4,16),maxshape=(None,4,16),chunks=(64,4,16),dtype='f8',compression='gzip',compression_opts=1)
             stage_data.attrs['columns']=json.dumps(['r','root_count']+[f'candidate_{j}' for j in range(5)]+[f'root_residual_{j}' for j in range(5)]+['scalar_residual','momentum_residual','divergence_inf','continuity_residual'])
             stage_data.attrs['time_rule']='row k corresponds to accepted time (k+1)*dt'
+            correction_data = h.create_dataset('scalar_corrections',(0,4,5),maxshape=(None,4,5),
+                chunks=(64,4,5),dtype='f8',compression='gzip',compression_opts=1)
+            correction_data.attrs['columns'] = json.dumps(['count','predictor','r1','r2','frozen_factor'])
             snap = h.create_group('snapshots')
             sr = snap.create_dataset('r',(0,),maxshape=(None,),chunks=True,dtype='f8')
             st = snap.create_dataset('t',(0,),maxshape=(None,),chunks=True,dtype='f8')
@@ -126,11 +131,15 @@ def run_case(config: dict, output: str) -> dict:
                     scalar_residual = max(scalar_residual,max(s.scalar_residual for s in trial.stages))
                     root_residual = max(root_residual,max((max(s.root_residuals,default=0.) for s in trial.stages),default=0.))
                     rows = []
+                    scalar_rows = []
                     for stage in trial.stages:
                         if len(stage.candidates)>5 or len(stage.candidates)!=len(stage.root_residuals):
                             raise RuntimeError('Unexpected scalar root storage capacity')
                         rows.append([stage.r,len(stage.candidates)]+list(stage.candidates)+[np.nan]*(5-len(stage.candidates))+list(stage.root_residuals)+[np.nan]*(5-len(stage.root_residuals))+[stage.scalar_residual,stage.residual,stage.divergence_inf,stage.continuity_residual])
+                        scalar_rows.append([len(stage.corrections),stage.correction_predictor]
+                            +stage.corrections+[np.nan]*(2-len(stage.corrections))+[stage.frozen_factor])
                     stage_records.append(rows)
+                    correction_records.append(scalar_rows)
                 if step%sample_stride==0 or step==total:
                     d = model.diagnostics(state)
                     values = [state.t,probe_vorticity(model,model.vector(state)),d['kinetic'],
@@ -146,7 +155,10 @@ def run_case(config: dict, output: str) -> dict:
                         begin = stage_data.shape[0]
                         stage_data.resize(begin+len(stage_records),axis=0)
                         stage_data[begin:] = np.asarray(stage_records)
+                        correction_data.resize(begin+len(correction_records),axis=0)
+                        correction_data[begin:] = np.asarray(correction_records)
                         stage_records.clear()
+                        correction_records.clear()
                 if step%snap_stride==0 or step==total:
                     i = st.shape[0]
                     for ds in (st,su,sv,sr):

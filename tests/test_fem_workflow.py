@@ -68,6 +68,12 @@ def test_six_scheme_saved_fields_pressure_edges_and_readonly_analysis(tmp_path, 
         assert np.max(data['stages/residual'][:]) < 1e-9
         assert np.max(data['stages/continuity_residual'][:]) < 1e-12
         assert np.max(data['stages/scalar_residual'][:]) < 1e-10
+        assert np.all(data['roots/count'][:] == 0)
+        assert np.all(data['corrections/count'][:] == info.n_corrections)
+        assert data.attrs['scalar_solver'] == ('fixed_count_frozen_factor' if info.n_corrections else 'none')
+        if info.n_corrections:
+            np.testing.assert_array_equal(data['stages/r'][:],
+                data['corrections/values'][:, :, info.n_corrections-1])
         for values in data['final/stage_pressure'][:]:
             assert abs(model.pressure_integral(values)) < 1e-12
     before = {p.name: p.read_bytes() for p in directory.iterdir()}
@@ -186,7 +192,7 @@ def test_identity_reuse_rerun_and_checksum_gate(tmp_path, monkeypatch):
 @pytest.mark.parametrize('change', ['missing_mesh', 'missing_map', 'connectivity', 'component_map',
     'map_dtype', 'edge_coefficients', 'nonfinite', 'boundary', 'pressure', 'gauge', 'library',
     'element', 'layout', 'schema', 'pressure_semantics', 'times', 'diagnostics', 'snapshots',
-    'roots', 'root_count', 'root_padding', 'status'])
+    'roots', 'root_count', 'root_padding', 'correction_count', 'correction_value', 'frozen_factor', 'status'])
 def test_reader_rejects_incomplete_or_incompatible_representation_despite_checksum(tmp_path, change):
     config = {'nx': 3, 'ny': 2, 'T': .01}
     directory = run(config, root=tmp_path)
@@ -214,17 +220,37 @@ def test_reader_rejects_incomplete_or_incompatible_representation_despite_checks
         elif change == 'times': data['times'][-1] = 0.
         elif change == 'diagnostics': del data['diagnostics/divergence_l2']
         elif change == 'snapshots': data['snapshots/actual_times'][-1] = .001
-        elif change == 'roots': data['roots/candidates'][0, 0, 0] = np.nan
+        elif change == 'roots': data['roots/selected'][0, 0] = np.nan
         elif change == 'root_count': data['roots/count'][0, 0] = 99
         elif change == 'root_padding':
             count = data['roots/count'][0, 0]
             assert count < 3
             data['roots/candidates'][0, 0, count] = 0.
+        elif change == 'correction_count': data['corrections/count'][0, 0] = 2
+        elif change == 'correction_value': data['corrections/values'][0, 0, 0] = np.nan
+        elif change == 'frozen_factor': data['corrections/frozen_factor'][0, 0] += .1
         elif change == 'status': data.attrs['status'] = 'running'
     refresh_checksum(directory)
     with pytest.raises(ValueError):
         load_fem(directory)
     assert run(config, root=tmp_path) != directory
+
+
+def test_historical_linear_root_record_remains_readable(tmp_path):
+    # Euler's one correction is its original exact linear solve, so this is also
+    # a numerical reference for the historical layout, not merely an arbitrary array.
+    directory = run({'nx': 3, 'ny': 2, 'T': .01, 'scheme': 'imex_euler_mrsav'}, root=tmp_path)
+    with h5py.File(directory/'results.h5', 'a') as data:
+        selected = data['roots/selected'][:]
+        data['roots/count'][:] = 1
+        data['roots/candidates'][:, :, 0] = selected
+        data['roots/residuals'][:, :, 0] = data['stages/scalar_residual'][:]
+        del data['corrections']
+        del data['stages/r']
+        del data.attrs['scalar_solver']
+    refresh_checksum(directory)
+    cfg, manifest = load_fem(directory, require_complete=True)
+    assert cfg['scheme'] == 'imex_euler_mrsav' and manifest['status'] == 'complete'
 
 
 @pytest.mark.parametrize('missing', ['code_sha256', 'python', 'platform', 'threads'])

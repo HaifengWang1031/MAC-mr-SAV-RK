@@ -101,6 +101,28 @@ def provenance() -> dict:
                 'OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','MKL_NUM_THREADS',
                 'VECLIB_MAXIMUM_THREADS','NUMEXPR_NUM_THREADS','NUMBA_NUM_THREADS')}}
 
+def save_scalar_corrections(data: Any, stages: list[list[dict]], n_stages: int) -> None:
+    """Shared additive scalar diagnostics; legacy root slots retain their original layout."""
+    selected = np.asarray([[stage['r'] for stage in row] for row in stages]).reshape(-1, n_stages)
+    data.create_dataset('stages/r', data=selected)
+    capacity = 2 if n_stages == 4 else 1
+    correction_counts = np.zeros((len(stages), n_stages), dtype=int)
+    correction_values = np.full((*correction_counts.shape, capacity), np.nan)
+    predictors = np.full(correction_counts.shape, np.nan)
+    factors = predictors.copy()
+    for n, row in enumerate(stages):
+        for i, stage in enumerate(row):
+            values = stage.get('corrections', [])
+            correction_counts[n, i] = len(values)
+            correction_values[n, i, :len(values)] = values
+            predictors[n, i] = stage.get('correction_predictor', np.nan)
+            factors[n, i] = stage.get('frozen_factor', np.nan)
+    data.attrs['scalar_solver'] = ('fixed_count_frozen_factor' if np.any(correction_counts)
+                                  else 'legacy_polynomial_roots' if any(s.get('root_count', 0) for row in stages for s in row) else 'none')
+    for key, value in [('count', correction_counts), ('values', correction_values),
+                       ('predictor', predictors), ('frozen_factor', factors)]:
+        data.create_dataset('corrections/'+key, data=value)
+
 def save_result(path: Path, result: "Result", metrics: dict, n_stages: int = 2, *,
                 n_roots: int | None = None, pressure_semantics: str | None = None) -> None:
     if n_roots is None: n_roots = {1: 1, 2: 3, 4: 5}[n_stages]
@@ -134,6 +156,7 @@ def save_result(path: Path, result: "Result", metrics: dict, n_stages: int = 2, 
                 candidates[n,i,:count]=stage['candidates']; residuals[n,i,:count]=stage['root_residuals']
         for key,value in [('candidates',candidates),('residuals',residuals),('count',counts),('selected',selected)]:
             data.create_dataset('roots/'+key,data=value)
+        save_scalar_corrections(data, result.stages, n_stages)
         for key in ('residual','scalar_residual','divergence_inf','continuity_residual'):
             data.create_dataset('stages/'+key,data=np.array([[s[key] for s in stages] for stages in result.stages]).reshape(-1,n_stages))
     temporary.replace(path)

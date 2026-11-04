@@ -1,5 +1,12 @@
 ## 当前能力索引（2026-11-04 文档核对）
 
+2026-11-04 用户确认：共享mr-ccSAV阶段以固定次数冻结因子校正替代多项式求根及Newton。
+一阶、二阶每阶段各一次，三阶每阶段两次；以先前阶段r为预测值。
+最终耦合为P_{p-1}(r_penultimate)*(1-r_final)，速度、压力、lifting/SAV功及残差使用同一因子。
+每阶段仍为两个同矩阵Stokes右端；不额外求解Stokes，也不按残差提前终止或增加校正次数。
+新记录明确保存校正值与冻结因子，历史根候选只作兼容读取；旧运行来源与文件不重写。
+这条用户决定取代下文历史记录中的实根枚举/最小模根选择，见docs/adr/0002-fixed-sav-corrections.md。
+
 当前实现六种共享时间格式：IMEX Euler、SDIRK2、SDIRK3 各有普通版与 mr-ccSAV 版，
 分别为一/二/三阶、单/两/四阶段。五类空间离散为无滑移 MAC、Legendre、双周期 Fourier、
 Channel MAC 和 Taylor–Hood P2/P1 FEM。六格式支持固定/给定步长；四种 SDIRK 嵌入格式

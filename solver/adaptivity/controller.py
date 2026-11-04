@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 import numpy as np
 
-from ..core import Scheme
+from ..core import Scheme, stage_diagnostics
 from ..integrate import Result
 from ..model import Model
 
@@ -295,13 +295,7 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
         result.times.append(trial.state.t)
         result.diagnostics.append(diagnostic)
         result.final_stages = trial.stages
-        result.stages.append([{'r': s.r, 'candidates': s.candidates,
-                               'root_residuals': s.root_residuals,
-                               'root_count': len(s.candidates), 'residual': s.residual,
-                               'scalar_residual': s.scalar_residual,
-                               'divergence_inf': s.divergence_inf,
-                               'continuity_residual': s.continuity_residual}
-                              for s in trial.stages])
+        result.stages.append([stage_diagnostics(stage) for stage in trial.stages])
         for index, request in enumerate(requests):
             distance = abs(request-trial.state.t)
             if distance < best[index][0]:

@@ -18,16 +18,17 @@ class SchemeInfo:
     n_roots: int
     estimator_order: int | None
     pressure_semantics: str = 'incremental_stage_multiplier_mean_zero'
+    n_corrections: int = 0
 
 
 DEFAULT_SCHEMES = ('sdirk2', 'sdirk2_mrsav', 'sdirk3', 'sdirk3_mrsav')
 _INFO = {
     'sdirk2': SchemeInfo(2, 2, 3, 2),
-    'sdirk2_mrsav': SchemeInfo(2, 2, 3, 2),
+    'sdirk2_mrsav': SchemeInfo(2, 2, 3, 2, n_corrections=1),
     'sdirk3': SchemeInfo(3, 4, 5, 3),
-    'sdirk3_mrsav': SchemeInfo(3, 4, 5, 3),
+    'sdirk3_mrsav': SchemeInfo(3, 4, 5, 3, n_corrections=2),
     'imex_euler': SchemeInfo(1, 1, 1, None, 'euler_step_multiplier_mean_zero'),
-    'imex_euler_mrsav': SchemeInfo(1, 1, 1, None, 'euler_step_multiplier_mean_zero'),
+    'imex_euler_mrsav': SchemeInfo(1, 1, 1, None, 'euler_step_multiplier_mean_zero', n_corrections=1),
 }
 SCHEMES = tuple(_INFO)
 _FACTORIES: dict[str, Callable[[float], Scheme]] = {

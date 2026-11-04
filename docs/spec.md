@@ -2,6 +2,16 @@
 
 ## Current capability summary
 
+2026-11-04 confirmed replacement: all three SAV schemes use the common
+fixed-count frozen-factor scalar map, with exactly1/1/2 corrections per stage
+for orders1/2/3. The predictor is the previous stage r (the old node r for the
+first stage). Use the penultimate iterate for P and the last iterate for r in
+velocity, pressure, lifting work and frozen-equation residuals. No polynomial
+root selection or Newton iteration remains in the production schemes.
+The two common-matrix Stokes RHS and full original equation/constraint checks
+remain. New records identify the fixed correction method, count and iterates;
+old root-array layouts and their saved provenance remain readable.
+
 The implemented scheme registry contains six names: `imex_euler/imex_euler_mrsav`,
 `sdirk2/sdirk2_mrsav`, and `sdirk3/sdirk3_mrsav`. They have velocity design orders
 1/2/3 and 1/2/4 stages. All support fixed and prescribed positive steps; the four

@@ -43,7 +43,7 @@ def test_sav_discrete_energy_balance():
     n0=m.nonlinear(old)
     trial=scheme.step(m,m.state(0.,old,r0),dt)
     s1,s2=trial.stages
-    first=m.backend.solve(old-dt*ETA*(1-s1.r*s1.r)*n0,mass=1.,viscosity=m.nu*ETA*dt).velocity
+    first=m.backend.solve(old-dt*ETA*(1+r0)*(1-s1.r)*n0,mass=1.,viscosity=m.nu*ETA*dt).velocity
     second=m.vector(trial.state)
     balance=0.
     velocities=[old,first,second]; scalars=[r0,s1.r,s2.r]

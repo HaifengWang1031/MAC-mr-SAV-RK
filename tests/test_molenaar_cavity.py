@@ -58,7 +58,9 @@ def test_streamed_run_retains_config_fields_probe_and_status(tmp_path: Path, sch
         np.testing.assert_allclose(h['snapshots/r'][-1],h['final'].attrs['r'])
         if scheme=='sdirk3_mrsav':
             assert .19 < h['final'].attrs['r'] < .2
-            assert np.all(h['stage_records'][:,:,1]>=1)
+            assert np.all(h['stage_records'][:,:,1] == 0)
+            assert np.all(h['scalar_corrections'][:,:,0] == 2)
+            np.testing.assert_array_equal(h['scalar_corrections'][:,:,3],h['stage_records'][:,:,0])
             assert np.max(h['stage_records'][:,:,12])<1e-8
 
     from experiments.molenaar_cavity.analyze import analyze

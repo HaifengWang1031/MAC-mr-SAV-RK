@@ -173,8 +173,9 @@ def test_sdirk2_steps_preserve_input_and_decay_unforced_energy(scheme):
         assert abs(model.pressure_integral(stage.pressure)) < 1e-10
         assert stage.scalar_residual < 1e-12
         if scheme.name.endswith('mrsav'):
-            assert min(abs(stage.r-r) for r in stage.candidates) < 1e-15
-            assert max(stage.root_residuals) < 1e-10
+            assert stage.candidates == stage.root_residuals == []
+            assert stage.r == stage.corrections[-1]
+            assert len(stage.corrections) == (2 if scheme.name == 'sdirk3_mrsav' else 1)
 
 
 def test_nonpolynomial_force_quadrature_sensitivity():

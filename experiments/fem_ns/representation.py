@@ -166,7 +166,9 @@ def validate_fields(data: Any, cfg: dict, manifest: dict, velocity: Any, pressur
     candidates = _array(data, 'roots/candidates', (n, stages, info.n_roots), finite=False)
     residuals = _array(data, 'roots/residuals', candidates.shape, finite=False)
     sav = cfg['scheme'].endswith('_mrsav')
-    if np.any(counts < (1 if sav else 0)) or np.any(counts > info.n_roots) or (not sav and np.any(counts)):
+    frozen = data.attrs.get('scalar_solver') == 'fixed_count_frozen_factor'
+    if np.any(counts < (1 if sav and not frozen else 0)) or np.any(counts > info.n_roots) \
+            or ((not sav or frozen) and np.any(counts)):
         raise ValueError('Invalid FEM root counts')
     for index in np.ndindex(counts.shape):
         count = counts[index]
@@ -175,6 +177,25 @@ def validate_fields(data: Any, cfg: dict, manifest: dict, velocity: Any, pressur
                 raise ValueError('Invalid FEM root candidates/padding')
         if np.any(residuals[index][:count] < 0.) or (count and selected[index] not in candidates[index][:count]):
             raise ValueError('Invalid FEM selected root/residual')
+    if frozen:
+        if not sav or info.n_corrections == 0:
+            raise ValueError('Frozen correction metadata for a non-SAV scheme')
+        correction_counts = _array(data, 'corrections/count', (n, stages), integer=True)
+        capacity = 2 if stages == 4 else 1
+        values = _array(data, 'corrections/values', (n, stages, capacity), finite=False)
+        predictor = _array(data, 'corrections/predictor', (n, stages))
+        factor = _array(data, 'corrections/frozen_factor', (n, stages))
+        scalar = _array(data, 'stages/r', (n, stages))
+        if np.any(correction_counts != info.n_corrections) or not np.array_equal(scalar, selected) \
+                or not np.isfinite(values[..., :info.n_corrections]).all() \
+                or not np.isnan(values[..., info.n_corrections:]).all() \
+                or not np.array_equal(values[..., info.n_corrections-1], scalar):
+            raise ValueError('Invalid FEM scalar correction sequence')
+        previous = predictor if info.n_corrections == 1 else values[..., -2]
+        expected = (np.ones_like(previous) if info.order == 1 else
+                    1+previous if info.order == 2 else 1+previous+previous*previous)
+        if not np.allclose(factor, expected, rtol=2e-14, atol=2e-14):
+            raise ValueError('Invalid FEM frozen scalar factor')
     if n and selected[-1, -1] != final_r:
         raise ValueError('FEM final scalar/root mismatch')
     return velocity, pressure

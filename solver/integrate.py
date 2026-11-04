@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from time import perf_counter, process_time
 from collections.abc import Callable
 import numpy as np
-from .core import State, Stage, Scheme, History
+from .core import State, Stage, Scheme, History, stage_diagnostics
 from .mac.grid import Array
 from .model import Model
 from .schedule import schedule_nodes, nearest_node_indices
@@ -74,11 +74,7 @@ def integrate(model: Model, scheme: Scheme, initial: State, steps: list[float] |
             result.times.append(trial.state.t)
             result.diagnostics.append(diagnostic)
             result.final_stages=trial.stages
-            result.stages.append([{'r':s.r,'candidates':s.candidates,'root_residuals':s.root_residuals,
-                                   'root_count':len(s.candidates),'residual':s.residual,
-                                   'scalar_residual':s.scalar_residual,'divergence_inf':s.divergence_inf,
-                                   'continuity_residual':s.continuity_residual}
-                                  for s in trial.stages])
+            result.stages.append([stage_diagnostics(stage) for stage in trial.stages])
             if k+1 in indices: kept[k+1]=trial.state
             if on_accept is not None:
                 observer_wall, observer_cpu = perf_counter(), process_time()

@@ -1,10 +1,11 @@
-"""First-order IMEX Euler-mr-ccSAV with G=1-r, Q=1 and a linear scalar solve."""
+"""First-order IMEX Euler-mr-ccSAV with one frozen scalar correction, Q=1."""
 from typing import Any
 import numpy as np
 
 from ..core import Trial
 from ..model import Model, stage_divergences
 from ..momentum import stage_momentum
+from .scalar_correction import solve_scalar_stage
 
 
 class IMEXEulerMRSAV:
@@ -32,11 +33,8 @@ class IMEXEulerMRSAV:
                 raise RuntimeError('Negative Stokes response energy')
         beta = max(beta, 0.)
         scalar_mass = 1+self.gamma*dt
-        denominator = scalar_mass+dt*dt*beta
-        if not np.isfinite(denominator) or denominator <= 0:
-            raise RuntimeError('Invalid IMEX Euler SAV scalar denominator')
-        r = (state.r-dt*alpha+dt*dt*beta)/denominator
-        correction = 1-r
+        scalar_update = solve_scalar_stage(state.r, dt, scalar_mass, state.r, alpha, beta, order=1)
+        r, correction = scalar_update.r, scalar_update.coupling
         velocity = model.combine((1., V), (-dt*correction, W))
         pressure = model.combine((1/dt, solved[0].pressure), (-correction, solved[1].pressure))
         scalar = scalar_mass*r-state.r+dt*(momentum.pair(convection, velocity)+lifting_work)
@@ -50,7 +48,6 @@ class IMEXEulerMRSAV:
                 or residual > 1e-8 or scalar_residual > 1e-8 \
                 or continuity > 1e-8*(1+model.max_abs(velocity)):
             raise RuntimeError(f'IMEX Euler SAV residuals {residual}, {scalar_residual}, divergence {continuity}')
-        # The sole candidate is the directly computed root of a linear equation.
-        stage = model.stage(pressure, residual, physical_divergence, r, [r], [scalar_residual],
-                            scalar_residual, continuity_residual=continuity)
+        stage = scalar_update.record(model.stage(pressure, residual, physical_divergence, r,
+                            scalar_residual=scalar_residual, continuity_residual=continuity))
         return Trial(model.state(state.t+dt, velocity, r), [stage])

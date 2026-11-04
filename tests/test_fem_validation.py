@@ -106,10 +106,10 @@ def test_six_formats_record_actual_nodes_residuals_roots_and_preserve_input(name
             candidates = stage['candidates']
             assert stage['root_count'] == len(candidates) == len(stage['root_residuals'])
             if sav:
-                assert 1 <= len(candidates) <= scheme_info(name).n_roots
-                assert np.isfinite(candidates+stage['root_residuals']).all()
-                assert max(stage['root_residuals']) < 1e-10
-                assert stage['r'] == min(candidates, key=lambda r: (abs(r), r))
+                assert candidates == stage['root_residuals'] == []
+                assert stage['correction_count'] == scheme_info(name).n_corrections
+                assert np.isfinite(stage['corrections']).all()
+                assert stage['r'] == stage['corrections'][-1]
             else:
                 assert candidates == [] and stage['r'] == 0.
 

@@ -45,31 +45,42 @@ R_r&=[1-\gamma\tau(1-2\eta)]r_1,\\
 \end{aligned}
 \]
 
-每阶段解
+每阶段先用同一Stokes矩阵分别求右端Rᵤ与Ñ，得到V、W，记
+α=(Ñ,V)ₕ、β=(Ñ,W)ₕ≥0，d=1+γητ。存在lifting时α另加同一已知边界功。
+
+令p为格式阶数，P₀(z)=1、P₁(z)=1+z、P₂(z)=1+z+z²。对预测值z，冻结C=P_{p-1}(z)，
+阶段方程和消元结果为
 
 \[
-U+\nu\eta\tau KU+\tau G\pi=R_u-\tau(1-r^2)\widetilde N,\quad DU=0,
+U+\nu\eta\tau KU+\tau G\pi=R_u-\tau C(1-r)\widetilde N,\qquad DU=0,
 \]
 \[
-(1+\gamma\eta\tau)r=R_r-\tau(1+r)(\widetilde N,U)_h.
+dr=R_r-\tau C(\widetilde N,U)_h,
+\qquad U=V-\tau C(1-r)W,
+\]
+\[
+\Phi(z)=\frac{R_r-\tau C\alpha+\tau^2C^2\beta}{d+\tau^2C^2\beta}.
 \]
 
-用同一 Stokes 矩阵分别求右端 Rᵤ 与 Ñ，得到 V、W，记 α=(Ñ,V)ₕ、β=(Ñ,W)ₕ。此时
+分母严格为正。首阶段预测值为节点r，后续阶段预测值为前阶段r；
+一阶与二阶每阶段固定一次更新r^[1]=Phi(r^[0])，三阶每阶段固定两次更新，
+额外计算r^[2]=Phi(r^[1])。次数不会因残差已经很小而提前终止。
+最终令m=1/1/2，C=P_{p-1}(r^[m-1])、r=r^[m]，统一使用耦合C(1-r)恢复速度和压力：
 
 \[
-U=V-\tau(1-r^2)W,\qquad
-\beta=\|W\|_h^2+\nu\eta\tau(W,KW)_h\ge0.
+U=V-\tau C(1-r)W,\qquad
+\pi=\pi_V/\tau-C(1-r)\pi_W.
 \]
 
-标量三次方程为
+二阶的d采用上述η；三阶采用各阶段D[i,i]，Euler采用1+γτ。
+每次Phi只做标量计算，两次校正也仅复用原来的V/W，不新增Stokes求解。
+各空间模型通过共同动量adapter保留质量、lifting和开放边界SAV功；
+对最终冻结系数的完整动量、标量和全部连续性行重新验收。
 
-\[
-\tau^2\beta r^3+\tau^2\beta r^2+
-(1+\gamma\eta\tau+\tau\alpha-\tau^2\beta)r
--R_r+\tau\alpha-\tau^2\beta=0.
-\]
-
-代码只删除精确为零的最高次系数，枚举数值实根，对重根可能产生的虚部使用与次数有关的舍入邻域筛选，再用按系数及根尺度归一化的多项式残差筛选，默认取 |r| 最小者；浮点精度内等距时取有符号值较小者。根的重数按数值求根器结果保留；这是数值筛选，不是代数根隔离证明。每阶段还独立检查代入后的速度与标量残差。
+生产格式不再构造三次/五次多项式、不枚举实根、不做Newton或按容差追加迭代。
+有限次校正与原自洽多项式不同，故冻结标量残差也不是该多项式根残差。
+当前Stage记录预测值、校正序列和冻结因子；历史根候选只用于旧数据读取。
+详见[ADR0002](adr/0002-fixed-sav-corrections.md)及[保存契约](architecture.md#保存布局与分析约定)。
 
 普通 IMEX-SDIRK2 使用同样的增量系数，直接以 Rᵤ−τÑ 求速度。它不推进辅助变量；输出 r=0 用于统一诊断结构。
 

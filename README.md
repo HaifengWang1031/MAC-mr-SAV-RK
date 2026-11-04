@@ -8,11 +8,11 @@
 
 | 时间格式配置名 | 速度设计阶数 | 阶段数 | SAV 标量求解 | 步长支持 |
 | --- | --- | --- | --- | --- |
-| `imex_euler` / `imex_euler_mrsav` | 1 | 1 | SAV 版为唯一线性解，G=1-r、Q=1 | 固定、给定序列 |
-| `sdirk2` / `sdirk2_mrsav` | 2 | 2 | SAV 版每阶段三次方程，G=1-r²、Q=1+r | 固定、给定序列、I/PI 自适应 |
-| `sdirk3` / `sdirk3_mrsav` | 3 | 4 | SAV 版每阶段五次方程，G=1-r³、Q=1+r+r² | 固定、给定序列、I/PI 自适应 |
+| `imex_euler` / `imex_euler_mrsav` | 1 | 1 | SAV 每阶段一次冻结校正，P₀=1 | 固定、给定序列 |
+| `sdirk2` / `sdirk2_mrsav` | 2 | 2 | SAV 每阶段一次冻结校正，P₁(z)=1+z | 固定、给定序列、I/PI 自适应 |
+| `sdirk3` / `sdirk3_mrsav` | 3 | 4 | SAV 每阶段两次冻结校正，P₂(z)=1+z+z² | 固定、给定序列、I/PI 自适应 |
 
-普通版每阶段求一个 Stokes 右端，SAV 版求两个共享同一矩阵的右端。二、三阶 SAV 枚举并筛选数值实根，选最小绝对值根后重新检查阶段方程。默认比较组仍为四种 SDIRK 格式；[一阶实验](experiments/imex_euler/README.md)中的“六后端”指该研究选定的模型/后端组合，当前空间模型与后端清单见下表。
+普通版每阶段求一个 Stokes 右端，SAV 版求两个共享同一矩阵的右端。SAV 从前一阶段r开始，每次只计算一个标量商；一/二/三阶每阶段固定1/1/2次，以倒数第二次标量值冻结P，使用最后一次r恢复速度、压力并检查阶段方程。默认比较组仍为四种 SDIRK 格式；[一阶实验](experiments/imex_euler/README.md)中的“六后端”指该研究选定的模型/后端组合，当前空间模型与后端清单见下表。
 
 | 空间离散模型 | 边界与离散 | 已实现的 Stokes 后端 |
 | --- | --- | --- |
@@ -70,7 +70,7 @@ solver/
     sdirk2_mrsav.py        增量 SDIRK2-mr-ccSAV
     sdirk3.py             普通四阶段 IMEX-SDIRK3
     sdirk3_mrsav.py       四阶段 SDIRK3-mr-ccSAV
-    roots.py              全部数值实根及最小绝对值选择
+    scalar_correction.py  共享冻结因子标量商，一/二/三阶固定1/1/2次
   spectral/               第二个离散：单元素 Dirichlet 组合 Legendre（无新依赖）
     basis.py              1D 精确矩阵（质量、刚度、散度、投影）与基函数递推
     assembly.py           Kronecker 张量积装配、Galerkin 载荷与求值
@@ -101,7 +101,7 @@ uv run mypy
 uv run pytest
 ```
 
-- [数学实现](docs/numerics.md)：MAC 边界处理、压力规范、阶段公式及三次方程。
+- [数学实现](docs/numerics.md)：MAC 边界处理、压力规范、阶段公式及固定次数标量校正。
 - [当前架构与修改导航](docs/architecture.md)：模块归属、依赖方向、扩展点、记录兼容与测试入口；修改模块分工时同步维护。
 - [验证结果](docs/validation.md)：实际网格、收敛阶和局限。
 - [确认的范围](docs/spec.md)、[领域约定](CONTEXT.md)。

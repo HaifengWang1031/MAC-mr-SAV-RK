@@ -24,7 +24,8 @@ def test_no_slip_public_run_single_stage_storage_reuse_and_analysis(tmp_path, na
         assert data['stages/residual'].shape == (2, 1)
         assert data['roots/candidates'].shape == (2, 1, 1)
         assert data['final/stage_pressure'].shape == (1, 6, 8)
-        assert (data['roots/count'][:] == (1 if name.endswith('_mrsav') else 0)).all()
+        assert (data['roots/count'][:] == 0).all()
+        assert (data['corrections/count'][:] == (1 if name.endswith('_mrsav') else 0)).all()
         assert abs(data['final/t'][()]-.03) < 1e-14
     import experiments.workflow as workflow
     monkeypatch.setattr(workflow, 'make_scheme', lambda *args: (_ for _ in ()).throw(AssertionError('analysis invoked solver')))

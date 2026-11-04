@@ -10,7 +10,7 @@
 
 | 修改对象 | 归属与阅读入口 | 修改时保留的约定 |
 | --- | --- | --- |
-| 时间格式、阶段和根选择 | [schemes](../solver/schemes/registry.py)、[Model 协议](../solver/model.py)、[数值说明](numerics.md) | 六种格式共用空间离散模型接缝，不在格式中复制 FEM/MAC 专属公式 |
+| 时间格式、阶段和标量校正 | [schemes](../solver/schemes/registry.py)、[Model 协议](../solver/model.py)、[数值说明](numerics.md) | 六种格式共用空间离散模型接缝，不在格式中复制 FEM/MAC 专属公式 |
 | 动量表示或 FEM 对流/SAV 功 | [共同动量 adapter](../solver/momentum.py)、[FEM 弱载荷 adapter](../solver/fem/momentum.py)、下文 FEM 章节 | 物理装配和表示转换分别维护；完整残差与约束检查保留 |
 | I/PI 配置与序列化 | [controllers.py](../experiments/controllers.py) | 实验默认值与启用策略留在各实验配置中 |
 | 运行身份、保存、复用、完成状态 | [records.py](../experiments/records.py)、下文记录章节 | 来源与校验和、旧可选键、失败前缀、专属表示校验保留 |
@@ -77,6 +77,34 @@ FEM 的 Brinkman/Hele–Shaw 是物理模型扩展，Darcy 是独立标量参照
 用短于最小步长的对齐步，但仍执行原有误差和阶段检查。显式 `min_step_policy=force`
 另有允许有限超容差下限步的规则，见[规格](spec.md)，不据此声明原容差已满足。
 
+## 共享固定次数标量校正与记录
+
+solver/schemes/scalar_correction.py拥有公共标量商和固定次数1/1/2，返回校正序列、
+预测值、倒数第二次迭代处的冻结因子及最终耦合系数。各SAV格式构造自己的阶段右端、
+alpha/beta和预测值，再用同一耦合恢复速度/压力并验证冻结方程。
+动量adapter保留质量与lifting配对，校正不引入新的模型接口或Stokes求解。
+registry的n_corrections对普通格式为0、SAV为1/1/2；n_roots保留历史存储预留容量。
+
+experiments/records.py的save_scalar_corrections共用写入附加标量诊断；公共save_result
+与楔腔独立循环都调用它。Molenaar流式布局另有同接受步对齐的scalar_corrections数据集，
+列为count/predictor/r1/r2/frozen_factor，保留原stage_records历史根槽。
+
+Stage的corrections、correction_predictor、frozen_factor是当前标量诊断，
+stage_diagnostics由固定与自适应推进器共用。当前candidates/root_residuals为空，
+不再把校正值当成原自洽多项式的实根；普通格式的校正序列也为空。
+
+公共HDF5保留schema_version=1并增添scalar_solver、stages/r和
+corrections/count/values/predictor/frozen_factor。
+scalar_solver为fixed_count_frozen_factor时，count必须按阶数为1/1/2，
+values末值等于阶段r，冻结因子对应倒数第二次迭代值；unused位置填NaN。
+普通格式scalar_solver为none、count为0。FEM及复用其校验的圆柱/Hele–Shaw读取器
+验证次数、有限性、填充、末值及冻结因子一致性。
+
+roots/*的历史预留形状不变；当前根计数为0，候选和根残差均为NaN。
+roots/selected是stages/r的兼容别名，不能解释为原多项式的实根。
+没有scalar_solver属性的旧记录继续执行历史实根候选校验；不回填校正字段或重写来源。
+来源哈希区分新旧算法，旧冻结worker保留其原实现和导入路径。
+
 ## 控制器配置只在共同入口实现
 
 [experiments/controllers.py](../experiments/controllers.py) 拥有：
@@ -104,7 +132,7 @@ FEM 的 Brinkman/Hele–Shaw 是物理模型扩展，Darcy 是独立标量参照
 表示的缩放扩展点；Hele–Shaw 的 beta 在弱载荷路径中先缩放载荷，Riesz 路径保持质量逆后
 再缩放的既有运算顺序。不要因复用装配而重复缩放或改变顺序。
 
-一致质量、固定迹、SAV 根选择和完整残差检查保持原义。多右端 Stokes 的第一列携带已知
+一致质量、固定迹、SAV边界功和完整残差检查保持原义；标量校正采用[ADR0002](adr/0002-fixed-sav-corrections.md)。多右端 Stokes 的第一列携带已知
 边界/连续性载荷，SAV 修正列为齐次响应；物理散度检查覆盖完整场。弱载荷残差仍使用一致
 质量逆，较保守的归一化不能替代原方程检查。开放流动配对与压力约定见
 [ADR0001](adr/0001-open-flow-sav-boundary-work.md)；性能配置见
@@ -161,8 +189,8 @@ Gmsh 等计算依赖保持按需导入；已有保存网格的读取不要求这
 
 `runs/<实验名>/<运行编号>/` 保存有效 `config.json`、含来源/状态/校验和的 `manifest.json`、
 公共工作流的 `results.h5` 和 `run.log`。专属研究也有 NPZ/JSON 命名空间，以对应家族说明为准。
-公共 HDF5 保存时间/步长、诊断、最终状态、请求/实际快照节点、阶段残差与 SAV 根候选。
-阶段数和候选容量由 registry 指定：Euler 为 1/1，SDIRK2 为 2/3，SDIRK3 为 4/5；普通格式
+公共 HDF5 保存时间/步长、诊断、最终状态、请求/实际快照节点、阶段残差、标量校正诊断和历史根槽。
+阶段数和候选容量由 registry 指定：Euler 为 1/1，SDIRK2 为 2/3，SDIRK3 为 4/5；当前所有格式
 的实际根计数为零，不使用的候选位置填 NaN。`final/stage_pressure` 是最后接受步的阶段乘子。
 
 FEM 保存实际网格、DOF 映射和完整 P2/P1 系数；压力规范及所需库版本随表示检查。快照中
