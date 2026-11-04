@@ -5,6 +5,11 @@ transients, and retain reproducible evidence independently of the old solver wor
 `run.py` computes and saves; `analyze.py` reads explicit saved records and never advances
 the solver. See [model conventions](../../docs/channel.md).
 
+All six shared schemes support fixed/prescribed steps. Embedded I/PI adaptivity
+is available for `sdirk2/sdirk2_mrsav` and `sdirk3/sdirk3_mrsav`; Euler has no
+adaptive estimator. The default validation and benchmark groups below retain the
+four SDIRK schemes; this subset does not limit the computation API.
+
 ```sh
 uv run python -m experiments.channel_ns.run --config experiments/channel_ns/configs/smoke.json
 uv run python -m experiments.channel_ns.run --config experiments/channel_ns/configs/adaptive.json

@@ -1,30 +1,96 @@
-# IMEX-SDIRK3(2) I and PI controllers
+# Embedded SDIRK2(1) and SDIRK3(2) I/PI controllers
 
-`integrate_adaptive` advances the third-order endpoint state from either `SDIRK3`
-or `SDIRK3MRSAV`. The embedded second-order velocity is formed from the already
-computed stages,
+`integrate_adaptive` uses the shared Model interface for MAC, Legendre, Fourier,
+Channel and FEM. It advances the main endpoint state from any of the four
+embedded SDIRK schemes. All six schemes support fixed/prescribed stepping, but
+`IMEXEuler` and `IMEXEulerMRSAV` return no embedded velocity; neither an Euler
+embedded estimator nor step doubling is implemented. Experiment configurations
+use [make_controller](../../experiments/controllers.py) to reject unsupported
+schemes and match the estimator order in the [registry](../schemes/registry.py).
+
+## Embedded velocities and velocity error
+
+The embedded combinations reuse already computed stages:
+
+| Main schemes | Main/embedded velocity order | `estimator_order` |
+| --- | --- | --- |
+| `SDIRK2`, `SDIRK2MRSAV` | 2/1 | 2 |
+| `SDIRK3`, `SDIRK3MRSAV` | 3/2 | 3 |
+
+Here `estimator_order` is the local power of the main-minus-embedded difference,
+not the order of the embedded velocity. With `eta=1-1/sqrt(2)`, SDIRK2 uses
+
+\[
+\bar u^{n+1}=(1-1/\eta)u^n+U_{n,1}/\eta.
+\]
+
+SDIRK3 uses
 
 \[
 \bar u^{n+1}=\tfrac23u^n-\tfrac{128}{99}U_{n,1}
                  +\tfrac{50}{33}U_{n,2}+\tfrac19U_{n,3}.
 \]
 
-The MAC/model inner product gives the norm of the difference. A trial is accepted
-when its normalized error is at most one and its state and diagnostics are finite.
-The I controller uses `0.9 * error**(-1/3)`, clipped to `[0.2, 2]`. The PI
-controller uses the same rule for its first accepted step and thereafter uses
-`0.9 * error**(-0.7/3) * previous_accepted_error**(0.4/3)` with the same clips.
-Both use the current-trial I estimate to shrink a rejected step; rejected trials
-do not change the previous accepted error. In either case, rejected trials
-are retried from the last accepted state. The main SAV scalar is committed only
-with the accepted third-order state. Failed stage/root solves trigger a smaller
-trial; repeated failure returns the accepted prefix with `status='failed'`.
+By default the model inner product defines the velocity norm. The optional
+`error_norm` callback replaces it consistently for the difference and both states:
+
+\[
+E_u=\frac{\|u^{n+1}-\bar u^{n+1}\|}
+ {\mathrm{atol}+\mathrm{rtol}\max(\|u^n\|,\|u^{n+1}\|)}.
+\]
+
+With local power `q=estimator_order`, the default I update is
+`0.9 * E_u**(-1/q)`, clipped to `[0.2, 2]`; zero error gives the maximum factor.
+PI uses I for its first accepted step, then
+`0.9 * max(E_u,1e-14)**(-0.7/q) * max(previous_E_u,1e-14)**(0.4/q)`
+with the same clips. These factors and the PI exponents/floor are configurable.
+The low-level API defaults to `estimator_order=3`; direct SDIRK2 callers must set
+`estimator_order=2` on their controller.
+
+## Optional scalar local-defect control
+
+Passing `ScalarErrorControl(atol, gamma)` adds
+
+\[
+E_r=\frac{|r^{n+1}-e^{-\gamma h}r^n|}{\mathrm{atol}_r},
+\qquad E=\max(E_u,E_r).
+\]
+
+This scalar indicator uses local power 2, its own accepted PI error history, and
+the same configured factor bounds. Velocity and scalar each propose a step factor;
+the driver takes the smaller. The default remains velocity-only control.
+Experiment eligibility is local: periodic and Channel expose scalar control for
+`sdirk3_mrsav`; FEM, cylinder and Hele–Shaw accept either adaptive SAV format.
+This defect against `r'=-gamma*r` does not bound accumulated scalar error or `|r|`.
+
+## Acceptance, rejection and output nodes
+
+Under the default `min_step_policy='fail'`, a trial must have `E<=1`, finite state,
+error and diagnostics, and successful stage/root checks. A rejected trial restarts
+from the last accepted state. Its shrink factor uses the current-trial I estimate
+and is capped at 0.8; rejected trials never update accepted PI histories or the
+committed SAV scalar. Repeated failure returns the accepted prefix with
+`status='failed'`.
 
 The last step is clipped to `initial.t + T - current.t`. This terminal alignment
 step may be shorter than `min_step`, including a roundoff-sized remainder, and
 still undergoes the usual stage and error checks. After acceptance, its state,
 time record, endpoint snapshot and callbacks use exactly `initial.t + T`.
-Other steps retain their existing minimum-step and rejection rules.
+
+`strict_snapshots=False` maps requests to nearest accepted nodes, taking the earlier
+node on an exact tie. With `strict_snapshots=True`, steps align to increasing output
+requests; near an internal output boundary the driver may partition the remaining
+interval into two or four steps. Internal output alignment does not permit ordinary
+steps below `min_step`.
+
+Explicit `min_step_policy='force'` clamps ordinary proposals to `min_step` and
+permits a finite over-tolerance trial exactly at that floor to be accepted. Stage
+failures, nonfinite states/errors and invalid diagnostics still fail; terminal
+alignment steps shorter than the floor retain the error check. Attempts preserve
+the original error and acceptance decision. This option does not establish that
+the requested local tolerance is met, and experiment exposure is configuration-specific.
+
+## API and saved records
 
 ```python
 from solver.adaptivity import PIController, integrate_adaptive
@@ -41,7 +107,14 @@ result = integrate_adaptive(
 previous accepted error, chosen factor, controller type, acceptance and rejection
 reason for every trial. `result.times`, diagnostics,
 stages and snapshots contain accepted states only. `T` is elapsed duration;
-snapshot times are absolute. This solver-level API does not yet write run manifests
-or HDF5 experiment records. The error difference is an estimator for the embedded
-order-two output, not a proven local error bound for the order-three output.
-Variable-step mr-ccSAV accuracy and long-time stability need separate validation.
+snapshot times are absolute. `integrate_adaptive` itself returns an in-memory result;
+experiment runners write manifests, HDF5 and accepted/rejected attempts through the
+shared record layer. Saved workflows exist for MAC adaptive studies, periodic,
+Channel, FEM, cylinder and Hele–Shaw; Legendre uses the same API in dedicated studies.
+See the [experiment index](../../experiments/README.md) and
+[architecture](../../docs/architecture.md) for the actual entry points and readers.
+
+The main-minus-embedded difference estimates the lower-order local error. It is
+not a proved local or global error bound for the main output. Variable-step SAV
+accuracy, PDE convergence and long-time stability require their own assumptions
+and evidence; implemented adaptivity alone does not establish them.

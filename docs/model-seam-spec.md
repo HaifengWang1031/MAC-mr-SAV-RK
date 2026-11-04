@@ -1,10 +1,16 @@
 # Model seam specification
 
-> Scope note (2026-09-23): the distributed realisation `solver/mac_parallel/` and the
-> `mpi` extra were removed, so the sections below that mention PETSc, MPI or
-> `ParallelNS` describe the removed implementation and are kept as history. The live
-> realisations are the staggered MAC model (`solver/mac_ns.py`) and the spectral model
-> (`solver/spectral/model.py`); the seam member list and its rules are unchanged.
+> Current scope: five live spatial Models (MAC, Legendre, Fourier, Channel and FEM)
+> reuse the six schemes in the [registry](../solver/schemes/registry.py). All support
+> fixed/prescribed stepping; the four SDIRK schemes also support embedded I/PI.
+> Euler has no adaptive estimator. Current interfaces and ownership, including the
+> shared momentum adapter and FEM weak-load adapter, are documented in
+> [architecture.md](architecture.md); this file records the original seam migration.
+>
+> Historical scope: `solver/mac_parallel/` and the `mpi` extra were removed on
+> 2026-09-23. The migration sections below describe that removed distributed MAC
+> implementation and its original two schemes. The current optional PETSc FEM
+> backend uses COMM_SELF and does not restore distributed MAC or FEM assembly.
 
 
 Status: confirmed 2026-09-21 — the test seams and the rounding gate below were

@@ -2316,3 +2316,16 @@ counts and reference summaries. Readonly analysis produced both six-panel
 figures from saved inputs without changing their checksums. Timing measurements
 were excluded from equality comparisons. These finite regression checks add no
 new production-run, performance or PDE accuracy qualification.
+
+## 2026-11-04 算法能力文档同步
+
+按当前 `solver/schemes/registry.py`、五类 Model、线性后端、共同自适应推进器和
+各实验配置核对现行说明：六种共享格式支持固定/给定步长，四种 SDIRK 嵌入格式
+支持 I/PI，Euler 尚无自适应估计器。更新项目总览及模型/实验说明，补齐二阶嵌入输出、
+可选标量局部缺陷、最小步长策略和 FEM 可选后端。求解器 API、实验入口及默认研究
+子集分别说明；楔腔六格式仅开放固定步。历次确认与验证记录保留其日期和当时范围。
+
+本次只修改 Markdown。文档导航测试 `uv run --locked pytest -q tests/test_study_documents.py`
+为 **5 passed**；能力说明的本地链接、标题锚点、六格式注册信息与 I/PI 构建规则逐项核对，
+`git diff --check` 通过。本次文档修改未重跑完整数值测试或生产计算，不新增可选后端、
+性能、PDE 阶数或长期稳定性资格；现有验证限制继续适用。

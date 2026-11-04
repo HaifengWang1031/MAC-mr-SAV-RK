@@ -1,6 +1,6 @@
 # 周期 NS 实验
 
-目的：验证 Fourier–Leray 离散对四套已有格式的兼容性、周期速度收敛、辅助变量和自适应行为，并测量本实现的短时成本。计算、存储和分析入口独立于无滑移 MAC 工作流。
+目的：检查 Fourier–Leray 离散下的速度精度、辅助变量和计算成本。当前入口支持六种共享格式的固定/给定步长，以及四种 SDIRK 嵌入格式的 I/PI 自适应；Euler 尚无自适应估计器。计算、存储和分析入口独立于无滑移 MAC 工作流；默认验证研究的格式子集见下文。
 
 ## 运行与分析
 
@@ -19,7 +19,7 @@ uv run --locked python -m experiments.periodic_ns.analyze runs/periodic_ns/<run-
 | 参数 | 语义 |
 |---|---|
 | `case` | `mms` 为连续解析非线性制造解；`kolmogorov` 为周期外力和确定性流函数扰动 |
-| `scheme` | 原四格式，另有 `imex_euler/imex_euler_mrsav`（一阶，仅固定/给定步长） |
+| `scheme` | `imex_euler/imex_euler_mrsav`、`sdirk2/sdirk2_mrsav`、`sdirk3/sdirk3_mrsav`；Euler 仅固定/给定步长 |
 | `nx,ny,lx,ly` | 采样节点数及周期长度；实际保留严格 2/3 频带 |
 | `nu,gamma,r0` | 黏性、SAV 参数、初始辅助变量；MMS 要求 r0=0 |
 | `amplitude` | 制造解幅值或 Kolmogorov 外力幅值 |

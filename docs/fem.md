@@ -1,15 +1,16 @@
 # FEM: Taylor–Hood P2/P1
 
 Independent fifth spatial Model: scikit-fem supplies affine triangular meshes,
-bases, DOF maps and weak-form assembly; SciPy supplies sparse direct solves and
-optional recycled-factor preconditioned solves of the identical shifted system.
+bases, DOF maps and weak-form assembly. The identical shifted system supports
+direct LU, checked recycled-factor solves and optional PETSc FGMRES/block AMG.
 The shared time schemes and stepping policies are unchanged; the integrator and
 saved-run reader share pure compensated schedule/snapshot mapping arithmetic.
-Locally installed and locked: scikit-fem 12.0.2, CPython 3.12.14, macOS arm64.
+Dependency versions are pinned by `uv.lock`; PETSc and PARDISO require their
+respective optional native libraries.
 
 The factor controls are independent of the time method and of `stokes_backend`
-(`direct` or checked `recycled`). `stokes_ordering=auto` uses cached METIS nested
-dissection for SuperLU systems with at least 20000 unknowns, otherwise MMD;
+(`direct`, checked `recycled`, or optional `petsc`). `stokes_ordering=auto` uses
+cached METIS nested dissection for SuperLU systems with at least 20000 unknowns, otherwise MMD;
 `mmd` and `metis` force either choice. Ordering uses the union of mass, stiffness,
 all divergence rows and the closed pressure gauge, and restores every solution
 to the original DOF coordinates. Multiple responses use divergence-only quadrature;
@@ -29,6 +30,16 @@ checks; unsuccessful factors/solutions fall back to checked SuperLU. Missing
 optional libraries produce an error. Default `superlu` does not load MKL.
 These optional configuration keys are added only when supplied, preserving old
 canonical configs and records. See [measurements and limits](fem-optimization.md).
+
+`mass_backend=direct|cg|metis` selects how to apply the same consistent mass
+inverse; CG uses diagonal preconditioning, not mass lumping. `fem_load_mode=riesz|weak`
+selects coefficient or weak-load stage arithmetic without changing physical
+states, operators, SAV roots or constraints. Defaults remain direct mass/Riesz.
+`stokes_backend=petsc` uses real-float64 COMM_SELF FGMRES with a block preconditioner
+and GAMG by default; Hypre requires a compatible build. True residual checks and
+counted global-LU fallback remain mandatory. GAMG remains experimental; Hypre
+performance is unqualified and distributed FEM is not implemented. See [shared solver settings and
+measured scope](fem-multigrid.md).
 
 ## Usage
 
@@ -85,8 +96,9 @@ initial = model.state(0., velocity, r=0.)
   **not** the arithmetic mean of coefficients. Every solve checks normalized
   weak momentum, **every** pressure-test continuity row and the integral gauge
   against the configured tolerance (default 1e-9). An additional mass-solved
-  momentum-coefficient defect is checked. Default direct MMD ordering falls back
-  to robust COLAMD when factorization or true checks fail. Optional `recycled`
+  momentum-coefficient defect is checked. Default SuperLU ordering uses MMD below
+  20000 saddle unknowns and METIS at or above that size, with checked robust COLAMD
+  fallback when factorization or true checks fail. Optional `recycled`
   first applies bounded multicolumn defect correction with a nearby old LU to
   the exact current matrix. Candidates pass all original checks; stagnation or
   failure falls back to GMRES with the same factor, then checked fresh/robust LU.

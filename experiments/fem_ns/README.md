@@ -43,10 +43,10 @@ Adaptive example: `run({'mode': 'adaptive', 'scheme': 'sdirk3_mrsav',
 'initial_step': .001, 'controller': {'kind': 'PI', 'rtol': 1e-4},
 'scalar_atol': 1e-6, 'stokes_backend': 'recycled'}, root=root)`.
 Do not supply `dt`/`steps` in adaptive mode. Euler has no embedded estimator.
-`scalar_atol` is optional and SAV-only; `stokes_backend` is `direct` (default) or
-`recycled`. Inactive adaptive defaults are stripped from fixed effective configs,
-so existing fixed record identities remain readable. Unknown keys and invalid parameters fail
-before creating a run.
+`scalar_atol` is optional and SAV-only; `stokes_backend` is `direct` (default),
+`recycled`, or optional `petsc`. Inactive adaptive defaults are stripped from fixed
+effective configs, so existing fixed record identities remain readable. Unknown
+keys and invalid parameters fail before creating a run.
 
 Factor controls (also valid in fixed mode): `stokes_ordering=auto|mmd|metis`,
 `stokes_factor_backend=superlu|pardiso`, and optional positive `stokes_threads`
@@ -55,6 +55,13 @@ METIS ordering above that threshold. PARDISO uses its own ordering (`auto`),
 requires the optional Linux x86_64 `pardiso` extra, and keeps two internal
 refinement steps. These choices retain the exact equations and all checks.
 Old configs acquire no new default keys. Details: [FEM solver](../../docs/fem.md).
+
+Independent optional choices are `mass_backend=direct|cg|metis` and
+`fem_load_mode=riesz|weak`; both preserve consistent-mass equations. PETSc uses
+COMM_SELF FGMRES and `stokes_amg_type=gamg` by default; `hypre` requires a matching
+native build. Original residual checks and counted LU fallback remain required.
+GAMG is experimental; measured selection and disqualified cases remain explicit in
+[the shared comparison](../../docs/fem-multigrid.md).
 
 ## Smooth reference problem
 

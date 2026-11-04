@@ -1,3 +1,15 @@
+## 当前能力索引（2026-11-04 文档核对）
+
+当前实现六种共享时间格式：IMEX Euler、SDIRK2、SDIRK3 各有普通版与 mr-ccSAV 版，
+分别为一/二/三阶、单/两/四阶段。五类空间离散为无滑移 MAC、Legendre、双周期 Fourier、
+Channel MAC 和 Taylor–Hood P2/P1 FEM。六格式支持固定/给定步长；四种 SDIRK 嵌入格式
+支持 I/PI，自适应标量控制与可选后端由各实验入口限定。Euler 尚无自适应估计器。
+完整清单见 [README](README.md#当前算法与支持范围)，模块归属见
+[architecture](docs/architecture.md)，控制规则见[自适应说明](solver/adaptivity/README.md)。
+
+下文保留历次确认记录；其中 V1、首期范围、已移除并行实现及旧验证数字按其日期解释，
+不作为当前能力清单。当前 PETSc 选项是单进程 FEM 后端，不代表恢复已删除的 MAC MPI 实现。
+
 2026-11-02 大规模FEM对照优化：新增显式petsc后端（COMM_SELF、FGMRES、速度块与压力辅助GAMG），
 压力辅助逆区分质量/黏性/反应系数；外层保留精确原矩阵、全部连续性行及原压力规范。
 可选mass_backend=cg仍求解一致质量；fem_load_mode=weak只改变动量载荷表示，共用六格式阶段及SAV根选择。

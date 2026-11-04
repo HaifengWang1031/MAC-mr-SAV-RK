@@ -1,6 +1,10 @@
 # 周期 Fourier–Leray 求解器
 
-2026-10-04 用户确认实现。`solver/fourier/` 是独立空间离散，通过现有 `Model` 接口复用四套 SDIRK / mr-ccSAV 和 I/PI 推进器。MAC 与 Legendre 的构造、数组、阶段公式和旧实验入口保持原语义。
+`solver/fourier/` 是五类空间离散之一，通过共同 `Model` 接口复用六种时间格式：
+`imex_euler/imex_euler_mrsav`、`sdirk2/sdirk2_mrsav`、`sdirk3/sdirk3_mrsav`。
+六格式支持固定/给定步长，四种 SDIRK 格式支持 I/PI 自适应；Euler 尚无自适应估计器。
+格式元数据见[注册表](../solver/schemes/registry.py)，控制规则见[自适应说明](../solver/adaptivity/README.md)。
+MAC 与 Legendre 的构造、数组、阶段公式和旧实验入口保持原语义。
 
 ## 表示与算子
 

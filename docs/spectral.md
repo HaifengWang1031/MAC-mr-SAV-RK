@@ -6,10 +6,15 @@
 eigenspaces with true pressure Schur-CG; default direct and all discrete equations remain.
 Details and validation are in [legendre-optimization.md](legendre-optimization.md).
 
-Slices S1, S2 and S3 of the plan agreed on 2026-09-21: the basis and the assembly for a
-third discretisation, its `solver/model.py` implementation, and the moving-lid lifting with
-the sharp and regularised lid-driven cavity compared against the validated MAC solutions.
-No new dependency is involved; only numpy, scipy and sympy.
+This is one of the five current spatial discretisations. It reuses all six shared
+time schemes with fixed/prescribed steps, and embedded I/PI adaptivity for the four
+SDIRK schemes. Euler has no adaptive estimator. See the
+[scheme registry](../solver/schemes/registry.py) and [adaptive guide](../solver/adaptivity/README.md).
+The spectral implementation uses numpy, scipy and sympy.
+
+The S1/S2/S3 measurements below record the 2026-09-21 basis, assembly, Model seam
+and fixed moving-lid lifting work. Historical two-scheme scope and pre-correction
+measurements do not define current support; later correction notes identify their limits.
 
 ## What is implemented
 
@@ -35,14 +40,15 @@ No new dependency is involved; only numpy, scipy and sympy.
 - The shifted Stokes saddle point
   `[[mass*Mv + viscosity*Lv, 0, -Dx^T], [0, ., -Dy^T], [Dx, Dy, 0]]` with the pressure
   constant mode removed, which is exactly the nullspace of that block, factorizations
-  cached on `(mass, viscosity)`, and both an algebraic residual and a pointwise divergence
-  check after every solve.
+  cached on `(mass, viscosity)`. Algebraic momentum and constrained weak-continuity
+  residuals determine acceptance; pointwise divergence sampled on Gauss nodes is
+  reported separately as a resolution diagnostic.
 
 `solver/spectral/model.py`
 
-- The discretisation presented through the seam in `solver/model.py`, so `SDIRK2` and
-  `SDIRK2-mr-ccSAV` drive it unmodified. A modal basis forces two decisions that the MAC
-  model never has to make:
+- The discretisation presented through the seam in `solver/model.py`, so all six
+  shared schemes drive it without spectral-specific stage formulas. A modal basis
+  forces two decisions that the MAC model never has to make:
   - **One vector space.** The schemes add `vector(state)`, `force(t)` and `nonlinear(state)`
     together and hand the sum to `solve`, so all three have to live in the same space. The
     MAC model satisfies this silently, because its basis functions are nodal indicators and

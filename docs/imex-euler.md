@@ -75,11 +75,13 @@ Euler 阶数和阶段数均为 1，候选容量为 1。HDF5 沿用 schema_versio
 普通格式 count=0，SAV count=1 并保存唯一线性解。`final/stage_pressure` 第一维为 1。
 旧二阶/三阶记录仍为两/四阶段及三/五候选容量，旧数据无需迁移。
 
-后端压力乘子除以实际步长后输出，并保持全局零均值。
-新记录标记 `pressure_semantics=euler_step_multiplier_mean_zero`；这是 Euler 步的离散压力，
-验证未宣称物理压力收敛阶。失败记录保留已接受前缀，复用及分析继续检查来源和校验和。
+后端压力乘子除以实际步长后输出。封闭域和周期模型按各自物理积分定义保持零均值，
+相应记录标记 `pressure_semantics=euler_step_multiplier_mean_zero`。
+开放 FEM 的自然应力已经固定压力常数，专属记录使用开放边界标签，不另施加零均值。
+这是 Euler 步的离散压力，验证未宣称物理压力收敛阶；瞬时半离散物理压力与阶段乘子分开。
+失败记录保留已接受前缀，复用及分析继续检查来源和校验和。
 
-MAC、Legendre、Fourier 和 Channel 都可直接使用同一类：
+MAC、Legendre、Fourier、Channel 和 FEM 五类空间模型都可使用同一格式类：
 
 ```python
 from solver.schemes import IMEXEulerMRSAV
@@ -88,15 +90,15 @@ from solver.integrate import integrate
 result = integrate(model, IMEXEulerMRSAV(gamma=1.), initial, [.01, .02, .01])
 ```
 
-公开 Channel/Fourier 配置入口支持两个名称，示例见
+公开 MAC、Channel、Fourier 和 FEM 配置入口支持两个名称；Legendre 可通过模型 API 和专属研究入口使用。示例见
 [一阶验证与示例配置](../experiments/imex_euler/README.md)。Euler 的 `embedded_velocity=None`。
-本次支持固定/给定步长；Channel/Fourier 在配置校验时拒绝新格式的嵌入自适应请求。
-后续 step doubling 需要独立估计器，不能借用旧 SDIRK 的嵌入阶数。
+当前支持固定/给定步长；共同控制器构建入口拒绝 Euler 的嵌入自适应请求。
+step doubling 尚未实现，需要独立估计器，不能借用 SDIRK 的嵌入阶数。
 
 ## 验证范围
 
 测试覆盖独立耦合线性系统、backward Euler 模态与标量衰减、非线性 ODE 一阶收敛、
 完整约束失效、六后端纯梯度压力、固定 lifting、单阶段保存/读取/复用/只读分析及失败前缀。
-周期与 Channel 的非线性时间阶测试扩展到 Euler；自适应测试只用于四套旧嵌入格式。
+周期与 Channel 的非线性时间阶测试扩展到 Euler；自适应测试只用于四种 SDIRK 嵌入格式。
 六后端细化验证保存最终场、解析时间参照及内积权重/质量矩阵，分析不构造模型也不启动积分。
 实际结果及局限记在 [validation.md](validation.md)。

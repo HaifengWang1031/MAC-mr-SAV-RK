@@ -47,6 +47,16 @@ flowchart TD
 
 ## 时间推进、状态与线性求解
 
+当前实现六种格式：`imex_euler/imex_euler_mrsav`、`sdirk2/sdirk2_mrsav`、
+`sdirk3/sdirk3_mrsav`，分别为一/二/三阶、单/两/四阶段。五类空间离散为 MAC、
+Legendre、Fourier、Channel 和 FEM；完整能力表见[项目总览](../README.md#当前算法与支持范围)。
+六格式均支持固定/给定步长，四种 SDIRK 格式支持嵌入式 I/PI；Euler 尚无自适应估计器。
+`DEFAULT_SCHEMES` 的四种研究默认值不是全部格式清单。共同推进能力与实验入口允许的
+配置分别描述：例如通用 MAC 固定步 runner 使用 direct；楔腔入口可选六格式固定步，
+默认 SDIRK2-mr-ccSAV，未开放自适应或给定步长序列。
+FEM 的 Brinkman/Hele–Shaw 是物理模型扩展，Darcy 是独立标量参照；Riesz/弱载荷是动量
+表示选择，均不另计为空间离散或时间格式。可选后端的实测资格见各后端文档。
+
 - [core.py](../solver/core.py) 定义 `State`、`History`、`Trial`、`Stage` 与格式协议。
   单步格式不改写输入状态，返回试算结果；共同推进器负责接受状态与历史记录。
 - [registry.py](../solver/schemes/registry.py) 是格式名称、工厂、阶数、估计器阶数、阶段数

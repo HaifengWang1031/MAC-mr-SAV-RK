@@ -2,10 +2,13 @@
 
 `solver.channel.ChannelModel` solves two-dimensional incompressible velocity-pressure
 Navier–Stokes on `(0,Lx) × (0,H)`, periodic in x and stationary homogeneous no-slip
-at y=0,H. Both spatial directions use second-order MAC differences. The first
-release defaults to the existing coupled sparse `DirectStokes`; the subsequent
-FFT backend accelerates the same MAC equations. All four existing SDIRK/mr-ccSAV schemes and I/PI drivers
-operate through the unchanged Model seam.
+at y=0,H. Both spatial directions use second-order MAC differences. The default
+coupled sparse `DirectStokes` and optional FFT backend solve the same MAC equations.
+All six shared schemes operate
+through the Model seam: `imex_euler/imex_euler_mrsav`, `sdirk2/sdirk2_mrsav`, and
+`sdirk3/sdirk3_mrsav`. All support fixed/prescribed steps; the four SDIRK schemes
+also support embedded I/PI adaptivity. Euler has no adaptive estimator. See the
+[registry](../solver/schemes/registry.py) and [adaptive guide](../solver/adaptivity/README.md).
 
 ## Faces and independent degrees of freedom
 
@@ -102,7 +105,7 @@ Stage pressure is the existing incremental multiplier, not a demonstrated high-o
 physical endpoint pressure. Scalar local-defect control is not a global bound on |r|.
 Short MMS and perturbed-channel checks do not validate long-time high-Re turbulence.
 Moving walls, prescribed flow-rate feedback, stretched grids, MPI backends and
-checkpoint continuation are outside this first release.
+checkpoint continuation are not implemented in the current model.
 
 See [experiment entry points](../experiments/channel_ns/README.md) and
 [recorded verification](validation.md).

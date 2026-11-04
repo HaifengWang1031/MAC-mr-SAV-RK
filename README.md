@@ -1,16 +1,32 @@
 # MAC-mr-SAV-RK
 
-二维不可压 Navier–Stokes 方程的无滑移 MAC 求解器。实现普通 IMEX-SDIRK2/3 与笔记中的增量 SDIRK2/3-mr-ccSAV，支持固定步长及给定步长序列。阶段速度和压力通过耦合 Stokes 系统一起求解，没有压力分裂子步。
+二维不可压流的数值求解与实验项目。当前五类空间离散共用六种时间格式，阶段速度与压力满足同一移位 Stokes 系统；直接、Schur、Fourier 或带状求解是该系统的不同求解方式，没有压力校正分裂子步。
 
-新增 [一阶 IMEX Euler 与 IMEX Euler-mr-ccSAV](docs/imex-euler.md)，配置名为
-`imex_euler/imex_euler_mrsav`。SAV 使用 G=1-r、Q=1，两个同矩阵 Stokes 右端加一个线性标量解。
-四种空间模型可复用，首轮支持固定/给定步长；[示例与六后端验证](experiments/imex_euler/README.md) 独立运行。
+## 当前算法与支持范围
 
-另有独立的二维双周期 [Fourier–Leray 模型](docs/fourier.md)，复用四套格式与 I/PI 自适应，使用实数 collocated 场及严格 2/3 去混叠；既有 MAC/Legendre 接口不变。[周期实验入口](experiments/periodic_ns/README.md) 提供制造解、Kolmogorov、持久化分析和短时计时。
+格式名称、设计阶数和阶段数以 [registry.py](solver/schemes/registry.py) 为准：
 
-新增独立的 [ChannelModel](docs/channel.md)：流向周期、上下壁面无滑移，双向二阶 MAC 离散，复用四套时间格式与 I/PI 自适应。[Channel 实验入口](experiments/channel_ns/README.md) 提供 Poiseuille、启动流、受扰流及制造解；默认耦合稀疏直接求解，可选同一 MAC 方程的 FFT 带状后端。
+| 时间格式配置名 | 速度设计阶数 | 阶段数 | SAV 标量求解 | 步长支持 |
+| --- | --- | --- | --- | --- |
+| `imex_euler` / `imex_euler_mrsav` | 1 | 1 | SAV 版为唯一线性解，G=1-r、Q=1 | 固定、给定序列 |
+| `sdirk2` / `sdirk2_mrsav` | 2 | 2 | SAV 版每阶段三次方程，G=1-r²、Q=1+r | 固定、给定序列、I/PI 自适应 |
+| `sdirk3` / `sdirk3_mrsav` | 3 | 4 | SAV 版每阶段五次方程，G=1-r³、Q=1+r+r² | 固定、给定序列、I/PI 自适应 |
 
-新增独立 [FEM Taylor–Hood P2/P1 模型](docs/fem.md)：一致质量、完整弱连续性检查及独立物理散度诊断；复用六格式固定/给定步与四种嵌入格式 I/PI 自适应。[FEM 实验入口](experiments/fem_ns/README.md) 提供完整系数保存重建；[圆柱绕流 DFG2D-2](experiments/cylinder_ns/README.md) 提供 Re100 自然出口、物理受力、网格/几何/时间验收及保存场动画，不改变既有模型或记录。
+普通版每阶段求一个 Stokes 右端，SAV 版求两个共享同一矩阵的右端。二、三阶 SAV 枚举并筛选数值实根，选最小绝对值根后重新检查阶段方程。默认比较组仍为四种 SDIRK 格式；[一阶实验](experiments/imex_euler/README.md)中的“六后端”指该研究选定的模型/后端组合，当前空间模型与后端清单见下表。
+
+| 空间离散模型 | 边界与离散 | 已实现的 Stokes 后端 |
+| --- | --- | --- |
+| [MAC](docs/numerics.md) | 矩形无滑移、二阶交错差分 | 稀疏直接；DST/DCT 张量求逆＋压力 Schur-CG |
+| [Legendre 谱 Galerkin](docs/spectral.md) | 单元素张量积、Dirichlet 组合基、固定 lifting | 稀疏直接；广义特征分解＋压力 Schur-CG |
+| [Fourier–Leray](docs/fourier.md) | 双周期、严格 2/3 去混叠 | FFT 波数空间显式 Stokes 求解 |
+| [Channel MAC](docs/channel.md) | 流向周期、上下无滑移、二阶交错差分 | 稀疏直接；流向 FFT＋法向带状 LU，保留全部 MAC 模式 |
+| [FEM Taylor–Hood P2/P1](docs/fem.md) | 仿射三角网格、一致质量、反对称弱对流 | 直接 LU；旧因子缺陷校正/GMRES；可选 PETSc FGMRES＋块 AMG |
+
+五类模型都可使用六格式的固定/给定步长，以及四种 SDIRK 嵌入格式的 I/PI 推进器。实验入口开放的配置不完全相同：通用 MAC 固定步入口使用直接后端，tensor 通过专属研究入口或后端注入使用；楔腔入口支持六格式固定步，默认 SDIRK2-mr-ccSAV，尚未开放自适应或给定步长序列。具体入口见[实验导航](experiments/README.md)。
+
+FEM 另有[圆柱开放流动](experiments/cylinder_ns/README.md)、[移动顶盖楔腔](experiments/wedge_cavity/README.md)及 [Hele–Shaw 惯性 Brinkman](docs/hele-shaw.md)模型；独立标量 P2 Darcy 参照不采用 SAV。FEM 的弱载荷表示、一致质量 CG/METIS、可选 PARDISO 与 PETSc 设置见 [FEM 后端说明](docs/fem-multigrid.md)，实现支持与实测资格分别说明。
+
+[自适应说明](solver/adaptivity/README.md)区分 SDIRK2(1)、SDIRK3(2)、可选标量局部缺陷控制、拒步及最小步长策略。Euler 尚无嵌入估计器或 step-doubling 实现；局部容差不代表全局误差上界。设计阶数不替代特定 PDE、边界和正则性条件下的收敛证明。
 
 ## 环境与首个计算
 
@@ -90,7 +106,7 @@ uv run pytest
 - [验证结果](docs/validation.md)：实际网格、收敛阶和局限。
 - [确认的范围](docs/spec.md)、[领域约定](CONTEXT.md)。
 
-当前不包含变网格或断点续算。移动顶盖、I/PI 自适应及可选 Stokes 后端的适用范围见各实验说明；一阶格式尚无自适应估计器。阶段压力是增量乘子；除定常 Stokes 实验外，不将其视为物理终点压力的二阶近似。数值测试不能替代长期稳定性或收敛性的数学证明。
+当前不包含变网格或断点续算。移动顶盖、I/PI 自适应及可选 Stokes 后端的适用范围见各实验说明；一阶格式尚无自适应估计器。阶段压力按格式乘子解释，不将其视为与速度同阶的物理端点压力；开放 FEM 的瞬时半离散物理压力另行恢复并标记。数值测试不能替代长期稳定性或收敛性的数学证明。
 
 ## 经典算例可视化
 
@@ -98,4 +114,4 @@ uv run pytest
 
 从 [实验入口导航](experiments/README.md) 选择算例、验证或性能研究；[2026-09-24 历史记录盘点](docs/experiment-inventory.md) 不是当前支持清单。测试保留原则见 [代表性测试](tests/README.md)。
 
-四种格式的制造解时间收敛实验见 [实验说明](experiments/manufactured_convergence/README.md)。
+四种 SDIRK 格式的制造解时间收敛实验见 [实验说明](experiments/manufactured_convergence/README.md)。

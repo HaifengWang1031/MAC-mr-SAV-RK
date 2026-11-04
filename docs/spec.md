@@ -1,5 +1,23 @@
 # Confirmed implementation specification
 
+## Current capability summary
+
+The implemented scheme registry contains six names: `imex_euler/imex_euler_mrsav`,
+`sdirk2/sdirk2_mrsav`, and `sdirk3/sdirk3_mrsav`. They have velocity design orders
+1/2/3 and 1/2/4 stages. All support fixed and prescribed positive steps; the four
+SDIRK schemes additionally provide embedded I/PI adaptivity. Euler has no embedded
+or step-doubling estimator. The five current spatial Models are no-slip MAC,
+Legendre, doubly periodic Fourier, Channel MAC, and Taylor–Hood P2/P1 FEM.
+Experiment-specific choices can be narrower than the common solver API.
+
+See the [current capability table](../README.md#当前算法与支持范围),
+[architecture](architecture.md), [registry](../solver/schemes/registry.py), and
+[adaptive rules](../solver/adaptivity/README.md). The dated decisions below retain
+their original scope; later extensions supersede initial exclusions. Their test
+or production evidence applies only to the stated configurations and dates.
+
+## Confirmed extensions and historical scope
+
 2026-11-01 approved Hele-Shaw airfoil extension: separate pressure-driven MWR
 inertial Brinkman model, fixed full-gap NACA0012, explicit closure coefficients,
 optional zero-default consistent-mass reaction operator and independent scalar
@@ -80,8 +98,10 @@ Unpenalized direct shifted Stokes checks every weak continuity row and physical-
 pressure gauge; physical gradient divergence is reported separately. All six shared
 formats support fixed/prescribed steps. Dedicated run/load/reconstruct/readonly analysis
 retains full coefficients and mesh/DOF metadata; legacy layouts remain unchanged.
-No adaptive or nonhomogeneous-boundary extension, production campaign or PDE time-order
-proof. See [FEM conventions](fem.md) and [measured evidence](validation.md#2026-10-27-fem-release-verification).
+That initial release excluded adaptivity and nonhomogeneous boundaries; the
+2026-10-28 extension above added both. Its evidence did not establish a production
+campaign or PDE time-order proof. See [FEM conventions](fem.md) and
+[measured evidence](validation.md#2026-10-27-fem-release-verification).
 
 2026-10-05 Legendre performance extension: cached immutable internal quadrature,
 exact 1D closed forms, tensor mass solves, shared weak operators and batched RHS.
@@ -115,7 +135,10 @@ run/load/analyze workflows are covered. The subsequent optional FFT/banded backe
 solves the identical MAC discretisation and is compared to direct solves before timing.
 The default remains direct. See docs/channel.md.
 
-Source: user-confirmed design in the current task, 2026-09-20.
+### Original design (2026-09-20; historical scope)
+
+Source: user-confirmed initial design. Later confirmed extensions above and below
+supersede this section's original two-scheme and fixed-step scope.
 
 - Separate desktop project MAC-mr-SAV-RK; source Stokes_BC.py and Fourier project remain unchanged.
 - Uniform rectangular MAC, homogeneous no-slip, mean-zero pressure, compatible divergence/gradient, positive viscous matrix, energy-compatible centered convection.
