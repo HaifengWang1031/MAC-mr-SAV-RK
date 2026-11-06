@@ -56,6 +56,10 @@ Legendre、Fourier、Channel 和 FEM；完整能力表见[项目总览](../READM
 默认 SDIRK2-mr-ccSAV，未开放自适应或给定步长序列。
 FEM 的 Brinkman/Hele–Shaw 是物理模型扩展，Darcy 是独立标量参照；Riesz/弱载荷是动量
 表示选择，均不另计为空间离散或时间格式。可选后端的实测资格见各后端文档。
+[FourierMHD](../solver/fourier/mhd.py) 复用同一 Fourier 空间与共同推进/校正，在同一乘积
+内积下推进速度和磁场。谱系数形状为 `(2, 2, ny, nx//2+1)`，两块各用物理扩散系数。
+Leray 消去阶段压力，感应方程用反对称通量。阶段残差针对完整投影方程，散度覆盖两个场
+全部格点。实验入口首期开放两种 SDIRK3 的固定步。
 
 - [core.py](../solver/core.py) 定义 `State`、`History`、`Trial`、`Stage` 与格式协议。
   单步格式不改写输入状态，返回试算结果；共同推进器负责接受状态与历史记录。
@@ -161,6 +165,7 @@ roots/selected是stages/r的兼容别名，不能解释为原多项式的实根�
 | --- | --- | --- |
 | 通用 MAC | [load_record](../experiments/records.py) | [plotting.py](../experiments/plotting.py) 等 MAC 读取处理 |
 | 周期 Fourier | [periodic_ns/records.py](../experiments/periodic_ns/records.py) 的 `load_periodic` | Fourier 表示、布局与压力标签 |
+| 周期 Fourier MHD | [periodic_mhd/records.py](../experiments/periodic_mhd/records.py) 的 `load_mhd` | 独立记录家族，补充 `final/magnetic`、`snapshots/magnetic`，省略阶段压力，检查两次校正计数。Zhou 算例另外保存和校验 `snapshots/flux` 与 `snapshots/current`，由 [analyze_zhou](../experiments/periodic_mhd/analyze_zhou.py) 读取两条显式运行记录 |
 | Channel | [channel_ns/records.py](../experiments/channel_ns/records.py) 的 `load_channel` | 周期面布局、壁面与阶段压力 |
 | 封闭 FEM | [fem_ns/records.py](../experiments/fem_ns/records.py) 的 `load_fem` | 独立配置、网格/DOF、系数与阶段/根检查 |
 | 圆柱 FEM | [cylinder_ns/records.py](../experiments/cylinder_ns/records.py) 的 `load_cylinder` | 专属表示与物理观测；同文件还拥有 native benchmark 读取 |
@@ -190,6 +195,22 @@ Gmsh 等计算依赖保持按需导入；已有保存网格的读取不要求这
 `runs/<实验名>/<运行编号>/` 保存有效 `config.json`、含来源/状态/校验和的 `manifest.json`、
 公共工作流的 `results.h5` 和 `run.log`。专属研究也有 NPZ/JSON 命名空间，以对应家族说明为准。
 公共 HDF5 保存时间/步长、诊断、最终状态、请求/实际快照节点、阶段残差、标量校正诊断和历史根槽。
+
+低/高频制造解诊断由 `tools/rerun_low_high_stability_probe.py` 重跑当前格式，
+沿用独立 `runs/low_high_stability_probe/<run-id>/` NPZ/JSON 命名空间。
+它读取显式旧基准参数、创建新身份并保存当前源码；不将新固定校正冒充旧求根结果。
+schema 2 的九列历史以 metadata/history_columns 为准，其中第六列记录实际耦合因子偏离1的最大值；
+额外 `stage_records` 保存两次校正、预测值、冻结因子、实际耦合及完整残差，
+以 `stage_times=history[1:,0]` 对齐，列名由 metadata/stage_columns 给出。
+对应报告内的 `plot.py`、`verify.py` 仅读取显式运行目录，旧schema 1及旧报告保持原记录。
+`tools/search_low_high_stability_steps.py`复用该计算入口，仅覆盖有效配置的dt，
+在`step_search/<batch-id>/cases/`保存各步长两方法的新运行；搜索索引保留全部状态，
+按全过程SAV误差、前期精度及原格式范数爆破条件筛选。并发进程数是执行控制，不改数值公式。
+`tools`是可导入的辅助脚本包，命令行入口仍可直接执行；分析脚本仅读显式完成批次及已核验基准。
+128²长算将当前数值源码冻结到`search_128/<job-id>/source`，从该副本导入并保存每档记录。
+独立报告的state/completion标记计算、核验和绘图阶段；短窗定位与正式T=30表分开，
+必要的T=40观察单列，不把线性化Ritz筛查或短窗成功当作完整非线性资格。
+
 阶段数和候选容量由 registry 指定：Euler 为 1/1，SDIRK2 为 2/3，SDIRK3 为 4/5；当前所有格式
 的实际根计数为零，不使用的候选位置填 NaN。`final/stage_pressure` 是最后接受步的阶段乘子。
 

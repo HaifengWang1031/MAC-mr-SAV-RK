@@ -124,7 +124,8 @@ def save_scalar_corrections(data: Any, stages: list[list[dict]], n_stages: int) 
         data.create_dataset('corrections/'+key, data=value)
 
 def save_result(path: Path, result: "Result", metrics: dict, n_stages: int = 2, *,
-                n_roots: int | None = None, pressure_semantics: str | None = None) -> None:
+                n_roots: int | None = None, pressure_semantics: str | None = None,
+                include_stage_pressure: bool = True) -> None:
     if n_roots is None: n_roots = {1: 1, 2: 3, 4: 5}[n_stages]
     temporary=path.with_suffix('.tmp')
     with h5py.File(temporary,'w') as data:
@@ -138,7 +139,7 @@ def save_result(path: Path, result: "Result", metrics: dict, n_stages: int = 2, 
             data.create_dataset('diagnostics/'+key,data=[item[key] for item in result.diagnostics])
         for key,value in [('u',result.final.u),('v',result.final.v),('r',result.final.r),('t',result.final.t)]:
             data.create_dataset('final/'+key,data=value)
-        if result.final_stages:
+        if include_stage_pressure and result.final_stages:
             data.create_dataset('final/stage_pressure',data=np.stack([s.pressure for s in result.final_stages]))
         data.create_dataset('snapshots/requested_times',data=result.snapshot_requests)
         data.create_dataset('snapshots/actual_times',data=result.snapshot_times)

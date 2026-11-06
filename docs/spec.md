@@ -28,6 +28,20 @@ or production evidence applies only to the stated configurations and dates.
 
 ## Confirmed extensions and historical scope
 
+2026-11-06 periodic incompressible resistive MHD: reuse the Fourier space,
+projected momentum and antisymmetric induction flux, with joint velocity/magnetic
+pairing and the shared fixed two-correction SDIRK3-mr-ccSAV stage. The Orszag–Tang
+entry point supports ordinary and SAV SDIRK3 with fixed steps. Pressure is eliminated
+and both full divergences are checked. See [the study](../experiments/periodic_mhd/README.md)
+for fixed-grid time refinement, independent grid/step checks of the paper curves,
+and the separate initial-amplitude sensitivity case.
+
+The Zhou magnetic-island case uses the same fixed-step model, derives viscosity
+and magnetic diffusivity from the initial island Lundquist number, and saves
+the zero-mean flux and current with each requested snapshot. Its paired,
+read-only analysis checks the initial fields and compares magnetic decay,
+prominent O-point counts, and spectral peaks.
+
 2026-11-01 approved Hele-Shaw airfoil extension: separate pressure-driven MWR
 inertial Brinkman model, fixed full-gap NACA0012, explicit closure coefficients,
 optional zero-default consistent-mass reaction operator and independent scalar

@@ -114,10 +114,12 @@ if TYPE_CHECKING:
     from .mac_ns import MACNavierStokes
     from .spectral.model import SpectralModel
     from .fourier.model import FourierModel
+    from .fourier.mhd import FourierMHD
     from .channel.model import ChannelModel
     from .fem.model import FEMModel
     _staggered_realisation: type[Model] = MACNavierStokes
     _spectral_realisation: type[Model] = SpectralModel
     _fourier_realisation: type[Model] = FourierModel
+    _mhd_realisation: type[Model] = FourierMHD
     _channel_realisation: type[Model] = ChannelModel
     _fem_realisation: type[Model] = FEMModel

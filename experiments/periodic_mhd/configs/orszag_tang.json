@@ -1,0 +1,16 @@
+{
+  "physical": {
+    "nu": 0.02,
+    "eta": 0.02,
+    "gamma": 1.0,
+    "T": 2.0,
+    "snapshots": [0.0, 1.0, 2.0],
+    "log_every": 100
+  },
+  "time_grid": 96,
+  "time_steps": [0.015625, 0.0078125, 0.00390625, 0.001953125],
+  "reference_dt": 0.000244140625,
+  "curve_grid": 192,
+  "curve_dt": 0.001953125,
+  "curve_amplitudes": [1.0, 2.0]
+}
