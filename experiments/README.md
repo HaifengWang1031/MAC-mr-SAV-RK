@@ -58,7 +58,7 @@
 | [Kolmogorov 统一速度容差 I/PI](kolmogorov_adaptive/README.md#current-design) | 八组方法/控制器、严格输出对齐及同格式固定步阶梯 | — | — | 待整理 |
 | [Kolmogorov 速度容差搜索](kolmogorov_adaptive/README.md#tolerance-search) | 短时重复计时下共同容差与分组容差的成本/精度取舍 | — | — | 待整理；旧扫描报告缺失 |
 | [Kolmogorov 自然节点逐点参考](kolmogorov_adaptive/README.md#natural-adaptive-nodes-and-optional-reference-errors) | 每条自适应轨迹的接受节点参考误差及其计算开销 | — | — | 待整理 |
-| [力矩转变MAC256正式运行](torque_transition/README.md) | 用户明确批准13相位从零至T100000，6单线程后台队列，标量1/场10最近节点流式保存 | production_v1计划、日志、原子checkpoint | 未启用 | 已启动；用户要求不再测试，新流式/PI恢复尚无端到端测试资格，不能当作长期统计已完成 |
+| [力矩转变MAC256正式运行](torque_transition/README.md) | 用户将13相位总终点缩短至T10000，保留已算前缀，6单线程后台队列，标量1/场10最近节点流式保存 | production_v1计划、日志、原子checkpoint | 未启用 | 已启动；用户要求不再测试，新流式/PI恢复尚无端到端测试资格，不能当作长期统计已完成 |
 | [力矩转变MAC256自适应参数搜索](torque_transition/README.md) | 同场速度/标量容差、I/PI及步长上限，独立固定细步/半步参考和交错计时 | 短窗候选与原生计时 | — | 已取得X4一个时间单位及两相位早期检查资格；非长期或全局最优，正式待确认 |
 | [Kolmogorov 联合速度/标量容差搜索](kolmogorov_adaptive/README.md) | 严格输出节点下局部联合控制的 CPU、速度误差和标量取舍 | — | — | 待整理 |
 

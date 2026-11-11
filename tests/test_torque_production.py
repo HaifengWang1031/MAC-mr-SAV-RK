@@ -1,12 +1,16 @@
 """Production persistence regressions; added but not run for the no-more-tests launch."""
 import csv
 import json
+import os
+
+import pytest
 from threading import Event
 from types import SimpleNamespace
 
 import numpy as np
 
-from experiments.torque_transition.production import Recorder, SCALAR_KEYS
+from experiments.records import write_json
+from experiments.torque_transition.production import FINAL_T, Recorder, SCALAR_KEYS, retarget
 from solver.adaptivity import PIController, ScalarErrorControl, integrate_adaptive
 from solver.schemes.sdirk3_mrsav import SDIRK3MRSAV
 from tests.test_sdirk3 import ODEModel, State
@@ -64,3 +68,14 @@ def test_nearest_sampler_and_checkpoint_offsets_restore_without_duplicate_output
     assert [float(row['request_t']) for row in rows] == [0., 1., 2.]
     # 2 is exactly midway: the earlier natural accepted node must win.
     assert [float(row['actual_t']) for row in rows] == [0., 1.5, 1.5]
+
+
+def test_retarget_cannot_copy_a_live_parent(tmp_path):
+    assert FINAL_T == 10000.
+    parent = tmp_path/'old'
+    parent.mkdir()
+    write_json(parent/'plan.json', {'approved': True, 'T': 100000.})
+    write_json(parent/'supervisor.json', {'pid': os.getpid()})
+    with pytest.raises(ValueError, match='supervisor still exists'):
+        retarget(parent, tmp_path/'new')
+    assert not (tmp_path/'new').exists()

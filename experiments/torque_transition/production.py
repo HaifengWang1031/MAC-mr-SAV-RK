@@ -14,7 +14,7 @@ import shutil
 import signal
 import subprocess
 import sys
-from threading import Event, Lock
+from threading import Event, RLock
 from time import perf_counter
 from typing import Any, TextIO
 
@@ -26,6 +26,22 @@ from experiments.torque_transition.mac_model import make_mac_model, mac_observab
 from experiments.torque_transition.preflight import PHASE_DEGREES, THREAD_KEYS
 from solver.adaptivity import AdaptiveContinuation, AdaptiveResult, ScalarErrorControl, integrate_adaptive
 from solver.schemes.sdirk3_mrsav import SDIRK3MRSAV
+
+FINAL_T = 10000.
+
+
+class StopFlag:
+    """Idempotent signal flag: no lock acquisition inside a signal handler."""
+
+    def __init__(self) -> None:
+        self.requested = False
+
+    def set(self) -> None:
+        self.requested = True
+
+    def is_set(self) -> bool:
+        return self.requested
+
 
 ATTEMPT_KEYS = ('t', 'step', 'error', 'accepted', 'error_u', 'error_r', 'scalar_defect',
                 'reason', 'factor', 'boundary_partition', 'output_truncated',
@@ -111,7 +127,7 @@ class Recorder:
     """At most two accepted face states; no output-related timestep truncation."""
 
     def __init__(self, directory: Path, model: Any, case: int, plan_hash: str,
-                 initial: Any, metadata: dict[str, Any] | None, stopping: Event) -> None:
+                 initial: Any, metadata: dict[str, Any] | None, stopping: Event | StopFlag) -> None:
         self.directory, self.model, self.case = directory, model, case
         self.plan_hash, self.previous, self.stopping = plan_hash, initial, stopping
         self.next_scalar = metadata['next_scalar'] if metadata else 0
@@ -129,7 +145,7 @@ class Recorder:
     def sample(self, current: Any) -> None:
         previous = self.previous
         cache: dict[float, dict[str, float]] = {}
-        while self.next_scalar <= 100000 and self.next_scalar <= current.t:
+        while self.next_scalar <= FINAL_T and self.next_scalar <= current.t:
             request = float(self.next_scalar)
             selected = previous if request-previous.t <= current.t-request else current
             if selected.t not in cache:
@@ -137,7 +153,7 @@ class Recorder:
             self.streams.writers['scalars.csv'].writerow(
                 {'request_t': request, 'actual_t': selected.t, 'r': selected.r, **cache[selected.t]})
             self.next_scalar += 1
-        while 10*self.next_field <= 100000 and 10*self.next_field <= current.t:
+        while 10*self.next_field <= FINAL_T and 10*self.next_field <= current.t:
             request = float(10*self.next_field)
             selected = previous if request-previous.t <= current.t-request else current
             path = self.directory/'fields'/f'{self.next_field:05d}.npz'
@@ -180,7 +196,7 @@ class Recorder:
             'divergence_inf': result.diagnostics[-1]['divergence_inf']})
         self.last_state, self.last_history = state, result.continuation
         if state.t-self.last_checkpoint_t >= 10 or perf_counter()-self.last_checkpoint >= 900 \
-                or self.stopping.is_set() or state.t == 100000.:
+                or self.stopping.is_set() or state.t == FINAL_T:
             self.checkpoint(state, result.continuation)
             if shutil.disk_usage(self.directory).free < 20*1024**3:
                 raise RuntimeError('Less than 20GiB disk free; paused at durable checkpoint')
@@ -192,7 +208,7 @@ def run_case(directory: Path, case: int, *, resume: bool = False) -> None:
     """One full trajectory; no pilot, no shortened production T and no forced acceptance."""
     plan_path = directory/'plan.json'
     plan, plan_hash = json.loads(plan_path.read_text()), digest(plan_path)
-    if not plan['approved'] or plan['T'] != 100000. or plan['grid_cells'] != 256:
+    if not plan['approved'] or plan['T'] != FINAL_T or plan['grid_cells'] != 256:
         raise ValueError('Missing production approval or changed production target')
     if provenance()['code_sha256'] != plan['source']['code_sha256']:
         raise ValueError('Frozen production source changed')
@@ -201,7 +217,7 @@ def run_case(directory: Path, case: int, *, resume: bool = False) -> None:
     output = directory/f'X{case:02d}'
     output.mkdir(exist_ok=resume)
     (output/'fields').mkdir(exist_ok=resume)
-    stopping = Event()
+    stopping = StopFlag()
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: stopping.set())
     model = make_mac_model(256, PHASE_DEGREES[case])
@@ -210,19 +226,26 @@ def run_case(directory: Path, case: int, *, resume: bool = False) -> None:
         with np.load(output/'checkpoint.npz', allow_pickle=False) as saved:
             metadata = json.loads(str(saved['metadata']))
             vector = saved['velocity'].copy()
-        if metadata['plan_sha256'] != plan_hash or metadata['case'] != case or metadata['nodes'] != 256:
+        allowed_plans = {plan_hash}
+        if 'parent_plan_sha256' in plan:
+            if digest(directory/'parent-plan.json') != plan['parent_plan_sha256']:
+                raise ValueError('Retarget parent plan checksum mismatch')
+            allowed_plans.add(plan['parent_plan_sha256'])
+        if metadata['plan_sha256'] not in allowed_plans or metadata['case'] != case or metadata['nodes'] != 256:
             raise ValueError('Checkpoint identity mismatch')
+        if not 0 <= metadata['t'] <= FINAL_T:
+            raise ValueError('Checkpoint outside shortened production interval')
         if hashlib.sha256(vector.tobytes()).hexdigest() != metadata['velocity_sha256']:
             raise ValueError('Checkpoint velocity checksum mismatch')
         initial = model.state(metadata['t'], vector, metadata['r'])
     else:
         initial = model.state(0., np.zeros(model.grid.size), 0.)
     recorder = Recorder(output, model, case, plan_hash, initial, metadata, stopping)
-    event('started', case=case, pid=os.getpid(), t=initial.t, final_T=100000., resume=resume)
+    event('started', case=case, pid=os.getpid(), t=initial.t, final_T=FINAL_T, resume=resume)
     try:
-        if initial.t < 100000.:
+        if initial.t < FINAL_T:
             controller = make_controller({**plan['controller'], 'max_steps': 100_000_000}, 'sdirk3_mrsav')
-            result = integrate_adaptive(model, SDIRK3MRSAV(1000.), initial, 100000.-initial.t, 1e-4,
+            result = integrate_adaptive(model, SDIRK3MRSAV(1000.), initial, FINAL_T-initial.t, 1e-4,
                 controller=controller, scalar_control=ScalarErrorControl(1e-3, 1000.),
                 min_step_policy='fail', retain_history=False,
                 continuation=recorder.last_history if resume else None,
@@ -231,11 +254,11 @@ def run_case(directory: Path, case: int, *, resume: bool = False) -> None:
             if result.status != 'complete':
                 raise RuntimeError(result.error)
         recorder.checkpoint(recorder.last_state, recorder.last_history)
-        atomic_json(output/'status.json', {'status': 'complete', 'pid': os.getpid(), 't': 100000.,
+        atomic_json(output/'status.json', {'status': 'complete', 'pid': os.getpid(), 't': FINAL_T,
                     'accepted_steps': recorder.last_history.accepted_steps,
                     'attempted_steps': recorder.last_history.attempted_steps,
                     'plan_sha256': plan_hash, 'checkpoint_sha256': digest(output/'checkpoint.npz')})
-        event('completed', case=case, t=100000.)
+        event('completed', case=case, t=FINAL_T)
     except BaseException as exc:
         # Keep the last transactional checkpoint. Never relabel a failure as a completed trajectory.
         atomic_json(output/'status.json', {'status': 'paused' if stopping.is_set() else 'failed',
@@ -245,6 +268,79 @@ def run_case(directory: Path, case: int, *, resume: bool = False) -> None:
         raise
     finally:
         recorder.streams.close()
+
+
+def retarget(parent: Path, directory: Path) -> None:
+    """Copy a stopped prefix and explicitly amend only T; never relabel old payloads."""
+    parent = parent.resolve()
+    old_plan = json.loads((parent/'plan.json').read_text())
+    old_hash = digest(parent/'plan.json')
+    supervisor = parent/'supervisor.json'
+    if supervisor.exists():
+        pid = json.loads(supervisor.read_text()).get('pid')
+        if pid and Path(f'/proc/{pid}').exists():
+            raise ValueError(f'Parent supervisor still exists: {pid}')
+    if not old_plan['approved'] or old_plan['T'] <= FINAL_T:
+        raise ValueError('Expected an approved longer parent trajectory')
+    old_root, new_root = parent.parents[1], Path(__file__).resolve().parents[2]
+    paths = [Path(name) for name in ('pyproject.toml', 'uv.lock', '.python-version')]
+    for name in ('solver', 'experiments', 'tools'):
+        old_files = {p.relative_to(old_root) for p in (old_root/name).rglob('*.py')}
+        new_files = {p.relative_to(new_root) for p in (new_root/name).rglob('*.py')}
+        if old_files != new_files:
+            raise ValueError('Source inventory changed outside the target amendment')
+        paths.extend(sorted(old_files))
+    fingerprint = hashlib.sha256()
+    for path in paths:
+        before = (old_root/path).read_bytes()
+        fingerprint.update(str(path).encode())
+        fingerprint.update(before)
+        if str(path) != 'experiments/torque_transition/production.py' and before != (new_root/path).read_bytes():
+            raise ValueError(f'Numerical/dependency source changed: {path}')
+    if fingerprint.hexdigest() != old_plan['source']['code_sha256']:
+        raise ValueError('Parent frozen source checksum mismatch')
+    restored = {}
+    for case in range(13):
+        member = parent/f'X{case:02d}'
+        status = member/'status.json'
+        if status.exists():
+            pid = json.loads(status.read_text()).get('pid')
+            if pid and Path(f'/proc/{pid}').exists():
+                raise ValueError(f'Parent worker still exists: {pid}')
+        checkpoint = member/'checkpoint.npz'
+        if not checkpoint.exists():
+            continue
+        with np.load(checkpoint, allow_pickle=False) as saved:
+            metadata = json.loads(str(saved['metadata']))
+            vector = saved['velocity']
+            if metadata['plan_sha256'] != old_hash or metadata['case'] != case or not 0 <= metadata['t'] < FINAL_T:
+                raise ValueError('Parent checkpoint identity/time mismatch')
+            if hashlib.sha256(vector.tobytes()).hexdigest() != metadata['velocity_sha256']:
+                raise ValueError('Parent checkpoint velocity corrupted')
+        for name, offset in metadata['offsets'].items():
+            if (member/name).stat().st_size < offset:
+                raise ValueError('Parent journal is shorter than its committed checkpoint')
+        with (member/'fields.jsonl').open('rb') as stream:
+            lines = stream.read(metadata['offsets']['fields.jsonl']).decode().splitlines()
+        for line in lines:
+            field = json.loads(line)
+            if digest(member/field['path']) != field['sha256']:
+                raise ValueError('Committed parent field checksum mismatch')
+        restored[str(case)] = metadata['t']
+    shutil.copytree(parent, directory)
+    os.replace(directory/'plan.json', directory/'parent-plan.json')
+    if (directory/'supervisor.json').exists():
+        os.replace(directory/'supervisor.json', directory/'parent-supervisor.json')
+    updated = {**old_plan, 'T': FINAL_T, 'source': provenance(),
+               'created_utc': datetime.now(timezone.utc).isoformat(),
+               'approval': 'User: T改成10000吧，我没有这么多计算时间',
+               'parent_plan_sha256': old_hash, 'parent_directory': str(parent),
+               'amendment': {'old_T': old_plan['T'], 'new_T': FINAL_T,
+                             'restored_checkpoint_times': restored,
+                             'scope': 'T and output horizon only; same numerical source except operational production entry'},
+               'shutdown_note': 'X0 required SIGKILL after graceful-stop timeout; recovered its last durable checkpoint; others stopped at accepted nodes'}
+    atomic_json(directory/'plan.json', updated)
+    event('retargeted', old_T=old_plan['T'], new_T=FINAL_T, restored=restored)
 
 
 def supervise(directory: Path, candidate: Path | None, *, resume: bool = False) -> None:
@@ -260,7 +356,7 @@ def supervise(directory: Path, candidate: Path | None, *, resume: bool = False) 
             'schema': 'torque_transition_production_v1', 'approved': True,
             'approval': 'User: 不需要测试了，直接执行吧；不需要实时监测进度，留一个log监测任务进程',
             'created_utc': datetime.now(timezone.utc).isoformat(), 'source': provenance(),
-            'candidate_sha256': digest(candidate), 'T': 100000., 'grid_cells': 256,
+            'candidate_sha256': digest(candidate), 'T': FINAL_T, 'grid_cells': 256,
             'nu': 2e-4, 'f0': .1, 'kf': 5, 'gamma': 1000., 'r0': 0.,
             'controller': selected['controller'], 'scalar_atol': 1e-3, 'initial_step': 1e-4,
             'workers': 6, 'threads': 1, 'phase_degrees': PHASE_DEGREES,
@@ -269,9 +365,12 @@ def supervise(directory: Path, candidate: Path | None, *, resume: bool = False) 
             'checkpoint': 'atomic accepted state + both PI histories + proposed h + sampler indices + journal offsets',
             'validation_limit': 'User requested no further tests; new streaming/restart path statically checked only; no restart equivalence qualification',
             'production_max_accepted_steps': 100_000_000})
+    effective = json.loads((directory/'plan.json').read_text())
+    if effective['T'] != FINAL_T or effective['source']['code_sha256'] != provenance()['code_sha256']:
+        raise ValueError('Supervisor target/source identity mismatch')
     plan_hash = digest(directory/'plan.json')
     active: dict[int, subprocess.Popen[Any]] = {}
-    lock, stopping = Lock(), Event()
+    lock, stopping = RLock(), StopFlag()
 
     def stop(*_: Any) -> None:
         stopping.set()
@@ -330,14 +429,19 @@ def supervise(directory: Path, candidate: Path | None, *, resume: bool = False) 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=('supervise', 'case'))
+    parser.add_argument('mode', choices=('supervise', 'case', 'retarget'))
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--candidate', type=Path)
+    parser.add_argument('--parent', type=Path)
     parser.add_argument('--case', type=int)
     parser.add_argument('--resume', action='store_true')
     arguments = parser.parse_args()
     if arguments.mode == 'supervise':
         supervise(arguments.output, arguments.candidate, resume=arguments.resume)
+    elif arguments.mode == 'retarget':
+        if arguments.parent is None:
+            parser.error('retarget requires --parent')
+        retarget(arguments.parent, arguments.output)
     else:
         if arguments.case is None:
             parser.error('case requires --case')

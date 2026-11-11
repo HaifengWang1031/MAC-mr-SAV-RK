@@ -3026,3 +3026,26 @@ X6–X12由同一队列调度；这属于正式轨迹初段，不是额外测试
 
 启动元数据 `runs/torque_transition/production-20261111T141856Z/`，
 报告 `reports/torque_transition/production-20261111T141856Z/launch.md`。
+
+## 2026-11-11 用户缩短总终点至T10000：已从接受态恢复
+
+用户因计算时间不足，将所有13条轨迹终点由100000改为**10000（从t0算起，包含过渡段）**。
+未做额外数值试验或pytest。原6worker/父supervisor已停止，五条在接受节点保存；X0正常
+停止90秒后仍阻塞，最终仅结束该进程，用最后持久checkpoint恢复，未从零重跑。
+恢复t依次40.0132948294、46.7704754826、47.4111936563、48.0805878859、41.9377968684、45.2304059100。
+X0最后检查点之后的未提交尾部被丢弃/重算；其余数值前缀保留。未断言X0阻塞的精确根因。
+
+显式retarget核验父完整源码哈希、除production入口外数值/依赖源码逐字节相同、状态SHA256、
+提交日志偏移和字段SHA256，再复制到新冻结根并保存parent-plan/哈希。绑定父checkpoint仅
+用于这次目标修订，保留双PI/建议h/计数/采样下标，旧场和原目录不回写；后续新记录绑定新plan。
+production终止与采样上界同步改为10000；共享格式、阶段与控制器公式未改。操作入口信号标记
+改为幂等无锁StopFlag、supervisor使用RLock，避免信号重入锁风险；信号/恢复等价性测试未运行。
+
+2026-11-11 14:47:43 UTC已在 `/home/hfwang/torque-production-T10000-20261111T144708Z/`
+恢复6单线程worker，supervisor PID164396，启动日志均确认resume=true与final_T10000；
+其他7算例仍在队列、从零算至10000。旧T100000任务不得再次启动。
+新源码SHA256 `8145d14abf80ba98af4832c5eb17a53ddcae80cc42b9bad9d772ad21620001ef`，
+已与本地核对。静态mypy232文件通过、diff检查通过；不将真实运行恢复当成独立重启等价性验证。
+新设置 `experiments/torque_transition/configs/production_T10000.json`，元数据
+`runs/torque_transition/production-T10000-20261111T144708Z/`，报告
+`reports/torque_transition/production-T10000-20261111T144708Z/retarget.md`。
