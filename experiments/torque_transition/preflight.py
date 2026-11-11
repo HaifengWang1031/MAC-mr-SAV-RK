@@ -1,7 +1,8 @@
 """Bounded smoke tests and native concurrency benchmarks, never a production launcher.
 
-128 denotes the nonlinear/observable Gauss rule, not 128 velocity modes.
-The maximum compatible dealiased Dirichlet modal count is 84.
+For spectral probes, 128 denotes the nonlinear Gauss rule (84 velocity modes).
+For explicit MAC probes, --nodes counts cells per direction (user target: 256).
+Neither path provides production streaming or strict PI-history continuation.
 """
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ import numpy as np
 from threadpoolctl import threadpool_info
 
 from experiments.controllers import controller_settings, make_controller
+from experiments.torque_transition.mac_model import make_mac_model, mac_observables
 from experiments.records import digest, provenance, write_json
 from solver.adaptivity import ScalarErrorControl, integrate_adaptive
 from solver.schemes.sdirk3_mrsav import SDIRK3MRSAV
@@ -83,17 +85,28 @@ def observables(model: SpectralModel, state: Any, case: int) -> dict[str, float]
 
 def run_probe(output: Path, *, nodes: int = 128, case: int = 4,
               duration: float = 1., backend: str = 'tensor', seed: Path | None = None,
-              barrier: Path | None = None) -> dict[str, Any]:
+              barrier: Path | None = None, discretization: str = 'spectral') -> dict[str, Any]:
     """Save one short accepted-prefix probe. No claim of production checkpointing."""
     if not 0 < duration <= 100:
         raise ValueError('Preflight duration must be in (0,100]; production is not supported')
+    if discretization not in ('spectral', 'mac') or case not in range(13):
+        raise ValueError('Unknown representation or case')
     output.mkdir(parents=True, exist_ok=False)
     start = perf_counter()
-    model = make_model(nodes, case, backend)
+    model: Any = (make_model(nodes, case, backend) if discretization == 'spectral' else
+                  make_mac_model(nodes, PHASE_DEGREES[case], backend))
+    observe = observables if discretization == 'spectral' else mac_observables
+    target = {**PRODUCTION, 'discretization': discretization}
+    if discretization == 'mac':
+        target.update(gauss_nodes=None, grid_cells=nodes)
     if seed is None:
-        initial = model.state(0., model.zero_velocity(), 0.)
+        zero = model.zero_velocity() if discretization == 'spectral' else np.zeros(model.grid.size)
+        initial = model.state(0., zero, 0.)
     else:
         with np.load(seed) as data:
+            representation = str(data['discretization']) if 'discretization' in data else 'spectral'
+            if representation != discretization:
+                raise ValueError('Seed representation mismatch')
             if int(data['case']) != case or int(data['nodes']) != nodes:
                 raise ValueError('Seed physical/spatial configuration mismatch')
             initial = model.state(float(data['t']), data['velocity'], float(data['r']))
@@ -120,7 +133,7 @@ def run_probe(output: Path, *, nodes: int = 128, case: int = 4,
             write_json(output/'progress.json', {'t': state.t, 'accepted_steps': accepted_count,
                                                'wall_seconds': perf_counter()-start})
             np.savez(output/'latest.npz', velocity=model.vector(state), r=state.r,
-                     t=state.t, nodes=nodes, case=case)
+                     t=state.t, nodes=nodes, case=case, discretization=discretization)
 
     requests = [float(k) for k in range(int(np.ceil(initial.t)),
                                         int(np.floor(initial.t+duration))+1)]
@@ -129,12 +142,12 @@ def run_probe(output: Path, *, nodes: int = 128, case: int = 4,
                                 snapshots=requests, strict_snapshots=False, on_accept=progress_state)
     vector = model.vector(result.final)
     np.savez(output/'final.npz', velocity=vector, r=result.final.r, t=result.final.t,
-             nodes=nodes, case=case)
+             nodes=nodes, case=case, discretization=discretization)
     np.savez(output/'history.npz', times=result.times,
              steps=[a['step'] for a in result.attempts],
              accepted=[a['accepted'] for a in result.attempts])
     samples = [{'request_t': request, 'actual_t': actual,
-                **observables(model, state, case)}
+                **observe(model, state, case)}
                for request, actual, state in zip(result.snapshot_requests,
                                                  result.snapshot_times, result.snapshots)]
     write_json(output/'scalar_samples.json', {'samples': samples})
@@ -144,16 +157,20 @@ def run_probe(output: Path, *, nodes: int = 128, case: int = 4,
              times=np.array(result.snapshot_times)[field_indices],
              velocity=np.array([model.vector(result.snapshots[i]) for i in field_indices]))
     stages = [s for row in result.stages for s in row]
-    row = {'status': result.status, 'error': result.error, 'gauss_nodes': nodes,
+    row = {'status': result.status, 'error': result.error,
+           'discretization': discretization,
+           'gauss_nodes': nodes if discretization == 'spectral' else None,
+           'grid_cells': nodes if discretization == 'mac' else None,
            'source': provenance(),
            'controller': controller_settings(controller), 'initial_step': .001,
            'gamma': 1000., 'scalar_atol': 1e-5,
            'seed': None if seed is None else {'path': str(seed), 'sha256': digest(seed)},
            'artifacts': {p.name: digest(p) for p in output.iterdir() if p.suffix in ('.npz', '.json')
                          and p.name != 'progress.json'}, 
-           'modes': model.space.size, 'case': case, 'backend': backend,
+           'modes': model.space.size if discretization == 'spectral' else None,
+           'case': case, 'backend': backend,
            'phase_degrees': PHASE_DEGREES[case], 'phase_source': 'inferred_from_rounded_table',
-           'production_target': PRODUCTION, 'start_t': initial.t, 'final_t': result.final.t,
+           'production_target': target, 'start_t': initial.t, 'final_t': result.final.t,
            'setup_wall_seconds': setup, 'integration_wall_seconds': result.seconds,
            'accepted_steps': len(result.times)-1, 'attempts': len(result.attempts),
            'max_coupling_deviation': max((abs(s['frozen_factor']*(1-s['r'])-1)
@@ -165,10 +182,11 @@ def run_probe(output: Path, *, nodes: int = 128, case: int = 4,
                              (1 if sys.platform == 'darwin' else 1024),
            'threadpools': threadpool_info(),
            'thread_environment': {k: os.environ.get(k) for k in THREAD_KEYS},
-           'final_observables': observables(model, result.final, case),
+           'final_observables': observe(model, result.final, case),
            'qualification': 'short_probe_only; PI history reset at seed; not production resume'}
     write_json(output/'result.json', row)
-    model.close()
+    if discretization == 'spectral':
+        model.close()
     if result.status != 'complete':
         raise RuntimeError(f'Probe failed: {result.error}')
     return row
@@ -181,6 +199,12 @@ def benchmark(output: Path, seed: Path, *, duration: float = .2, repeats: int = 
     combinations = combinations or [(1, 1), (2, 1), (4, 1), (6, 1), (8, 1), (2, 2), (4, 2)]
     if any(w < 1 or w > 13 or t < 1 or t > 4 for w, t in combinations):
         raise ValueError('Benchmark requires 1..13 workers and 1..4 threads')
+    with np.load(seed) as saved:
+        representation = str(saved['discretization']) if 'discretization' in saved else 'spectral'
+        seed_nodes, seed_case = int(saved['nodes']), int(saved['case'])
+    target = {**PRODUCTION, 'discretization': representation}
+    if representation == 'mac':
+        target.update(gauss_nodes=None, grid_cells=seed_nodes)
     rows: list[dict[str, Any]] = []
     for repeat in range(repeats):
         order = combinations if repeat % 2 == 0 else list(reversed(combinations))
@@ -197,7 +221,9 @@ def benchmark(output: Path, seed: Path, *, duration: float = .2, repeats: int = 
                     streams.append(stream)
                     command = [sys.executable, '-m', 'experiments.torque_transition.preflight',
                                'probe', '--output', str(group/str(worker)), '--seed', str(seed),
-                               '--duration', str(duration), '--barrier', str(release)]
+                               '--duration', str(duration), '--barrier', str(release),
+                               '--nodes', str(seed_nodes), '--case', str(seed_case),
+                               '--discretization', representation]
                     processes.append(subprocess.Popen(command, env=env, stdout=stream, stderr=stream))
                 deadline = monotonic()+180
                 while not all((group/str(i)/'ready').exists() for i in range(workers)):
@@ -223,7 +249,7 @@ def benchmark(output: Path, seed: Path, *, duration: float = .2, repeats: int = 
                        'rss_sum_peak_bytes': sum(r['peak_rss_bytes'] for r in results),
                        'max_stage_residual': max(r['max_stage_residual'] for r in results)}
                 rows.append(row)
-                write_json(output/'measurements.json', {'production_target': PRODUCTION, 'rows': rows})
+                write_json(output/'measurements.json', {'production_target': target, 'rows': rows})
                 print(json.dumps(row), flush=True)
             finally:
                 for p in processes:
@@ -239,7 +265,7 @@ def benchmark(output: Path, seed: Path, *, duration: float = .2, repeats: int = 
                         'median_throughput': float(np.median([r['throughput'] for r in selected])),
                         'max_peak_rss_bytes': max(r['rss_sum_peak_bytes'] for r in selected)})
     write_json(output/'summary.json', {'status': 'complete', 'rows': sorted(summary, key=lambda r: -r['median_throughput']),
-                                     'production_target': PRODUCTION})
+                                     'production_target': target})
 
 
 def main() -> None:
@@ -250,7 +276,9 @@ def main() -> None:
     parser.add_argument('--seed', type=Path)
     parser.add_argument('--barrier', type=Path)
     parser.add_argument('--case', type=int, default=4)
-    parser.add_argument('--nodes', type=int, default=128)
+    parser.add_argument('--nodes', type=int, default=128,
+                        help='Gauss nodes for spectral; cells per direction for MAC')
+    parser.add_argument('--discretization', choices=('spectral', 'mac'), default='spectral')
     parser.add_argument('--backend', choices=('tensor', 'direct'), default='tensor')
     parser.add_argument('--combinations', help='Additional bounded candidates, e.g. 10x1,12x1,13x1')
     args = parser.parse_args()
@@ -264,7 +292,8 @@ def main() -> None:
     else:
         print(json.dumps(run_probe(args.output, nodes=args.nodes, case=args.case,
                                    duration=args.duration, backend=args.backend,
-                                   seed=args.seed, barrier=args.barrier)))
+                                   seed=args.seed, barrier=args.barrier,
+                                   discretization=args.discretization)))
 
 
 if __name__ == '__main__':
