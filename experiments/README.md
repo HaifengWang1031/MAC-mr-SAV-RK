@@ -31,6 +31,7 @@
 | [顶盖驱动方腔](cavity/README.md) | 移动顶盖的稳态/启动过程与网格对比，含保存场动画 | — | — | 待整理 |
 | [FEM 圆柱绕流 DFG 2D-2](cylinder_ns/README.md) | Re=100 定常入口、自然出口、六格式与 I/PI 自适应、物理受力和保存场动画 | — | — | 四级自适应周期/空间/几何/时间资格通过；实测优化约2.51倍，范围见记录 |
 | [二维 SAV 圆柱尾流动画对比](cylinder_wake_compare/README.md) | Re100 周期脱涡与 Re1000 二维非定常尾流；显式保存场和独立来源 | — | — | 探索性动画；新低 Re 已完成，高 Re 原批次触及步长下限失败，强制下限重跑另存 |
+| [X0–X12 谱力矩转变预检](torque_transition/README.md) | 128高斯点、SDIRK3-mr-ccSAV、自适应与EIT-WSL并发测试；目标T=100000 | 原生预检报告 | — | 仅完成短时/吞吐测试；空间资格未通过，正式执行待确认 |
 | [A/B 外力旋转](forced_rotation/README.md) | 净力矩与零净力矩的长期能量收支、角动量和旋转反转 | — | — | 待整理；历史原始证据有缺失限制 |
 | [周期 Kolmogorov 流](periodic_ns/README.md) | 双周期 Fourier 模型的受迫流及保存场动画，不是无滑移 Kolmogorov 对照 | — | — | 待整理 |
 | [受迫二维 MHD 逆级联边缘](inverse_cascade/README.md) | 论文双场强迫、四阶／逆四阶耗散、通量、相关时间与稳态筛查、分段 chain、证据清单与预登记矩阵 | 降 Re 试算与粗步失真对照 | `inventory`、`plan` | 定性趋势与有限窗区间；未取得论文临界值／指数、临界涨落与谱斜率、统计或空间收敛 |
