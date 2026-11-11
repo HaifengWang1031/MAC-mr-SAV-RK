@@ -60,6 +60,32 @@ FEM 的 Brinkman/Hele–Shaw 是物理模型扩展，Darcy 是独立标量参照
 内积下推进速度和磁场。谱系数形状为 `(2, 2, ny, nx//2+1)`，两块各用物理扩散系数。
 Leray 消去阶段压力，感应方程用反对称通量。阶段残差针对完整投影方程，散度覆盖两个场
 全部格点。实验入口首期开放两种 SDIRK3 的固定步。
+[ForcedFourierMHD](../solver/fourier/forced_mhd.py) 是独立受迫扩展：两场共用正乘子
+`nu_plus*|k|^4+nu_minus*|k|^-4`，零模的逆幂取零。共同格式仍以 `model.nu=nu_plus`
+乘 `apply_K`；后者包含两条耗散通道。加性外源不乘 SAV 耦合因子，不复制阶段公式。
+同文件拥有零均值磁通重建及原 PDE 非线性通量／壳层谱诊断，面积平均和 rFFT 权重一致。
+[逆级联实验](../experiments/inverse_cascade/README.md) 的 config/problem 拥有论文单位、
+定常双场外源和可复现扰动初值；run 通过接受态 observer 抽样谱，不在分析时重新计算流动。
+同目录另有四个只读或执行辅助模块，职责不得混用：
+
+| 模块 | 归属 | 契约 |
+| --- | --- | --- |
+| [stats.py](../experiments/inverse_cascade/stats.py) | 相关系数与有限窗筛查 | 只接受均匀采样的标量序列；常量、样本不足返回明确状态，不造有限误差 |
+| [segments.py](../experiments/inverse_cascade/segments.py) | 分段执行与 checkpoint | 每段调用同一 `integrate`；只在段边界原子发布；未达计划终点不标完成 |
+| [chain.py](../experiments/inverse_cascade/chain.py) | chain 的只读组装 | 拒绝缺段、重叠时间、重复采样、校验和变化与未完成段；不构造模型 |
+| [inventory.py](../experiments/inverse_cascade/inventory.py) / [plan.py](../experiments/inverse_cascade/plan.py) | 探索性库存与部分候选预算 | inventory 只读扫描；plan 默认 dry run，显式本地 execute 须配置/代码/证据绑定的人工审批；无远程提交 |
+
+分段 chain 是独立记录家族（`runs/inverse_cascade_chains/<id>/`）：
+`chain.json` 拥有段索引、累积步数、样本数与分段校验和，`manifest.json` 仍走
+公共开始/完成流程；schema 2 的 `results_sha256` 为段及 checkpoint 元数据校验和的有序摘要。
+新记录绑定父 checkpoint、配置/来源身份、全局采样相位及完整接受态连续性；failed 不可续算。
+所有提交段在重启前逐个校验，`load_chain(assemble=False)` 不累计全历史；空谱采样段合法。
+单写者锁、孤儿文件及不一致提交一律 fail closed，需人工检查；不承诺断电事务恢复。
+max_wall_seconds 仅在段边界检查。旧 schema 1 可只读，但不能用当前实现续算历史来源。
+分析入口用 `--chain` 转成与单次运行相同的数组接口；分析仍组装完整历史，非流式分析。
+分析 schema 3 修正 IPS、注入尺度漂移、双非重叠窗筛查、完整块区间中心；不改阶段算法。
+执行审批检查具名人工审阅及文件完整性，不证明科学判断；37 条候选矩阵不是完整研究规范。
+详见[审计及兼容限制](inverse-cascade-toolchain-audit.md)。
 
 - [core.py](../solver/core.py) 定义 `State`、`History`、`Trial`、`Stage` 与格式协议。
   单步格式不改写输入状态，返回试算结果；共同推进器负责接受状态与历史记录。
@@ -164,8 +190,10 @@ roots/selected是stages/r的兼容别名，不能解释为原多项式的实根�
 | 记录家族 | 当前读取入口 | 校验或重建扩展 |
 | --- | --- | --- |
 | 通用 MAC | [load_record](../experiments/records.py) | [plotting.py](../experiments/plotting.py) 等 MAC 读取处理 |
+| 排版/外部工具 | [plotting.py](../experiments/plotting.py) 的 `latex_binary`、`usetex_available`、`latex_style` | 唯一工具定位入口：先查 `PATH`，再查 `/Library/TeX/texbin`、`/usr/local/texlive/*/bin/*` 等标准位置（MacTeX 常不在非登录 shell 的 `PATH`）。`latex_style` 有工具链时启用 `text.usetex`、否则回退 mathtext；需要 PDF 表的分析（no_slip 参考收敛等）经此判断是否编译，缺工具记 `pdf_status` 而不是数值失败 |
 | 周期 Fourier | [periodic_ns/records.py](../experiments/periodic_ns/records.py) 的 `load_periodic` | Fourier 表示、布局与压力标签 |
 | 周期 Fourier MHD | [periodic_mhd/records.py](../experiments/periodic_mhd/records.py) 的 `load_mhd` | 独立记录家族，补充 `final/magnetic`、`snapshots/magnetic`，省略阶段压力，检查两次校正计数。Zhou 算例另外保存和校验 `snapshots/flux` 与 `snapshots/current`，由 [analyze_zhou](../experiments/periodic_mhd/analyze_zhou.py) 读取两条显式运行记录 |
+| 受迫 MHD 逆级联 | [inverse_cascade/records.py](../experiments/inverse_cascade/records.py) 的 `load` | 独立记录家族，复用公共 HDF5 与来源机制；补充磁场及 `spectra/{times,K,Pi_E,Pi_Q,E_u,E_B}`，检查谱抽样与接受步对齐、双场形状及两次标量校正。低通收支列 `E_low/Q_low/power_*_low/diss_*_low` 为**可选**：新记录写入并校验形状，旧记录缺列不得报错、不回填。只读分析显式指定运行、完成扫描或 chain，burn-in/块长为分析参数，不自动扫描或求解 |
 | Channel | [channel_ns/records.py](../experiments/channel_ns/records.py) 的 `load_channel` | 周期面布局、壁面与阶段压力 |
 | 封闭 FEM | [fem_ns/records.py](../experiments/fem_ns/records.py) 的 `load_fem` | 独立配置、网格/DOF、系数与阶段/根检查 |
 | 圆柱 FEM | [cylinder_ns/records.py](../experiments/cylinder_ns/records.py) 的 `load_cylinder` | 专属表示与物理观测；同文件还拥有 native benchmark 读取 |
@@ -231,6 +259,7 @@ FEM 保存实际网格、DOF 映射和完整 P2/P1 系数；压力规范及所�
 
 | 修改内容 | 优先运行的已有测试 |
 | --- | --- |
+| 受迫 MHD 高／负阶耗散与通量 | `tests/test_forced_mhd.py`；论文外源、运行／复用／只读统计见 `tests/test_inverse_cascade_workflow.py` |
 | 共同控制器配置 | `tests/test_controller_config.py` 及受影响家族的 workflow 测试 |
 | FEM 装配或动量表示 | `tests/test_fem_weak_load.py`；边界功另查 `test_backflow_outlet.py`、`test_wedge_cavity.py`、`test_hele_shaw_inlet.py` 的独立参照 |
 | 保存、复用、只读加载 | 各家族 workflow 测试；`tests/test_fem_workflow.py` 含独立进程读取与 rerun/损坏检查 |

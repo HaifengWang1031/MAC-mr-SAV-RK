@@ -33,6 +33,7 @@
 | [二维 SAV 圆柱尾流动画对比](cylinder_wake_compare/README.md) | Re100 周期脱涡与 Re1000 二维非定常尾流；显式保存场和独立来源 | — | — | 探索性动画；新低 Re 已完成，高 Re 原批次触及步长下限失败，强制下限重跑另存 |
 | [A/B 外力旋转](forced_rotation/README.md) | 净力矩与零净力矩的长期能量收支、角动量和旋转反转 | — | — | 待整理；历史原始证据有缺失限制 |
 | [周期 Kolmogorov 流](periodic_ns/README.md) | 双周期 Fourier 模型的受迫流及保存场动画，不是无滑移 Kolmogorov 对照 | — | — | 待整理 |
+| [受迫二维 MHD 逆级联边缘](inverse_cascade/README.md) | 论文双场强迫、四阶／逆四阶耗散、通量、相关时间与稳态筛查、分段 chain、证据清单与预登记矩阵 | 降 Re 试算与粗步失真对照 | `inventory`、`plan` | 定性趋势与有限窗区间；未取得论文临界值／指数、临界涨落与谱斜率、统计或空间收敛 |
 | [不可压 Orszag–Tang 涡](periodic_mhd/README.md) | 周期 MHD 双场时间阶及原文动能、磁能和耗散对照 | 时间误差与论文曲线 | — | 原式初值和双倍振幅分开记录 |
 | [Channel 压力驱动瞬态](channel_ns/README.md) | 离散 Poiseuille、从静止启动及受扰后的松弛，含保存场动画 | — | — | 待整理 |
 | [Channel TS 失稳](channel_ns/README.md#tollmien--schlichting-instability) | 独立连续参照、线性增长资格检查及非线性可视化 | — | — | 待整理；动画不等于长期收敛认证 |

@@ -28,6 +28,10 @@ FEM 另有[圆柱开放流动](experiments/cylinder_ns/README.md)、[移动顶�
 
 [自适应说明](solver/adaptivity/README.md)区分 SDIRK2(1)、SDIRK3(2)、可选标量局部缺陷控制、拒步及最小步长策略。Euler 尚无嵌入估计器或 step-doubling 实现；局部容差不代表全局误差上界。设计阶数不替代特定 PDE、边界和正则性条件下的收敛证明。
 
+[受迫二维 MHD 逆级联边缘](experiments/inverse_cascade/README.md)使用既有 Fourier MHD
+和两次固定校正 SDIRK3-mr-ccSAV，增加论文双场强迫、四阶／逆四阶耗散及通量统计。
+当前是降 Reynolds 数的初步定性试算；粗步失真保留，尚非论文临界指数或完整 DNS 复现。
+
 ## 环境与首个计算
 
 使用 uv 管理项目独立环境，Python 3.12；依赖版本由 `uv.lock` 固定。
@@ -105,6 +109,8 @@ uv run pytest
 - [当前架构与修改导航](docs/architecture.md)：模块归属、依赖方向、扩展点、记录兼容与测试入口；修改模块分工时同步维护。
 - [验证结果](docs/validation.md)：实际网格、收敛阶和局限。
 - [确认的范围](docs/spec.md)、[领域约定](CONTEXT.md)。
+- [二维 MHD 长时间行为探讨](docs/mhd-long-time-discussion.md)：用现有方法复现磁岛合并、粗化与衰减；记录已有证据和定量复现缺口，MRI 仅留作历史讨论。
+- [二维受迫 MHD 模型与文献](docs/forced-2d-mhd-literature.md)：机械外力＋背景磁场、机械外力＋磁性外源；慢失稳与局域传播结构、级联转变及长期通量统计，含 [BibTeX](docs/forced-2d-mhd.bib)。仅调研，尚未实现。
 
 当前不包含变网格或断点续算。移动顶盖、I/PI 自适应及可选 Stokes 后端的适用范围见各实验说明；一阶格式尚无自适应估计器。阶段压力按格式乘子解释，不将其视为与速度同阶的物理端点压力；开放 FEM 的瞬时半离散物理压力另行恢复并标记。数值测试不能替代长期稳定性或收敛性的数学证明。
 

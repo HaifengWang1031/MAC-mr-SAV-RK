@@ -1,10 +1,20 @@
 """Short real rerun, saved frozen stages and independently reconstructed exact fields."""
 import json
+from pathlib import Path
+
+import pytest
 
 import numpy as np
 
 from experiments.records import digest
 from tools.rerun_low_high_stability_probe import baseline_config, run
+
+# The archived baseline record this probe replays is external, untracked evidence.
+_BASELINE = (Path(__file__).resolve().parents[1]/'runs/low_high_stability_probe'
+             /'20261004T080538558295'/'metadata.json')
+pytestmark = pytest.mark.skipif(
+    not _BASELINE.is_file(),
+    reason=f'missing archived baseline record {_BASELINE.relative_to(Path(__file__).resolve().parents[1])}')
 
 
 def test_current_probe_save_reload_and_exact_final_errors(tmp_path, monkeypatch):

@@ -12,6 +12,7 @@ from experiments.no_slip_reference_convergence.lattice import force_vector, init
 from solver.mac.grid import MACGrid
 from solver.mac.operators import MACOperators
 from experiments.no_slip_reference_convergence.run import run_campaign
+from experiments.plotting import latex_binary
 from experiments.workflow import load_record
 
 
@@ -72,7 +73,11 @@ def test_third_order_lattice_campaign_persists_and_reports(tmp_path):
             assert np.max(data['stages/divergence_inf'][:]) < 1e-10
             assert data['diagnostics/kinetic'][0] == pytest.approx(initial_kinetic)
     report = Path(batch['report'])
-    assert (report/'convergence.pdf').exists()
+    analysis = json.loads((report/'analysis.json').read_text())
+    if latex_binary('pdflatex') is None:
+        assert analysis['pdf_status'].startswith('tool_missing')
+    else:
+        assert (report/'convergence.pdf').exists()
     assert not (report/'tables/sdirk2_L2.tex').exists()
     assert 'SDIRK3-mr-ccSAV' in (report/'tables/sdirk3_L2.tex').read_text()
     rows = list(csv.DictReader((report/'tables/errors.csv').open()))

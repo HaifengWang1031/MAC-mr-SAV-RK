@@ -155,12 +155,20 @@ def analyze_batch(batch_path: Path, *, root: Path = PROJECT) -> Path:
                               for norm in ('L2', 'H1'))+'\n'+r'\end{document}'+'\n')
         (folder/'convergence.tex').write_text(document)
         import subprocess
-        with (folder/'analysis.log').open('w') as log:
-            completed = subprocess.run(['pdflatex', '-interaction=nonstopmode', '-halt-on-error',
-                                        'convergence.tex'], cwd=folder, stdout=log, stderr=subprocess.STDOUT,
-                                       check=False)
-        if completed.returncode:
-            raise RuntimeError('LaTeX compilation failed; see analysis.log')
+        from experiments.plotting import latex_binary
+        # PDF rendering is an optional presentation step: a missing LaTeX toolchain is
+        # recorded, not treated as a numerical-analysis failure.
+        pdflatex = latex_binary('pdflatex')
+        analysis['pdf_status'] = ('tool_missing: pdflatex not found; convergence.tex written'
+                                  if pdflatex is None else 'pending')
+        if pdflatex is not None:
+            with (folder/'analysis.log').open('w') as log:
+                completed = subprocess.run([pdflatex, '-interaction=nonstopmode', '-halt-on-error',
+                                            'convergence.tex'], cwd=folder, stdout=log, stderr=subprocess.STDOUT,
+                                           check=False)
+            if completed.returncode:
+                raise RuntimeError('LaTeX compilation failed; see analysis.log')
+            analysis['pdf_status'] = 'complete'
         analysis['status'] = 'complete'
     except Exception as exc:
         analysis.update(status='failed', error=f'{type(exc).__name__}: {exc}')

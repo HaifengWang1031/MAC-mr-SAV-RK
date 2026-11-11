@@ -1,10 +1,20 @@
 """A real small step scan retains controls, outcomes and truthful qualification."""
 import json
+from pathlib import Path
+
+import pytest
 import numpy as np
 
 from experiments.records import digest
 from tools.rerun_low_high_stability_probe import baseline_config
 from tools.search_low_high_stability_steps import search
+
+# The archived baseline record this probe replays is external, untracked evidence.
+_BASELINE = (Path(__file__).resolve().parents[1]/'runs/low_high_stability_probe'
+             /'20261004T080538558295'/'metadata.json')
+pytestmark = pytest.mark.skipif(
+    not _BASELINE.is_file(),
+    reason=f'missing archived baseline record {_BASELINE.relative_to(Path(__file__).resolve().parents[1])}')
 
 
 def test_search_passes_steps_to_saved_runs_and_preserves_unqualified_controls(tmp_path):

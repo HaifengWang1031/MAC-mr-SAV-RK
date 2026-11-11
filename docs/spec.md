@@ -28,6 +28,31 @@ or production evidence applies only to the stated configurations and dates.
 
 ## Confirmed extensions and historical scope
 
+2026-11-07 requested inverse-cascade reproduction: independent `inverse_cascade`
+experiment uses the exact Seshasayanan et al. (2014) mechanical/magnetic forcing
+and equal fourth-order plus negative-fourth-order dissipation on the existing
+periodic MHD/shared SDIRK3 and two-correction SAV seam. It records actual E/Q
+injection, split dissipations, raw nonlinear fluxes and spectra; read-only analysis
+uses explicit records, completed scans or segmented chains and user-selected
+burn-in/block windows. Reduced-Re pilots and the `512²,kf=8,Re+=1400` grid are
+separate; that grid was run only at reduced window (`T*=100/300`, not the paper's
+`T*=2000`). Reported quantities keep raw flux, injection-normalised flux,
+large-scale-dissipation fraction and large-scale-dissipation-over-injection apart,
+and emit `null` rather than a silent unit divisor. Long windows use segmented
+chains with atomic per-segment checkpoints and explicit, identity-checked resume;
+an unfinished chain is never analysed as a complete sample. The 2026-11-10 audit
+supersedes schema-2 correlation/qualification claims: analysis schema 3 uses corrected
+Geyer IPS, injection-scaled drift and two fixed non-overlapping windows. Chain schema 2
+hash-links checkpoint metadata and full accepted-state boundaries; failed chains are
+not resumable. Matrix execution requires an explicit configuration/code/evidence-bound
+manual approval; it is not automated proof of scientific qualification. See
+[inverse-cascade-toolchain-audit.md](inverse-cascade-toolchain-audit.md) for limits and
+invalidated historical plan artifacts. 2026-11-08 adds the
+serial-correlation/storage screen: existing scan points fail it, so they support
+finite-window trends only. No critical-parameter/exponent, stationarity,
+convergence or divergence qualification is implied.
+See [experiment scope](../experiments/inverse_cascade/README.md).
+
 2026-11-06 periodic incompressible resistive MHD: reuse the Fourier space,
 projected momentum and antisymmetric induction flux, with joint velocity/magnetic
 pairing and the shared fixed two-correction SDIRK3-mr-ccSAV stage. The Orszag–Tang

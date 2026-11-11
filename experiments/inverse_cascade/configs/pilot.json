@@ -1,0 +1,10 @@
+{
+  "base": {
+    "nx": 96, "ny": 96, "kf": 4, "f0": 1.0,
+    "Re_plus": 80.0, "Re_minus": 1000.0,
+    "scheme": "sdirk3_mrsav", "gamma": 1.0,
+    "T": 80.0, "dt": 0.005, "sample_every": 20,
+    "log_every": 1000, "seed": 2014, "noise_rms": 0.01
+  },
+  "members": [ {"mu": 0.05}, {"mu": 0.2}, {"mu": 0.3}, {"mu": 0.8} ]
+}

@@ -10,6 +10,7 @@ import pytest
 
 from experiments.no_slip_reference_convergence.lattice import clamped_force_vector
 from experiments.no_slip_reference_convergence.run import run_campaign
+from experiments.plotting import latex_binary
 from experiments.workflow import effective_config, load_record
 from solver.mac.grid import MACGrid
 from solver.mac.operators import MACOperators
@@ -56,7 +57,11 @@ def test_h_force_four_method_campaign_persists_and_reports(tmp_path):
             np.testing.assert_allclose(data['snapshots/actual_times'][:], [.01, .02], rtol=0, atol=1e-14)
             assert np.max(data['stages/divergence_inf'][:]) < 1e-10
     report = Path(batch['report'])
-    assert (report/'convergence.pdf').exists()
+    analysis = json.loads((report/'analysis.json').read_text())
+    if latex_binary('pdflatex') is None:
+        assert analysis['pdf_status'].startswith('tool_missing')
+    else:
+        assert (report/'convergence.pdf').exists()
     for pair in ('sdirk2', 'sdirk3'):
         for norm in ('L2', 'H1'):
             assert (report/f'tables/{pair}_{norm}.tex').exists()

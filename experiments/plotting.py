@@ -6,6 +6,12 @@ field or history figure has a single definition. Every reader goes through
 than being plotted.
 """
 from pathlib import Path
+import glob
+import os
+import shutil
+import contextlib
+from collections.abc import Iterator
+from typing import Any, cast
 import numpy as np
 import h5py
 import matplotlib
@@ -16,6 +22,58 @@ from experiments.records import load_record
 from solver.mac.grid import MACGrid, Array
 
 FIELD_CMAPS={'speed':('magma',False),'vorticity':('RdBu_r',True)}
+
+# MacTeX links its binaries at /Library/TeX/texbin (and TeX Live keeps them under
+# /usr/local/texlive/<year>/bin/<arch>). Neither is on the PATH of a non-login shell,
+# so shutil.which alone reports a false "tool missing" on a machine that has TeX.
+LATEX_SEARCH_PATHS=('/Library/TeX/texbin','/usr/local/texlive/*/bin/*','/opt/homebrew/bin','/usr/local/bin')
+
+def latex_binary(name: str='pdflatex') -> str | None:
+    """Absolute path of a TeX binary from PATH or the standard TeX Live/MacTeX roots."""
+    found = shutil.which(name)
+    if found:
+        return found
+    for pattern in LATEX_SEARCH_PATHS:
+        for directory in sorted(glob.glob(pattern),reverse=True):
+            candidate = Path(directory)/name
+            if candidate.is_file() and os.access(candidate,os.X_OK):
+                return str(candidate)
+    return None
+
+def usetex_available() -> bool:
+    """True when matplotlib can typeset labels with real LaTeX (latex + dvipng or ghostscript)."""
+    return (latex_binary('latex') is not None
+            and (latex_binary('dvipng') is not None or shutil.which('gs') is not None))
+
+@contextlib.contextmanager
+def latex_style(rc: dict[str,Any] | None = None) -> Iterator[None]:
+    """Figure style with LaTeX-typeset math, falling back to Computer-Modern mathtext.
+
+    matplotlib shells out to `latex`/`dvipng` by name, so the TeX binary directory is
+    prepended to PATH for the duration of the context. Without a toolchain the same
+    labels still render through mathtext, so a figure is always produced.
+    """
+    settings: dict[str,Any] = {'font.family':'serif', 'axes.unicode_minus':False,
+                               'axes.labelsize':10, 'axes.titlesize':10,
+                               'legend.fontsize':8, 'xtick.labelsize':9, 'ytick.labelsize':9}
+    latex = latex_binary('latex') if usetex_available() else None
+    if latex is not None:
+        settings.update({'text.usetex':True, 'font.size':9,
+                         'text.latex.preamble':r'\usepackage{amsmath}'})
+    else:
+        settings.update({'mathtext.fontset':'cm'})
+    settings.update(rc or {})
+    params = cast(Any, plt.rcParams)
+    previous_path = os.environ.get('PATH','')
+    previous_values = {key:params[key] for key in settings}
+    if latex is not None:
+        os.environ['PATH'] = str(Path(latex).parent)+os.pathsep+previous_path
+    try:
+        params.update(settings)
+        yield
+    finally:
+        params.update(previous_values)
+        os.environ['PATH'] = previous_path
 
 def read_run_fields(path: Path) -> tuple[dict, MACGrid, list[float], dict[str,dict[float,Array]], dict[str,Array]]:
     """Recorded snapshots as cell-centred fields plus the per-step diagnostics."""
