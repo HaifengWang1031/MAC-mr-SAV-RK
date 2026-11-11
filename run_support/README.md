@@ -19,8 +19,9 @@ source = provenance(task_paths=[
 默认核心范围为 `solver/`、`run_support/` 下全部 Python 文件以及根目录的
 `pyproject.toml`、`uv.lock`、`.python-version`。`task_paths` 相对源码根目录解析；
 目录收集其 Python 文件，单个文件也可指定参数之外的必要任务数据。
-缺文件、空目录、越出根目录的路径/符号链接均报错。路径排序并去重，不受源码根目录
-绝对位置影响。`source_files(root=..., task_paths=...)` 返回同一清单供源码捕获使用。
+缺文件、空目录、越出根目录的路径均报错。显式来源不接受源码符号链接（即使目标在根内，
+包括嵌套目录或文件路径中的链接），避免遍历漏项及快照丢失导入名称；源码根目录本身允许规范化。
+路径排序并去重，不受源码根目录绝对位置影响。`source_files(root=..., task_paths=...)` 返回同一清单供源码捕获使用。
 
 结果包含 `source_schema=2`、相对文件名到 SHA256 的 `source_files`、`code_sha256`，
 以及 Python/平台、依赖版本和线程环境。必需依赖中的 scikit-fem/pymetis 也记录版本；

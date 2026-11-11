@@ -83,9 +83,28 @@ def test_inventory_is_portable_deduplicated_and_confined(tmp_path):
     (first/'escape.py').symlink_to(second/'experiments/task.py')
     with pytest.raises(ValueError, match='escapes root'):
         provenance(root=first, task_paths=['escape.py'])
+    (first/'internal.py').symlink_to(first/'experiments/task.py')
+    with pytest.raises(ValueError, match='symlink'):
+        provenance(root=first, task_paths=['internal.py'])
     (first/'empty').mkdir()
     with pytest.raises(ValueError, match='Empty source'):
         provenance(root=first, task_paths=['empty'])
+
+
+@pytest.mark.parametrize('target_inside', [False, True])
+@pytest.mark.parametrize('nested', [False, True])
+def test_directory_symlinks_are_rejected_instead_of_silently_omitted(tmp_path, target_inside, nested):
+    from run_support.source import provenance
+
+    root = tmp_path/'core'
+    source_tree(root)
+    dependency = root/'shared' if target_inside else tmp_path/'external'
+    dependency.mkdir()
+    (dependency/'actual.py').write_text('value = 1\n')
+    link = root/'solver/linked' if nested else root/'selected'
+    link.symlink_to(dependency, target_is_directory=True)
+    with pytest.raises(ValueError, match='symlink|escapes root'):
+        provenance(root=root, task_paths=[] if nested else ['selected'])
 
 
 def test_records_and_provenance_work_without_experiment_tree(tmp_path):

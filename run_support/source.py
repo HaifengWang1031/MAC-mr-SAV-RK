@@ -29,6 +29,23 @@ def digest(path: Path) -> str:
     return hasher.hexdigest()
 
 
+def _source_path(root: Path, path: Path) -> Path:
+    try:
+        resolved = path.resolve()
+    except RuntimeError as error:
+        raise ValueError(f'Invalid source symlink: {path}') from error
+    if not resolved.is_relative_to(root):
+        raise ValueError(f'Source path escapes root: {path}')
+    # Source copies must preserve importable names. Resolving a symlink and
+    # copying only its target would silently remove that name from the copy.
+    for ancestor in (path, *path.parents):
+        if ancestor == root:
+            break
+        if ancestor.is_symlink():
+            raise ValueError(f'Source symlinks are unsupported: {ancestor}')
+    return resolved
+
+
 def source_files(*, root: Path = PROJECT,
                  task_paths: Sequence[str | Path] = ()) -> tuple[Path, ...]:
     """Return the deterministic, complete core plus explicitly named task files.
@@ -39,9 +56,7 @@ def source_files(*, root: Path = PROJECT,
     root = root.resolve()
     files: set[Path] = set()
     for name in (*ENVIRONMENT_FILES, *CORE_SOURCE_DIRS, *task_paths):
-        path = (root/name).resolve()
-        if not path.is_relative_to(root):
-            raise ValueError(f'Source path escapes root: {name}')
+        path = _source_path(root, root/name)
         if name in ENVIRONMENT_FILES and not path.is_file():
             raise ValueError(f'Missing source file: {name}')
         if name in CORE_SOURCE_DIRS and not path.is_dir():
@@ -49,15 +64,20 @@ def source_files(*, root: Path = PROJECT,
         if path.is_file():
             candidates = [path]
         elif path.is_dir():
-            candidates = sorted(path.rglob('*.py'))
+            candidates = []
+            for entry in sorted(path.rglob('*')):
+                if entry.is_symlink():
+                    # rglob does not descend into directory symlinks: inspect
+                    # them explicitly rather than silently dropping code.
+                    _source_path(root, entry)
+                if entry.suffix == '.py':
+                    candidates.append(entry)
             if not candidates:
                 raise ValueError(f'Empty source directory: {name}')
         else:
             raise ValueError(f'Missing source path: {name}')
         for candidate in candidates:
-            resolved = candidate.resolve()
-            if not resolved.is_relative_to(root):
-                raise ValueError(f'Source path escapes root: {candidate}')
+            resolved = _source_path(root, candidate)
             if not resolved.is_file():
                 raise ValueError(f'Missing source file: {candidate}')
             files.add(resolved)
