@@ -8,9 +8,10 @@ from uuid import uuid4
 import h5py
 import numpy as np
 
-from experiments.records import (
-    PROJECT, begin_run, fail_run, finish_run, provenance, reusable_run, save_result, write_json,
+from run_support.records import (
+    PROJECT, begin_run, fail_run, finish_run, reusable_run, save_result, write_json,
 )
+from run_support.source import provenance
 from solver.core import State
 from solver.fourier import FourierMHD, FourierSpace, MHDState
 from solver.integrate import integrate, step_sizes
@@ -84,7 +85,11 @@ def _magnetic(state: State) -> np.ndarray:
 
 def run(config: dict, *, root: Path = PROJECT, rerun: bool = False) -> Path:
     cfg = effective_config(config)
-    source = provenance()
+    source = provenance(task_paths=[
+        'experiments/__init__.py', 'experiments/periodic_mhd/__init__.py',
+        'experiments/periodic_mhd/run.py', 'experiments/periodic_mhd/records.py',
+        'experiments/periodic_mhd/zhou.py',
+    ])
     parent = root/'runs'/'periodic_mhd'
     reused = reusable_run(parent, cfg, source, reader=load_mhd, rerun=rerun)
     if reused is not None:

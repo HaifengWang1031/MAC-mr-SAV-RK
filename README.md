@@ -85,9 +85,12 @@ solver/
   channel/                流向周期、法向无滑移的 MAC 网格、算子、对流与 Model
   fem/                    scikit-fem P2/P1 空间、一致质量 Model 与无罚项 Stokes
   adaptivity/             I/PI 接受/拒绝、速度误差与可选标量缺陷控制
+run_support/
+  records.py              公共运行身份、保存、复用与完整性检查（不依赖实验）
+  source.py               核心＋显式任务来源清单；旧来源策略兼容
 experiments/
   controllers.py          共同 I/PI 构建、校验与 JSON 配置表示
-  records.py              共同运行身份、来源、保存、复用与完整性检查
+  records.py              run_support 旧名兼容导出（旧入口仍用广泛来源策略）
   workflow.py             MAC 实验计算入口及历史工具名兼容导出
   <实验名>/               各实验的配置、计算、表示校验与只读分析
     records.py            periodic_ns/channel_ns/fem_ns/cylinder_ns/hele_shaw_airfoil 专属读取
@@ -97,6 +100,9 @@ tests/                    数值和工作流回归检查
 tools/                    步长计时与快照绘图
 archive/                  旧程序来源索引
 ```
+
+核心记录与来源的独立入口见 [run_support](run_support/README.md)。当前只有周期 MHD
+入口完成显式任务来源迁移；其他实验暂保留旧策略，本轮尚未取消跟踪实验或拆分测试。
 
 ## 验证与阅读
 

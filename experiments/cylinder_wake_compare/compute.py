@@ -64,13 +64,11 @@ def prepare(config: dict[str, Any], *, root: Path = PROJECT) -> Path:
     directory.mkdir(parents=True)
     source = directory/'source'
     source.mkdir()
-    for name in ('solver', 'experiments', 'tools'):
-        for path in sorted((PROJECT/name).rglob('*.py')):
-            target = source/path.relative_to(PROJECT)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(path, target)
-    for name in ('pyproject.toml', 'uv.lock', '.python-version'):
-        shutil.copy2(PROJECT/name, source/name)
+    from run_support.source import legacy_source_files
+    for path in legacy_source_files(PROJECT):
+        target = source/path.relative_to(PROJECT)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, target)
     source_hashes = {str(p.relative_to(source)): digest(p) for p in source.rglob('*') if p.is_file()}
     write_json(directory/'source.json', {'files': source_hashes})
     write_json(directory/'config.json', cfg)

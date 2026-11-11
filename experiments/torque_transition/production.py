@@ -22,6 +22,7 @@ import numpy as np
 
 from experiments.controllers import make_controller
 from experiments.records import digest, provenance
+from run_support.source import LEGACY_SOURCE_DIRS
 from experiments.torque_transition.mac_model import make_mac_model, mac_observables
 from experiments.torque_transition.preflight import PHASE_DEGREES, THREAD_KEYS
 from solver.adaptivity import AdaptiveContinuation, AdaptiveResult, ScalarErrorControl, integrate_adaptive
@@ -284,7 +285,7 @@ def retarget(parent: Path, directory: Path) -> None:
         raise ValueError('Expected an approved longer parent trajectory')
     old_root, new_root = parent.parents[1], Path(__file__).resolve().parents[2]
     paths = [Path(name) for name in ('pyproject.toml', 'uv.lock', '.python-version')]
-    for name in ('solver', 'experiments', 'tools'):
+    for name in LEGACY_SOURCE_DIRS:
         old_files = {p.relative_to(old_root) for p in (old_root/name).rglob('*.py')}
         new_files = {p.relative_to(new_root) for p in (new_root/name).rglob('*.py')}
         if old_files != new_files:

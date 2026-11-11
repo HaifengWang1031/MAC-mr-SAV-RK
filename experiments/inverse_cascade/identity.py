@@ -11,6 +11,7 @@ import hashlib
 from pathlib import Path
 
 from experiments.records import PROJECT, digest
+from run_support.source import CORE_SOURCE_DIRS
 
 # Only files that determine the accepted trajectory, the sampling of it, or the
 # on-disk representation of those numbers.
@@ -23,10 +24,10 @@ NUMERICAL_MODULES = (
 
 
 def numerical_files(root: Path = PROJECT) -> list[Path]:
-    solver = sorted((root/'solver').rglob('*.py'))
+    solver = [path for name in CORE_SOURCE_DIRS for path in sorted((root/name).rglob('*.py'))]
     explicit = [root/rel for rel in NUMERICAL_MODULES]
     missing = [str(path) for path in explicit if not path.is_file()]
-    if missing or not solver:
+    if missing or any(not list((root/name).rglob('*.py')) for name in CORE_SOURCE_DIRS):
         raise ValueError(f'Numerical source inventory is incomplete: {missing}')
     return solver+explicit
 

@@ -1,0 +1,55 @@
+# 运行记录与来源
+
+`records.py` 负责单次计算的开始/完成/失败、配置与来源身份、公共 HDF5、校验和及复用。
+`source.py` 负责明确源码范围、生成来源信息；两者都不导入实验计算入口。
+模型与阶段推进仍属于 `solver/`，实际网格和表示的专属校验仍由对应 reader 负责。
+
+## 新调用方：核心＋显式任务来源
+
+```python
+from run_support.records import begin_run, save_result, finish_run, load_record
+from run_support.source import provenance
+
+source = provenance(task_paths=[
+    'local/my_study/run.py',
+    'local/my_study/problem.py',
+])
+```
+
+默认核心范围为 `solver/`、`run_support/` 下全部 Python 文件以及根目录的
+`pyproject.toml`、`uv.lock`、`.python-version`。`task_paths` 相对源码根目录解析；
+目录收集其 Python 文件，单个文件也可指定参数之外的必要任务数据。
+缺文件、空目录、越出根目录的路径/符号链接均报错。路径排序并去重，不受源码根目录
+绝对位置影响。`source_files(root=..., task_paths=...)` 返回同一清单供源码捕获使用。
+
+结果包含 `source_schema=2`、相对文件名到 SHA256 的 `source_files`、`code_sha256`，
+以及 Python/平台、依赖版本和线程环境。必需依赖中的 scikit-fem/pymetis 也记录版本；
+可选 PETSc/PARDISO 等依赖仍由选择这些后端的计算入口补充。相同代码哈希不代表完整
+来源相同，更不代表科学验证通过。`run_identity` 使用有效配置和**完整来源**。
+
+调用方负责列全实际任务依赖，包括相关包初始化；不自动分析导入闭包，也不自动发现
+其他本地研究目录。当前仅支持同一源码根目录中的任务，不是跨仓库发布/打包系统。
+`periodic_mhd/run.py` 是首个采用新方式的真实入口：计算、初值和 reader 在清单中，
+只读分析与无关研究不影响其计算身份。
+
+## 过渡期兼容
+
+`experiments.records` 继续导出原记录函数，记录实现只有一份。其 `provenance` 有意保留
+旧的广泛扫描策略：按旧顺序扫描 solver/experiments/tools，再加入 run_support。
+`legacy_source_files` 给旧式快照和校验提供同一清单，仍支持没有 run_support 的真实旧源码树。
+因此**尚未迁移的入口仍受本地无关 Python 文件影响**，不应在此阶段取消跟踪实验目录。
+
+新来源策略不会重算或改写旧 manifest；旧结果按其记录的来源与校验和读取。新共享实现
+改变了真实源码，新运行的身份应如实变化，不应与旧运行伪装同源。HDF5 schema、历史根槽、
+冻结因子标量校正和专属压力/网格语义均未改变。已有冻结源码和生产任务不在此分支重写。
+
+## 验证
+
+```sh
+uv run --locked pytest -q tests/test_run_support.py tests/test_record_compatibility.py
+uv run --locked mypy
+```
+
+核心测试在只有 solver/run_support/环境文件的临时副本中，独立进程阻止 experiments/tools
+导入，实际保存并读取记录。兼容测试另验旧来源编码、旧导入、冻结 worker 和 MHD 复用。
+该验证不代表所有实验已迁移，也不替代可选后端或长期生产恢复验证。

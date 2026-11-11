@@ -4,6 +4,8 @@
 
 | 机制 | 保留的测试 |
 |---|---|
+| 实验目录不存在时的记录/来源、清单完整性与可迁移身份 | test_run_support |
+| 旧来源编码/导入、冻结 worker 及显式周期 MHD 来源 | test_record_compatibility |
 | MAC 算子与边界 | test_model_seam、test_cavity、test_kernels |
 | Stokes 求解、压力定标与分解复用 | test_stokes、test_numerics 的空间收敛 |
 | 二阶、SAV 能量与实根 | test_numerics、test_schemes |

@@ -50,9 +50,8 @@ def prepare(root: Path = PROJECT, *, cases: dict[str, dict[str, Any]] | None = N
     directory = root/'runs/hele_shaw_wake'/label
     source = directory/'source'
     source.mkdir(parents=True)
-    files = [PROJECT/name for name in ('pyproject.toml', 'uv.lock', '.python-version')]
-    for name in ('solver', 'experiments', 'tools'):
-        files.extend(sorted((PROJECT/name).rglob('*.py')))
+    from run_support.source import legacy_source_files
+    files = legacy_source_files(PROJECT)
     hashes = {}
     for path in files:
         relative = path.relative_to(PROJECT)
@@ -93,10 +92,8 @@ def verify_source(directory: Path) -> None:
     if PROJECT.resolve() != (directory/'source').resolve():
         raise ValueError('Execute the worker from the frozen source directory')
     expected = json.loads((directory/'source_manifest.json').read_text())
-    current = {str(path.relative_to(PROJECT)): digest(path)
-               for name in ('solver', 'experiments', 'tools')
-               for path in (PROJECT/name).rglob('*.py')}
-    current.update({name: digest(PROJECT/name) for name in ('pyproject.toml', 'uv.lock', '.python-version')})
+    from run_support.source import legacy_source_files
+    current = {str(path.relative_to(PROJECT)): digest(path) for path in legacy_source_files(PROJECT)}
     if current != expected or provenance() != json.loads((directory/'request.json').read_text())['source']:
         raise ValueError('Frozen source/environment differs from the prepared request')
 

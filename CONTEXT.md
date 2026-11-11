@@ -1,5 +1,11 @@
 ## 当前能力索引（2026-11-04 文档核对）
 
+2026-11-11 用户批准在独立优化分支先做运行记录与来源抽取：公共保存/读取归属
+run_support，新增仅核心与显式任务清单的版本化来源；periodic_mhd 先行采用。
+旧 experiments.records 为兼容导出，未迁移入口仍广泛扫描并纳入新公共实现；
+旧记录身份和冻结源码不回写。本轮不删除实验/测试、不改 gitignore 或数值公式，
+并同步检查新快照和数值身份不能遗漏 run_support。见 docs/architecture.md。
+
 **2026-11-10 审计覆盖旧完成声明**：分析升 schema 3，修正 Geyer IPS 换算；旧 schema 2
 τ/ESS 及资格结论撤回。旧 `reports/inverse_cascade/plan/configs` 高尺度配置不可执行。
 当前 plan 明确各档 kf/Re-，执行须绑定有效配置/代码/证据的人工审批；37 条仍仅部分候选。

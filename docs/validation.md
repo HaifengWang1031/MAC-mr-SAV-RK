@@ -2,6 +2,32 @@
 
 # 正式验收记录
 
+## 2026-11-11 核心运行记录与显式来源：第一阶段
+
+在独立 `refactor/run-records-core` 分支/worktree，从 `744a695` 抽取 `run_support`，
+未改 solver 数值实现、HDF5 布局、gitignore 或已有运行；未连接远端机器或启动生产计算。
+`tests/test_run_support.py` 通过新公开入口验证明确的任务/核心来源变化、无关任务隔离、
+可迁移且去重的清单、缺失/越界/符号链接拒绝、配置损坏拒绝及保存读取/复用。
+其中独立进程仅复制 solver/run_support/环境文件，并禁止 experiments/tools 导入，
+实际执行公共保存/读取；这不是“整个项目移除实验目录后已通过”的声明。
+`test_record_compatibility.py` 另验历史来源编码、旧导入不回写来源、冻结 worker 捕获
+新实现，以及两步周期 MHD 的显式来源与复用；既有 MHD 工作流另作回归。
+
+使用项目现有锁定依赖的 Python 3.12 环境运行：全套 **705 passed / 36 skipped**
+（121.24 秒）；全项目 mypy **235 源文件通过**；git diff --check 通过。
+受影响专项（核心/兼容、MHD、低高频、逆级联、生产记录、圆柱快照、FEM 快照）为
+56 passed / 3 skipped。跳过涉及可选绘图工具、PETSc 以及依赖本地历史基准的探针；
+未据此授予这些未运行路径新的数值/生产验证资格。
+
+首次全套在原分支已存在的 macOS 测试失败上停止（704 passed / 36 skipped）：
+`test_retarget_cannot_copy_a_live_parent` 假定 Linux /proc 存在；原分支单独重跑复现。
+本次仅在该测试提供模拟的 Linux 进程目录存在性，生产检查未更改、测试未跳过，
+随后取得上述全套结果。此项不等于真实 Linux 进程/信号生命周期或远端生产恢复验证。
+
+范围限制：仅 periodic_mhd 计算入口改为显式任务来源；其他入口仍经兼容策略广泛扫描，
+新 shared implementation 被纳入来源/快照/逆级联数值身份。旧 manifest/冻结源码不改，
+跨此次实现变更的旧 chain/retarget 不被自动放行；剩余实验、工具和核心测试拆分待后续阶段。
+
 ## 2026-11-01 高Re翼型尾迹实验准备
 
 新增显式尾迹Box网格加密、可选单因子缓存与只读wake_analysis。

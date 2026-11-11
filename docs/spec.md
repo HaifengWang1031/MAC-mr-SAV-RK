@@ -26,6 +26,23 @@ See the [current capability table](../README.md#当前算法与支持范围),
 their original scope; later extensions supersede initial exclusions. Their test
 or production evidence applies only to the stated configurations and dates.
 
+## Core repository extraction: run records and provenance (2026-11-11)
+
+First stage only: extract shared persistence/integrity to `run_support.records`,
+with explicit core/task source inventories owned by `run_support.source`.
+Core provenance must work with no experiments directory, track core plus explicitly
+selected task files, reject missing/escaping sources, and expose a versioned,
+portable relative-path inventory. Real task code must not be silently excluded.
+Preserve existing record schemas, full stage diagnostics, historical identities,
+legacy imports and frozen-source compatibility; do not rewrite existing runs.
+Existing experiment callers keep a transitional broad provenance policy including
+the new shared implementation. Periodic MHD is the first explicitly scoped caller.
+Update source-capture and numerical-identity inventories wherever extracting the
+shared writer creates a new dependency. Do not change numerical formulas, remove
+experiments/tests, edit gitignore or migrate all workflows in this stage.
+Validate standalone save/load, source identity behavior, legacy loading and a
+source-selected worker. Core-test/task-test separation is a later stage.
+
 ## Confirmed extensions and historical scope
 
 2026-11-07 requested inverse-cascade reproduction: independent `inverse_cascade`

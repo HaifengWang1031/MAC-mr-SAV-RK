@@ -13,7 +13,7 @@
 | 时间格式、阶段和标量校正 | [schemes](../solver/schemes/registry.py)、[Model 协议](../solver/model.py)、[数值说明](numerics.md) | 六种格式共用空间离散模型接缝，不在格式中复制 FEM/MAC 专属公式 |
 | 动量表示或 FEM 对流/SAV 功 | [共同动量 adapter](../solver/momentum.py)、[FEM 弱载荷 adapter](../solver/fem/momentum.py)、下文 FEM 章节 | 物理装配和表示转换分别维护；完整残差与约束检查保留 |
 | I/PI 配置与序列化 | [controllers.py](../experiments/controllers.py) | 实验默认值与启用策略留在各实验配置中 |
-| 运行身份、保存、复用、完成状态 | [records.py](../experiments/records.py)、下文记录章节 | 来源与校验和、旧可选键、失败前缀、专属表示校验保留 |
+| 运行身份、保存、复用、完成状态 | [run_support/records.py](../run_support/records.py)、[source.py](../run_support/source.py)、下文记录章节 | 显式来源范围；旧可选键、失败前缀、专属表示校验保留 |
 | 网格、布局、压力标签、读取重建 | 各实验 `records.py` / `representation.py` / `reconstruct.py` | 读取实际保存网格；区分阶段乘子与瞬时半离散压力 |
 | 绘图与结果分析 | 各实验 `analyze.py` / `animate.py`，MAC 通用 [analysis.py](../experiments/analysis.py) | 只接受显式记录，输出到 `reports/`，不启动计算 |
 | 实验参数、物理观测或计算调度 | 各实验 `config.py` / `problems.py` / `run.py`，见[实验导航](../experiments/README.md) | 共用已有推进与记录机制；实验特有物理内容留在实验内 |
@@ -84,7 +84,9 @@ flowchart TD
     Schemes --> Momentum[阶段动量 adapter]
     Momentum --> Model[空间离散模型 Model]
     Model --> Linear[具体线性求解后端]
-    Run --> Records[experiments/records.py]
+    Run --> Records[run_support/records.py]
+    Run --> Source[run_support/source.py]
+    Legacy[experiments/records.py兼容导出] --> Records
     Run --> Extra[实验专属表示与附加数据写入]
     Analysis[只读分析和绘图] --> Reader[实验专属 reader]
     Reader --> Records
@@ -164,7 +166,7 @@ alpha/beta和预测值，再用同一耦合恢复速度/压力并验证冻结方
 动量adapter保留质量与lifting配对，校正不引入新的模型接口或Stokes求解。
 registry的n_corrections对普通格式为0、SAV为1/1/2；n_roots保留历史存储预留容量。
 
-experiments/records.py的save_scalar_corrections共用写入附加标量诊断；公共save_result
+run_support/records.py的save_scalar_corrections共用写入附加标量诊断；公共save_result
 与楔腔独立循环都调用它。Molenaar流式布局另有同接受步对齐的scalar_corrections数据集，
 列为count/predictor/r1/r2/frozen_factor，保留原stage_records历史根槽。
 
@@ -219,11 +221,12 @@ roots/selected是stages/r的兼容别名，不能解释为原多项式的实根�
 
 ## 运行记录的共同流程与专属读取
 
-[experiments/records.py](../experiments/records.py) 拥有共同机制：
+[run_support/records.py](../run_support/records.py) 拥有共同机制，不导入实验或计算入口。
+[experiments/records.py](../experiments/records.py) 仅保留旧名兼容导出，不维护第二份记录实现：
 
 | 函数 | 职责 |
 | --- | --- |
-| `run_identity` / `provenance` | 有效配置与来源的身份编码；代码、依赖、平台、线程环境记录 |
+| `run_identity` / `source.provenance` | 有效配置与来源的身份编码；显式源码清单、依赖、平台、线程环境记录 |
 | `write_json` / `save_result` | 临时文件写入并替换；公共 HDF5 结果布局 |
 | `load_record` | 配置/结果校验和及完成状态的共同检查，不替代专属表示校验 |
 | `reusable_run` | 经专属 reader 查找同配置、同来源、同身份的完整结果 |
@@ -238,7 +241,7 @@ roots/selected是stages/r的兼容别名，不能解释为原多项式的实根�
 
 | 记录家族 | 当前读取入口 | 校验或重建扩展 |
 | --- | --- | --- |
-| 通用 MAC | [load_record](../experiments/records.py) | [plotting.py](../experiments/plotting.py) 等 MAC 读取处理 |
+| 通用 MAC | [load_record](../run_support/records.py) | [plotting.py](../experiments/plotting.py) 等 MAC 读取处理 |
 | 排版/外部工具 | [plotting.py](../experiments/plotting.py) 的 `latex_binary`、`usetex_available`、`latex_style` | 唯一工具定位入口：先查 `PATH`，再查 `/Library/TeX/texbin`、`/usr/local/texlive/*/bin/*` 等标准位置（MacTeX 常不在非登录 shell 的 `PATH`）。`latex_style` 有工具链时启用 `text.usetex`、否则回退 mathtext；需要 PDF 表的分析（no_slip 参考收敛等）经此判断是否编译，缺工具记 `pdf_status` 而不是数值失败 |
 | 周期 Fourier | [periodic_ns/records.py](../experiments/periodic_ns/records.py) 的 `load_periodic` | Fourier 表示、布局与压力标签 |
 | 周期 Fourier MHD | [periodic_mhd/records.py](../experiments/periodic_mhd/records.py) 的 `load_mhd` | 独立记录家族，补充 `final/magnetic`、`snapshots/magnetic`，省略阶段压力，检查两次校正计数。Zhou 算例另外保存和校验 `snapshots/flux` 与 `snapshots/current`，由 [analyze_zhou](../experiments/periodic_mhd/analyze_zhou.py) 读取两条显式运行记录 |
@@ -252,6 +255,29 @@ roots/selected是stages/r的兼容别名，不能解释为原多项式的实根�
 新只读代码直接导入专属 reader 与共同记录工具，不从计算入口取得读取函数。读取可按
 保存网格重建基函数、插值和表示检查，不构造动力模型、重生成网格或启动积分。PETSc、
 Gmsh 等计算依赖保持按需导入；已有保存网格的读取不要求这些依赖。
+
+### 来源范围与分阶段迁移
+
+[run_support/source.py](../run_support/source.py) 拥有来源发现和哈希，具体用法见
+[运行支持说明](../run_support/README.md)。新的 `provenance(task_paths=...)` 默认仅包含
+`solver/`、`run_support/` 的 Python 文件及 `pyproject.toml`、`uv.lock`、`.python-version`。
+任务需显式列出实际依赖的文件或目录；目录仅收集 Python，显式文件也可记录任务数据。
+缺文件、空源码目录或越出源码根目录的路径（包括符号链接）均拒绝。路径排序、去重，
+以相对路径和文件 SHA256 生成 `source_schema=2` 的来源；`source_files` 保存确切清单。
+绝对位置不进入代码哈希；平台、Python、依赖和线程设置仍独立参与完整来源。
+显式来源补录必需的 scikit-fem/pymetis 版本；可选后端版本仍由实际计算入口补齐。
+这是新身份策略，不是旧来源的重命名；不得以新策略重算并覆盖旧 manifest。
+
+首个迁移入口为 `periodic_mhd/run.py`，显式包含自身、专属 reader、初值定义和包初始化；
+只读分析和其他任务不再改变其计算身份。任务调用方拥有清单完整性，当前不自动推断导入闭包，
+只支持同一源码根目录下的任务。专属 reader 继续验证真实表示，不由共同 load_record 替代。
+
+尚未迁移的 `experiments.records.provenance` 仍使用 `legacy_provenance` 的广泛发现策略：
+按历史顺序遍历 solver/experiments/tools，再附加 run_support，确保抽取后的真实实现也被哈希。
+这类入口仍会受无关本地任务影响，不能据此宣称所有实验已解耦。源码捕获和校验共用
+`legacy_source_files` 或显式 `source_files`；圆柱/翼型/跨规模快照、低高频脚本均包含
+run_support。逆级联数值身份也包含该实现，旧 chain 不允许被悄悄续接到新来源。
+旧冻结源码本身不修改；生产 retarget 继续拒绝本次公共依赖变化。
 
 ### 历史兼容与冻结源码
 
@@ -311,6 +337,7 @@ FEM 保存实际网格、DOF 映射和完整 P2/P1 系数；压力规范及所�
 | 受迫 MHD 高／负阶耗散与通量 | `tests/test_forced_mhd.py`；论文外源、运行／复用／只读统计见 `tests/test_inverse_cascade_workflow.py` |
 | 共同控制器配置 | `tests/test_controller_config.py` 及受影响家族的 workflow 测试 |
 | FEM 装配或动量表示 | `tests/test_fem_weak_load.py`；边界功另查 `test_backflow_outlet.py`、`test_wedge_cavity.py`、`test_hele_shaw_inlet.py` 的独立参照 |
+| 核心记录与来源范围 | `tests/test_run_support.py`（独立进程无实验目录）；`tests/test_record_compatibility.py`（旧导入、冻结 worker、显式 MHD 来源） |
 | 保存、复用、只读加载 | 各家族 workflow 测试；`tests/test_fem_workflow.py` 含独立进程读取与 rerun/损坏检查 |
 | 自适应接受、终点、失败观测 | `tests/test_adaptivity.py`、`test_min_step_policy.py`、`test_accepted_observers.py` |
 | 线性后端或可选依赖 | 对应算子/求解器测试和完整阶段测试；单独报告跳过项的覆盖限制 |

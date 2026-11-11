@@ -16,6 +16,8 @@ import sys
 from time import perf_counter
 from typing import Any
 
+from run_support.source import legacy_source_files
+
 PROJECT = Path(__file__).resolve().parents[2]
 THREAD_ENV = {key: '1' for key in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS',
                                   'VECLIB_MAXIMUM_THREADS', 'NUMEXPR_NUM_THREADS', 'NUMBA_NUM_THREADS')}
@@ -41,8 +43,7 @@ def write(path: Path, value: Any) -> None:
 
 def freeze(source: Path, target: Path) -> dict[str, str]:
     target.mkdir()
-    paths = [p for name in ('solver', 'experiments', 'tools') for p in (source/name).rglob('*.py')]
-    paths += [source/name for name in ('pyproject.toml', 'uv.lock', '.python-version')]
+    paths = legacy_source_files(source)
     result = {}
     for path in paths:
         if path.is_file():

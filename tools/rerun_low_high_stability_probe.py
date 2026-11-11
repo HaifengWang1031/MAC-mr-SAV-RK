@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from experiments.records import begin_run, digest, provenance, write_json
+from run_support.source import source_files
 from solver.core import Scheme, Stage
 from solver.mac.grid import Array, MACGrid
 from solver.mac_ns import MACNavierStokes
@@ -190,8 +191,7 @@ def run(cfg: dict[str, Any], parent: Path) -> Path:
         handler.setFormatter(logging.Formatter('%(asctime)s %(message)s'))
         logger.addHandler(handler)
     try:
-        files = [Path(__file__), ROOT/'experiments/records.py', *sorted((ROOT/'solver').rglob('*.py')),
-                 ROOT/'pyproject.toml', ROOT/'uv.lock', ROOT/'.python-version']
+        files = source_files(root=ROOT, task_paths=[Path(__file__), 'experiments/records.py'])
         hashes = {str(path.relative_to(ROOT)): digest(path) for path in files}
         for relative in hashes:
             saved = out/'source'/relative

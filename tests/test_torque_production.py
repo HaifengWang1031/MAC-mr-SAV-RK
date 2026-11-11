@@ -70,7 +70,14 @@ def test_nearest_sampler_and_checkpoint_offsets_restore_without_duplicate_output
     assert [float(row['actual_t']) for row in rows] == [0., 1.5, 1.5]
 
 
-def test_retarget_cannot_copy_a_live_parent(tmp_path):
+def test_retarget_cannot_copy_a_live_parent(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    # Production runs on Linux. Supply its /proc filesystem precondition also
+    # on macOS, without changing the production liveness check or skipping it.
+    exists = Path.exists
+    live_process = Path(f'/proc/{os.getpid()}')
+    monkeypatch.setattr(Path, 'exists', lambda path: path == live_process or exists(path))
     assert FINAL_T == 10000.
     parent = tmp_path/'old'
     parent.mkdir()

@@ -21,6 +21,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from experiments.records import begin_run, digest, provenance, write_json
+from run_support.source import source_files
 from tools.rerun_low_high_stability_probe import baseline_config, run
 
 DEFAULT_STEPS = [.00387, .0038725, .0038775, .003885, .0039, .004]
@@ -61,9 +62,8 @@ def search(cfg: dict[str, Any], steps: list[float], parent: Path, *,
                 'rank_by': 'SAV maximum relative L2 error over every saved node'}
     batch, manifest = begin_run(parent, controls, provenance(),
                                metadata={'experiment': 'low_high_step_search', 'schema_version': 1})
-    files = [Path(__file__), ROOT/'tools/rerun_low_high_stability_probe.py',
-             ROOT/'experiments/records.py', *sorted((ROOT/'solver').rglob('*.py')),
-             ROOT/'pyproject.toml', ROOT/'uv.lock', ROOT/'.python-version']
+    files = source_files(root=ROOT, task_paths=[Path(__file__),
+                         'tools/rerun_low_high_stability_probe.py', 'experiments/records.py'])
     hashes = {str(path.relative_to(ROOT)): digest(path) for path in files}
     for relative in hashes:
         target = batch/'source'/relative

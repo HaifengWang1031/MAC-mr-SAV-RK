@@ -4,7 +4,7 @@ from pathlib import Path
 import h5py
 import numpy as np
 
-from experiments.records import load_record
+from run_support.records import load_record
 from solver.fourier import FourierSpace
 from solver.schemes.registry import scheme_info
 from .zhou import ZHOU_CASE
