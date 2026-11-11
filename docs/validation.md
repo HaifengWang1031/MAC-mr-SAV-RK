@@ -3001,3 +3001,28 @@ X0/X12 t1→1.2的推荐项速度差8.486e-10/1.263e-9，属于早期补充检�
 最终本地全套 **690 passed、36 skipped（120.33s）**、mypy **231源文件通过**；
 隔离原生audit-final最新搜索/MAC回归 **6 passed（1.05s）**、专属7文件mypy通过，diff检查通过。
 回归另覆盖失败接受前缀仅显示incomplete/n-a、不在错误时间比较或参与最优排名；原生数值源树保持原样。
+
+## 2026-11-11 用户批准直接生产：无新增数值测试
+
+用户明确要求“不需要测试了，直接执行；不需要实时监测进度，留一个log监测任务进程”。
+据此不再进行pilot、参数/并发基准或pytest。补齐长算必需的有界历史、observer流式输出和
+接受节点checkpoint；共同控制器/阶段/接受公式和原检查不改，默认全历史行为保留。
+新增AdaptiveContinuation保存双分量PI历史/建议h与累计计数，生产最大接受步数保护100000000。
+checkpoint绑定状态SHA256、源码/plan、已fsync日志偏移及下一采样下标；自然节点恢复不重置PI。
+这只是已实现的恢复格式，**未跑新增回归、断电恢复或重启轨迹等价性检查**。
+`tests/test_torque_production.py`新增有界历史/联合PI恢复与最近节点/日志尾部恢复用例，按要求未运行。
+仅静态mypy **232源文件通过**、diff检查通过；此前690测试结果不算新持久化的测试资格。
+
+实际生产2026-11-11 14:19:55 UTC启动于
+`/home/hfwang/torque-production-20261111T141856Z/`，supervisor PID163964，6单线程worker。
+13相位独立从零到T100000，推荐PI(.8,.3)/rtol_u1e-3/atol_u1e-8/atol_r1e-3/hmax.015，
+初步1e-4；标量1/场10按最近自然接受节点、等距取早。用户授权单独保存生产plan，历史候选不回写。
+一次启动确认中首批X0–X5全部存活、各约100%CPU且均已写t10.0005/673接受步的检查点，
+X6–X12由同一队列调度；这属于正式轨迹初段，不是额外测试。启动成功不等于13轨迹完成或科学资格。
+总日志supervisor.log，算例runs/production/Xnn.log，30分钟进程摘要，无实时数值监控代理。
+源码SHA256 `0c799bd1755ec8fc9fbd6712fcb075ddacd0f04f717e3d7470ac1e15ad600204`
+与本地实际数值源码核对相同，远端冻结源码不再修改。每10物理时间或900墙钟秒checkpoint，
+磁盘低于20GiB时保存后停算；WSL/主机重启不自动恢复，需显式确认旧进程退出后resume。
+
+启动元数据 `runs/torque_transition/production-20261111T141856Z/`，
+报告 `reports/torque_transition/production-20261111T141856Z/launch.md`。

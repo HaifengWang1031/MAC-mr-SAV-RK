@@ -114,6 +114,27 @@ Channel, FEM, cylinder and Hele–Shaw; Legendre uses the same API in dedicated 
 See the [experiment index](../../experiments/README.md) and
 [architecture](../../docs/architecture.md) for the actual entry points and readers.
 
+### Optional bounded history and natural-node continuation
+
+`retain_history=False` keeps only the initial/latest time and latest trial,
+diagnostics and stage summaries. Use `result.accepted_steps` / `attempted_steps`,
+not list lengths, for invocation counters. Explicit snapshot requests still retain
+their requested states; production streaming therefore passes no snapshot list.
+`on_attempt(record)` receives every trial; `on_advance(result)` runs after an
+accepted step and the next step proposal are committed. Observer errors stop with
+a failed prefix; they never authorize accepting a numerically rejected trial.
+
+`result.continuation` is an `AdaptiveContinuation` with proposed `step`, previous
+joint/velocity/scalar accepted errors and cumulative accepted/attempted counters.
+Pass it together with the same accepted state and controller/scalar settings to
+continue a natural-node trajectory. Strict-output boundary partitions are not
+restartable through this interface (`strict_snapshots=True` is rejected on resume).
+Experiments own identity checks, atomic storage, sampler cursors and log offsets;
+the solver does not itself publish checkpoints. Default history retention and
+numerical formulas remain unchanged. The first production use was explicitly
+requested without further tests; new streaming/restart equivalence tests exist
+but were not run before launch, so no new numerical qualification is implied.
+
 The main-minus-embedded difference estimates the lower-order local error. It is
 not a proved local or global error bound for the main output. Variable-step SAV
 accuracy, PDE convergence and long-time stability require their own assumptions

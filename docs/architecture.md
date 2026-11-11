@@ -22,7 +22,7 @@
 仍在各自 `run.py`；封闭 FEM、圆柱和 Hele–Shaw 有独立 `config.py`。楔腔还保存逐帧
 阶段压力，计算循环有专属实现。
 
-## 力矩转变预检（非生产入口）
+## 力矩转变：预检、参数搜索与生产
 
 [torque_transition](../experiments/torque_transition/README.md) 的 `preflight.py` 仅拥有
 X0–X12 无滑移问题的短时物理配置、观测和进程/线程基准；共享空间模型、SDIRK3-mr-ccSAV、
@@ -41,8 +41,24 @@ SDIRK3固定细步/半步，每条参考最多20000步，试算保留速度/标�
 参考粗细差和物理门槛通过后才排名；不通过放宽科学门槛选择最快。最终候选配置另存
 `configs/recommended_adaptivity.json`，明确短窗资格、生产未批准、生产流式与步数预算未就绪。
 共同控制器公式、旧预检默认及既有数值记录不改；仅新增显式选择。
-正式目标T=100000、标量1/全场10与待审批状态随记录保存，但入口禁止单probe超过100；
-生产流式/自适应恢复尚未实现，不把预检通过解释为生产资格。
+预检入口仍禁止单probe超过100，不把预检通过解释为生产科学资格。
+
+2026-11-11用户明确批准直接正式运行、无需再试算，仅保留后台进程日志。
+`production.py`拥有独立production_v1计划、6个单线程子进程生命周期及30分钟进程摘要日志；
+固定MAC256、13相位从零到T100000，候选文件的历史未批准标记不回写，实际授权单独写入生产plan。
+共享`integrate_adaptive`新增可选retain_history=False、on_attempt/on_advance observer及
+AdaptiveContinuation；默认保留原全历史，阶段/误差公式和检查不改。显式流式模式只保留末次记录，
+用accepted_steps/attempted_steps计数，continuation保留双分量PI历史、下一建议步长与累计计数。
+自然节点恢复不支持strict_snapshots分割边界；生产不采用这种分割。
+`production.Recorder`最多持有两个接受态，标量每1/场每10只按前后接受节点选最近者、等距取早，
+不插值或截断步长。逐试步attempts.csv、接受阶段摘要stages.csv、scalars.csv和fields.jsonl
+独立追加；只读消费者必须以manifest为准，不能扫描所有NPZ假定它们都已提交。
+checkpoint原子发布当前面场/SAV、PI上下文、采样下标及已fsync的日志字节偏移；恢复校验plan/源码、
+状态SHA256，截断未提交的日志尾部；字段NPZ逐项带SHA256，未提交旧字段可被原子重写。
+每物理10或900墙钟秒checkpoint；磁盘低于20GiB在checkpoint后停算，启动要求220GiB空闲。
+失败不强制接受、不自动重跑或篡改终点；只对完整到T100000的成员标complete。
+本次按用户要求不运行新增回归/重启等价性验证，新增测试留在tests/test_torque_production.py，
+只作静态类型检查；这项验证缺口必须随分析报告保留，不能声称新生产持久化已经通过端到端测试。
 
 ## 调用关系
 

@@ -89,10 +89,24 @@ class ScalarErrorControl:
         return float(trial_r-np.exp(-self.gamma*step)*old_r)
 
 
+@dataclass(frozen=True)
+class AdaptiveContinuation:
+    """Natural-node restart data; no accepted PI component is reset on restart."""
+    step: float
+    previous_error: float | None = None
+    previous_u: float | None = None
+    previous_r: float | None = None
+    accepted_steps: int = 0
+    attempted_steps: int = 0
+
+
 @dataclass
 class AdaptiveResult(Result):
     """Result plus one record per trial, including rejected trials."""
     attempts: list[dict[str, float | bool | str]] = field(default_factory=list)
+    accepted_steps: int = 0
+    attempted_steps: int = 0
+    continuation: AdaptiveContinuation | None = None
 
 
 def _error(model: Model, old: Any, high: Any, low: Any, controller: IController,
@@ -117,7 +131,11 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
                        progress: Callable[[int, float, float], None] | None = None,
                        on_accept: Callable[[Any], None] | None = None,
                        scalar_control: ScalarErrorControl | None = None,
-                       min_step_policy: Literal['fail', 'force'] = 'fail') -> AdaptiveResult:
+                       min_step_policy: Literal['fail', 'force'] = 'fail',
+                       retain_history: bool = True,
+                       continuation: AdaptiveContinuation | None = None,
+                       on_attempt: Callable[[dict[str, float | bool | str]], None] | None = None,
+                       on_advance: Callable[[AdaptiveResult], None] | None = None) -> AdaptiveResult:
     """Advance the order-three state; rejected trials never change the accepted state.
 
     T is a duration from initial.t. Snapshot requests are absolute physical times
@@ -145,11 +163,23 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
         raise ValueError('Strict snapshot times must be distinct and increasing')
     best = [(abs(t-initial.t), initial) for t in requests]
     result = AdaptiveResult(initial, [initial.t], [model.diagnostics(initial)])
-    step = min(initial_step, controller.max_step)
+    if continuation is not None:
+        if strict_snapshots:
+            raise ValueError('Continuation supports natural nodes, not strict snapshot partitions')
+        if not np.isfinite(continuation.step) or not controller.min_step <= continuation.step <= controller.max_step:
+            raise ValueError('Invalid continuation step')
+        history_values = [v for v in (continuation.previous_error, continuation.previous_u,
+                                      continuation.previous_r) if v is not None]
+        if any(not np.isfinite(v) or v < 0 for v in history_values) or \
+                continuation.accepted_steps < 0 or continuation.attempted_steps < continuation.accepted_steps:
+            raise ValueError('Invalid continuation history')
+    saved_history = continuation or AdaptiveContinuation(min(initial_step, controller.max_step))
+    step = saved_history.step
+    result.continuation = saved_history
     rejections = 0
-    previous_error: float | None = None
-    previous_u: float | None = None
-    previous_r: float | None = None
+    previous_error = saved_history.previous_error
+    previous_u = saved_history.previous_u
+    previous_r = saved_history.previous_r
     scalar_controller = replace(controller, estimator_order=2)
     output_index = 0
     boundary_step: float | None = None
@@ -159,7 +189,7 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
     start = perf_counter()
     cpu_start = process_time()
     while result.final.t < end:
-        if len(result.times)-1 >= controller.max_steps:
+        if saved_history.accepted_steps + result.accepted_steps >= controller.max_steps:
             result.status, result.error = 'failed', 'Maximum accepted steps exceeded'
             break
         remaining = end-result.final.t
@@ -265,6 +295,19 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
                                 'controller': type(controller).__name__,
                                 'elapsed_seconds': perf_counter()-start-result.observer_wall_seconds,
                                 'cpu_seconds': process_time()-cpu_start-result.observer_cpu_seconds})
+        result.attempted_steps += 1
+        if not retain_history:
+            result.attempts[:] = result.attempts[-1:]
+        if on_attempt is not None:
+            observer_wall_start, observer_cpu_start = perf_counter(), process_time()
+            try:
+                on_attempt(result.attempts[-1])
+            except Exception as exc:
+                result.status, result.error = 'failed', f'Trial observer failed: {type(exc).__name__}: {exc}'
+                break
+            finally:
+                result.observer_cpu_seconds += process_time()-observer_cpu_start
+                result.observer_wall_seconds += perf_counter()-observer_wall_start
         if reason:
             if boundary_partition:
                 boundary_step = None
@@ -292,10 +335,15 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
         if strict_snapshots and output_index < len(requests) and \
                 abs(trial.state.t-requests[output_index]) <= 8*np.finfo(float).eps*max(1.,abs(trial.state.t)):
             output_index += 1
+        result.accepted_steps += 1
         result.times.append(trial.state.t)
         result.diagnostics.append(diagnostic)
         result.final_stages = trial.stages
         result.stages.append([stage_diagnostics(stage) for stage in trial.stages])
+        if not retain_history:
+            result.times[:] = [initial.t, trial.state.t]
+            result.diagnostics[:] = result.diagnostics[-1:]
+            result.stages[:] = result.stages[-1:]
         for index, request in enumerate(requests):
             distance = abs(request-trial.state.t)
             if distance < best[index][0]:
@@ -313,7 +361,7 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
                 result.observer_cpu_seconds += process_time()-observer_cpu_start
                 result.observer_wall_seconds += perf_counter()-observer_wall_start
         if progress is not None:
-            progress(len(result.times)-1, trial.state.t,
+            progress(result.accepted_steps, trial.state.t,
                      perf_counter()-start-result.observer_wall_seconds)
         if boundary_partition:
             boundary_steps_remaining -= 1
@@ -327,6 +375,20 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
             step = min(step*factor, controller.max_step)
         if min_step_policy == 'force' and not boundary_steps_remaining:
             step = max(step, controller.min_step)
+        result.continuation = AdaptiveContinuation(
+            step, previous_error, previous_u, previous_r,
+            saved_history.accepted_steps+result.accepted_steps,
+            saved_history.attempted_steps+result.attempted_steps)
+        if on_advance is not None:
+            observer_wall_start, observer_cpu_start = perf_counter(), process_time()
+            try:
+                on_advance(result)
+            except Exception as exc:
+                result.status, result.error = 'failed', f'Advance observer failed: {type(exc).__name__}: {exc}'
+                break
+            finally:
+                result.observer_cpu_seconds += process_time()-observer_cpu_start
+                result.observer_wall_seconds += perf_counter()-observer_wall_start
     for request, (_, state) in zip(requests, best):
         result.snapshot_requests.append(request)
         result.snapshot_times.append(state.t)
