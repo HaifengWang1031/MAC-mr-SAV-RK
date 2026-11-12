@@ -17,7 +17,7 @@ PROJECT = Path(__file__).resolve().parents[1]
 ENVIRONMENT_FILES = ('pyproject.toml', 'uv.lock', '.python-version')
 CORE_SOURCE_DIRS = ('solver', 'run_support')
 # Order is part of the historical byte-stream encoding. Append, do not reorder.
-LEGACY_SOURCE_DIRS = ('solver', 'experiments', 'tools', 'run_support')
+LEGACY_SOURCE_DIRS = ('solver', 'experiments', 'tools', 'run_support', 'postprocess')
 
 
 def digest(path: Path) -> str:
@@ -88,7 +88,7 @@ def legacy_source_files(root: Path = PROJECT) -> tuple[Path, ...]:
     """Ordered broad inventory for old callers and source-selected workers.
 
     Missing directories are allowed, as in the old implementation, so genuine
-    older source trees without run_support can still be captured. Required
+    older trees without run_support/postprocess can still be captured. Required
     environment files remain mandatory at hashing/copy time.
     """
     files = [root/name for name in ENVIRONMENT_FILES]
@@ -130,7 +130,7 @@ def legacy_provenance(*, root: Path = PROJECT) -> dict[str, Any]:
     """Keep legacy encoding while including the newly extracted implementation.
 
     No saved source/identity is rewritten. New broad-scope runs change identity
-    honestly when shared implementation changes, including run_support itself.
+    honestly when shared implementation changes, including run_support/postprocess.
     """
     hasher = hashlib.sha256()
     for path in legacy_source_files(root):

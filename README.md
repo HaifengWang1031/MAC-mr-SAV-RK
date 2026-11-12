@@ -88,6 +88,11 @@ solver/
 run_support/
   records.py              公共运行身份、保存、复用与完整性检查（不依赖实验）
   source.py               核心＋显式任务来源清单；旧来源策略兼容
+postprocess/
+  mac.py                  公共 MAC 保存场读取（不构造动力模型）
+  plotting.py             通用字段/历史图与 TeX 样式
+  diagnostics.py          显式完整/失败前缀的保存诊断分析
+  snapshots.py            快照报告与独立命令行
 experiments/
   controllers.py          共同 I/PI 构建、校验与 JSON 配置表示
   records.py              run_support 旧名兼容导出（旧入口仍用广泛来源策略）
@@ -97,17 +102,18 @@ experiments/
 runs/                     配置、manifest、HDF5、日志与批次记录
 reports/                  分析来源、图、表和日志
 tests/
-  core/                   不依赖实验/工具的数值与公共记录回归
+  core/                   不依赖实验/工具的数值、公共记录及只读后处理回归
   references/             测试专用 ODE、MAC、Fourier、Channel 数学参照
   tasks/                  实验配置、运行/分析、扫描、动画与工具回归
   core_distribution.py    无实验/工具目录的隔离核心验证入口
-tools/                    步长计时与快照绘图
+tools/                    旧快照只读命令 adapter；其余计时/回放/探针/搜索仍属计算任务
 archive/                  旧程序来源索引
 ```
 
 核心记录与来源的独立入口见 [run_support](run_support/README.md)。当前只有周期 MHD
 入口完成显式任务来源迁移；其他实验暂保留旧策略。测试已按核心/任务分离，
-但本轮仍未取消跟踪实验/任务测试，也未改忽略规则；工具与任务的分离留待下一阶段。
+通用只读后处理已抽取到 [postprocess](postprocess/README.md)，与仍会计算的
+[任务工具](tools/README.md)分开；实验/任务测试仍在跟踪中，本轮没有改变忽略规则。
 
 ## 验证与阅读
 
@@ -116,6 +122,7 @@ uv run --locked mypy
 uv run --locked pytest -q                    # 当前检出的全部测试，含任务测试
 uv run --locked pytest -q tests/core         # 核心回归
 uv run --locked python -m tests.core_distribution  # 无实验/工具目录的完整核心回归
+uv run --locked python -m postprocess.snapshots --run /path/to/run --fields speed vorticity
 ```
 
 [测试说明](tests/README.md)列出归属和参照范围。隔离入口复用当前解释器和已安装依赖，

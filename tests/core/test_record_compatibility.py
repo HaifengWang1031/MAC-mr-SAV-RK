@@ -18,3 +18,9 @@ def test_legacy_source_encoding_and_new_shared_dependencies(tmp_path):
     (tmp_path/'run_support').mkdir()
     (tmp_path/'run_support/records.py').write_text('# shared implementation')
     assert legacy_provenance(root=tmp_path)['code_sha256'] != old['code_sha256']
+    # Shared readonly implementations must also be captured by new broad snapshots,
+    # while a genuine old source tree without them retains the byte stream above.
+    shared = legacy_provenance(root=tmp_path)
+    (tmp_path/'postprocess').mkdir()
+    (tmp_path/'postprocess/mac.py').write_text('# shared readonly implementation')
+    assert legacy_provenance(root=tmp_path)['code_sha256'] != shared['code_sha256']

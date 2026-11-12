@@ -39,7 +39,7 @@ def check_core(*, collect_only: bool = False) -> subprocess.CompletedProcess[str
     with TemporaryDirectory(prefix='mac-core-tests-') as temporary:
         root = Path(temporary)
         ignore = shutil.ignore_patterns('__pycache__', '*.pyc', '*.nbc', '*.nbi')
-        for name in ('solver', 'run_support', 'tests/core', 'tests/references'):
+        for name in ('solver', 'run_support', 'postprocess', 'tests/core', 'tests/references'):
             shutil.copytree(PROJECT/name, root/name, ignore=ignore)
         for name in ('pyproject.toml', 'uv.lock', '.python-version',
                      'tests/__init__.py', 'tests/core_distribution.py'):

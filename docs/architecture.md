@@ -15,7 +15,7 @@
 | I/PI 配置与序列化 | [controllers.py](../experiments/controllers.py) | 实验默认值与启用策略留在各实验配置中 |
 | 运行身份、保存、复用、完成状态 | [run_support/records.py](../run_support/records.py)、[source.py](../run_support/source.py)、下文记录章节 | 显式来源范围；旧可选键、失败前缀、专属表示校验保留 |
 | 网格、布局、压力标签、读取重建 | 各实验 `records.py` / `representation.py` / `reconstruct.py` | 读取实际保存网格；区分阶段乘子与瞬时半离散压力 |
-| 绘图与结果分析 | 各实验 `analyze.py` / `animate.py`，MAC 通用 [analysis.py](../experiments/analysis.py) | 只接受显式记录，输出到 `reports/`，不启动计算 |
+| 绘图与结果分析 | [postprocess](../postprocess/README.md) 拥有公共 MAC 读取/报告/图/样式；专属 `analyze.py` / `animate.py` 留在实验 | 只接受显式记录，输出到 `reports/`，不启动计算；不做万能 reader |
 | 实验参数、物理观测或计算调度 | 各实验 `config.py` / `problems.py` / `run.py`，见[实验导航](../experiments/README.md) | 共用已有推进与记录机制；实验特有物理内容留在实验内 |
 | 核心验证、数学参照与任务测试 | [tests/core](../tests/core/)、[references](../tests/references/)、[tasks](../tests/tasks/)，见[测试导航](../tests/README.md) | 按机制分层；核心不导入实验/工具或另一个测试文件，任务工作流不伪装成核心验证 |
 
@@ -92,6 +92,12 @@ flowchart TD
     Analysis[只读分析和绘图] --> Reader[实验专属 reader]
     Reader --> Records
     Reader --> Reconstruct[表示校验与保存网格重建]
+    Snapshot[postprocess/snapshots.py] --> MACReader[postprocess/mac.py]
+    MACReader --> Records
+    Snapshot --> Figures[postprocess/plotting.py]
+    Snapshot --> Source
+    Diagnostics[postprocess/diagnostics.py] --> Records
+    Diagnostics --> Source
 ```
 
 模型、阶段推进、持久化和绘图分别拥有自己的职责。MAC、Legendre 谱、Fourier、Channel
@@ -242,8 +248,8 @@ roots/selected是stages/r的兼容别名，不能解释为原多项式的实根�
 
 | 记录家族 | 当前读取入口 | 校验或重建扩展 |
 | --- | --- | --- |
-| 通用 MAC | [load_record](../run_support/records.py) | [plotting.py](../experiments/plotting.py) 等 MAC 读取处理 |
-| 排版/外部工具 | [plotting.py](../experiments/plotting.py) 的 `latex_binary`、`usetex_available`、`latex_style` | 唯一工具定位入口：先查 `PATH`，再查 `/Library/TeX/texbin`、`/usr/local/texlive/*/bin/*` 等标准位置（MacTeX 常不在非登录 shell 的 `PATH`）。`latex_style` 有工具链时启用 `text.usetex`、否则回退 mathtext；需要 PDF 表的分析（no_slip 参考收敛等）经此判断是否编译，缺工具记 `pdf_status` 而不是数值失败 |
+| 通用 MAC | [load_record](../run_support/records.py) | [postprocess/mac.py](../postprocess/mac.py) 的保存场解释；旧 experiments.plotting 仅导出该入口 |
+| 排版/外部工具 | [postprocess/plotting.py](../postprocess/plotting.py) 的 `latex_binary`、`usetex_available`、`latex_style` | 唯一工具定位入口：先查 `PATH`，再查 `/Library/TeX/texbin`、`/usr/local/texlive/*/bin/*` 等标准位置（MacTeX 常不在非登录 shell 的 `PATH`）。`latex_style` 有工具链时启用 `text.usetex`、否则回退 mathtext；需要 PDF 表的分析（no_slip 参考收敛等）经此判断是否编译，缺工具记 `pdf_status` 而不是数值失败 |
 | 周期 Fourier | [periodic_ns/records.py](../experiments/periodic_ns/records.py) 的 `load_periodic` | Fourier 表示、布局与压力标签 |
 | 周期 Fourier MHD | [periodic_mhd/records.py](../experiments/periodic_mhd/records.py) 的 `load_mhd` | 独立记录家族，补充 `final/magnetic`、`snapshots/magnetic`，省略阶段压力，检查两次校正计数。Zhou 算例另外保存和校验 `snapshots/flux` 与 `snapshots/current`，由 [analyze_zhou](../experiments/periodic_mhd/analyze_zhou.py) 读取两条显式运行记录 |
 | 受迫 MHD 逆级联 | [inverse_cascade/records.py](../experiments/inverse_cascade/records.py) 的 `load` | 独立记录家族，复用公共 HDF5 与来源机制；补充磁场及 `spectra/{times,K,Pi_E,Pi_Q,E_u,E_B}`，检查谱抽样与接受步对齐、双场形状及两次标量校正。低通收支列 `E_low/Q_low/power_*_low/diss_*_low` 为**可选**：新记录写入并校验形状，旧记录缺列不得报错、不回填。只读分析显式指定运行、完成扫描或 chain，burn-in/块长为分析参数，不自动扫描或求解 |
@@ -276,10 +282,11 @@ Gmsh 等计算依赖保持按需导入；已有保存网格的读取不要求这
 只支持同一源码根目录下的任务。专属 reader 继续验证真实表示，不由共同 load_record 替代。
 
 尚未迁移的 `experiments.records.provenance` 仍使用 `legacy_provenance` 的广泛发现策略：
-按历史顺序遍历 solver/experiments/tools，再附加 run_support，确保抽取后的真实实现也被哈希。
+按历史顺序遍历 solver/experiments/tools，再附加 run_support/postprocess，确保抽取后的真实实现也被哈希。
 这类入口仍会受无关本地任务影响，不能据此宣称所有实验已解耦。源码捕获和校验共用
 `legacy_source_files` 或显式 `source_files`；圆柱/翼型/跨规模快照、低高频脚本均包含
-run_support。逆级联数值身份也包含该实现，旧 chain 不允许被悄悄续接到新来源。
+run_support/postprocess。逆级联数值身份包含共同记录实现，但不把只读 postprocess 加入
+计算核心目录；旧 chain 不允许被悄悄续接到新来源。
 旧冻结源码本身不修改；生产 retarget 继续拒绝本次公共依赖变化。
 
 ### 历史兼容与冻结源码
@@ -295,6 +302,37 @@ run_support。逆级联数值身份也包含该实现，旧 chain 不允许被�
 - 实验表示标签明确区分自然出口、回流耗散出口及压力入口修正；瞬时半离散物理压力与
   阶段增量乘子分别命名。旧楔腔缺少字段时保留真实的 `r0=1`、移动角点解释；当前默认
   `r0=0`、静止角点不回填到旧记录。
+
+## 公共只读后处理与任务工具
+
+[postprocess](../postprocess/README.md) 是独立的只读 module：`mac.py` 解释完整保存的
+MAC 面数组，`plotting.py` 拥有字段/历史图及公共 TeX 样式，`snapshots.py` 拥有快照
+统计/报告/CLI，`diagnostics.py` 拥有显式保存诊断分析。它们只依赖共同记录、数组/绘图库
+及 MACGrid 几何工具，不导入实验、任务工具、动力模型、推进器或线性求解实现。
+solver/run_support 不反向依赖后处理，读取、持久化与渲染仍分开维护。
+
+保持 `read_run_fields` 五元组、速度格心平均取模、内部顶点旋度及原请求/实际时刻规则。
+读取前校验输入完整性/完成状态，额外拒绝显式非 MAC 布局、快照数量/形状不符及非有限
+时刻/字段；不靠广播或截短 zip 悄悄解释其他布局。历史无标签 MAC 记录继续读取。
+零快照可以读取历史，但快照报告拒绝补算。诊断分析保留旧固定步 MAC 字段要求，可描述
+显式 failed 接受前缀，CSV 仍标记失败；分析成功不等于输入运行成功或物理合格。
+
+公共命令 `python -m postprocess.snapshots --run ...` 不要求 tools/experiments。
+原 `tools/plot_speed_snapshots.py` 和 `report` 导入委托同一 `main/report`，不再拥有
+另一份参数解析/报告逻辑。`experiments.plotting/analysis` 保留旧名 adapter；固定两种
+格式/斜率二的 reference-error 图仍留在实验。当前实验分析直接导入公共 owner，任务特有
+统计、表示与报告仍不合并。参见 [工具归属清单](../tools/README.md)：其余 benchmark、
+probe、rerun/search 会计算，仍保留任务依赖和原源码选择路径，不冒充只读命令。
+
+新公共报告来源显式选择 postprocess 加默认核心/环境，覆盖实际读取/渲染/参数解析/报告
+代码，不扫描其他任务；输入计算来源不回填或重算。旧广泛来源/快照清单在原有顺序末尾
+附加 postprocess，缺该目录的真实旧源码仍支持；新依赖/来源改变不被自动视为旧同源。
+尚未迁移的广泛来源入口仍会受分析文件改动影响，本阶段不整体迁移所有任务身份。
+
+抽取时修复公共渲染的两个边界：单面板历史的 Axes 标量索引；没有 TeX 时默认显式关闭
+继承的 usetex=True。可用性上下文覆盖字段/历史图及诊断报告的实际创建和保存，而非只
+要求调用者主动进入样式 helper；调用者原本关闭 TeX 时不会因发现外部工具而自动启用。
+TeX 工具定位及样式/PATH 在异常时恢复，由实际公开渲染/报告测试覆盖，不改变数值公式。既有记录、冻结源码、默认计算参数、忽略规则和跟踪范围不改。
 
 ## 保存布局与分析约定
 
@@ -335,7 +373,7 @@ FEM 保存实际网格、DOF 映射和完整 P2/P1 系数；压力规范及所�
 
 ## 核心验证与任务测试的依赖边界
 
-`tests/core/` 直接验证公开算子、Model/阶段、固定/自适应推进和公共运行记录。
+`tests/core/` 直接验证公开算子、Model/阶段、固定/自适应推进、公共运行记录及公共只读后处理。
 `tests/references/` 是测试私有的数学参照 module：`ode.py` 拥有已知旋转 ODE 和可控
 Trial 缺陷，多个格式/控制器测试共享它，不再从 `test_sdirk3` 或 `test_joint_adaptivity`
 导入。`mac.py`、`fourier.py`、`channel.py` 只保留测试所需的显式数学构造，不导入任务配置、
@@ -355,11 +393,14 @@ FEM 求积/Model 在 core，实际 workflow 的 MMS 模态投影和默认求积�
 
 默认 `pytest -q` 继续运行全部现存测试；`pytest -q tests/core` 明确选择核心。
 [tests/core_distribution.py](../tests/core_distribution.py) 提供隔离分发 seam：
-`python -m tests.core_distribution` 仅复制 solver/run_support、core/references、测试包初始化、
+`python -m tests.core_distribution` 仅复制 solver/run_support/postprocess、core/references、测试包初始化、
 本入口与环境文件，在新进程中实际运行核心套件。`-I` 隔离原检出/PYTHONPATH，禁止
 experiments、tools、tests.tasks 导入且禁用无关自动加载插件；不安装环境、不复制研究材料。
 `test_core_distribution` 只验证该边界下的收集，完整隔离执行须另外运行上述命令。
-此阶段没有取消跟踪任务、改变忽略规则或解除所有工具对实验的依赖。
+`test_postprocess` 还在另一个无实验/工具/测试包副本实际执行快照 CLI，除 MACGrid 外
+禁止所有数值模块导入，并逐字节检查输入不变。测试仍复用已安装的完整依赖，不是最小
+依赖安装证明；真实 TeX 执行和专属家族后处理另有范围。本阶段没有取消跟踪任务、改变
+忽略规则或解除所有计算工具对实验的依赖。
 
 ## 修改后的验证与文档维护
 
@@ -370,6 +411,7 @@ experiments、tools、tests.tasks 导入且禁用无关自动加载插件；不�
 | FEM 装配或动量表示 | `tests/core/test_fem_weak_load.py`；core 下 `test_backflow_outlet.py`、`test_wedge_cavity.py`、`test_hele_shaw_inlet.py` 保留独立功参照 |
 | 核心记录与来源范围 | `tests/core/test_run_support.py`、`tests/core/test_record_compatibility.py`；旧导入/冻结 worker/显式 MHD 来源见 `tests/tasks/test_record_compatibility.py` |
 | 保存、复用、只读加载 | tasks 下各家族 workflow；`tests/tasks/test_fem_workflow.py` 含独立进程读取与 rerun/损坏检查 |
+| 公共只读报告/CLI 与 TeX 样式 | `tests/core/test_postprocess.py`、`tests/core/test_plotting.py`；旧导入/冻结捕获另见 `tests/tasks/test_postprocess_compatibility.py`、`tests/tasks/test_record_compatibility.py` |
 | 自适应接受、终点、失败观测 | core 下 `test_adaptivity.py`、`test_min_step_policy.py`、`test_accepted_observers.py`、`test_tensor_stokes_adaptive.py` |
 | 线性后端或可选依赖 | 对应算子/求解器测试和完整阶段测试；单独报告跳过项的覆盖限制 |
 

@@ -23,7 +23,8 @@ def test_source_selected_worker_captures_shared_record_implementation(tmp_path):
     from run_support.source import PROJECT, ENVIRONMENT_FILES
 
     root = tmp_path/'input'
-    shutil.copytree(PROJECT/'run_support', root/'run_support', ignore=shutil.ignore_patterns('__pycache__'))
+    for name in ('solver', 'run_support', 'postprocess'):
+        shutil.copytree(PROJECT/name, root/name, ignore=shutil.ignore_patterns('__pycache__'))
     (root/'experiments').mkdir()
     shutil.copy2(PROJECT/'experiments/records.py', root/'experiments/records.py')
     for name in ENVIRONMENT_FILES:
@@ -32,7 +33,8 @@ def test_source_selected_worker_captures_shared_record_implementation(tmp_path):
     inventory = freeze(root, frozen)
     assert 'run_support/records.py' in inventory
     assert 'run_support/source.py' in inventory
-    script = "import sys; sys.path.insert(0, sys.argv[1]); from experiments.records import provenance; assert provenance()['code_sha256']"
+    assert 'postprocess/mac.py' in inventory and 'postprocess/plotting.py' in inventory
+    script = "import sys; sys.path.insert(0, sys.argv[1]); from experiments.records import provenance; from postprocess.mac import read_run_fields; assert provenance()['code_sha256']"
     subprocess.run([sys.executable, '-I', '-c', script, str(frozen)], cwd=frozen,
                    check=True, capture_output=True, text=True)
 

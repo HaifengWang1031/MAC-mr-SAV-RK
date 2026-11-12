@@ -36,8 +36,11 @@ source = provenance(task_paths=[
 ## 过渡期兼容
 
 `experiments.records` 继续导出原记录函数，记录实现只有一份。其 `provenance` 有意保留
-旧的广泛扫描策略：按旧顺序扫描 solver/experiments/tools，再加入 run_support。
-`legacy_source_files` 给旧式快照和校验提供同一清单，仍支持没有 run_support 的真实旧源码树。
+旧的广泛扫描策略：按旧顺序扫描 solver/experiments/tools，再加入 run_support/postprocess。
+`legacy_source_files` 给旧式快照和校验提供同一清单，依次保留原 solver/experiments/tools，
+再附加 run_support/postprocess 的真实实现；仍支持缺少这些新目录的真实旧源码树。
+公共后处理的新报告显式选择 postprocess，不把它加入默认计算核心来源；见
+[postprocess](../postprocess/README.md)。旧 manifest 与冻结源码不回写。
 因此**尚未迁移的入口仍受本地无关 Python 文件影响**，不应在此阶段取消跟踪实验目录。
 
 新来源策略不会重算或改写旧 manifest；旧结果按其记录的来源与校验和读取。新共享实现

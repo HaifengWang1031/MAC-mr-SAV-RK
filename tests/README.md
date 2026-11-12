@@ -8,10 +8,10 @@
 
 | 目录/入口 | 归属 |
 | --- | --- |
-| `core/` | 公开算子、线性求解、空间/时间阶、阶段/SAV/约束、自适应与公共记录；不依赖实验/工具 |
+| `core/` | 公开算子、线性求解、空间/时间阶、阶段/SAV/约束、自适应、公共记录与只读后处理；不依赖实验/工具 |
 | `references/` | 测试私有 ODE、解析 MAC/Fourier、连续/离散 Channel 数学参照；不从测试文件借 helper |
 | `tasks/` | 研究配置、campaign、专属 run/load/analyze、物理观测、绘图、工具与历史数据探针 |
-| `core_distribution.py` | 只复制核心文件，在无实验/工具/任务测试的临时副本验证完整核心套件 |
+| `core_distribution.py` | 只复制 solver/run_support/postprocess 与核心测试，在无实验/工具/任务测试的临时副本验证完整核心套件 |
 
 ```sh
 uv run --locked pytest -q tests/core
@@ -35,7 +35,7 @@ pytest 插件自动加载。`--collect-only` 只验证收集，默认命令实�
 测试参照只描述明确的数学问题，不是第二套研究配置/生产工厂；实验中的参照和工具实现
 保留原归属，不反向依赖 tests。连续 PDE 导数、独立固定网格 stencil、半离散轨迹的
 验证范围分别说明，不将时间验证冒充 PDE 空间/阶数证明。此阶段未改忽略规则、未取消
-跟踪任务或清理工具依赖。
+跟踪任务。通用只读工具已抽取到 postprocess，其他会计算的任务工具仍保留原依赖。
 
 ## 代表机制索引
 
@@ -47,6 +47,9 @@ pytest 插件自动加载。`--collect-only` 只验证收集，默认命令实�
 | 旧来源编码 | core/test_record_compatibility |
 | 旧导入、冻结 worker 及显式周期 MHD 来源 | tasks/test_record_compatibility |
 | 无研究目录的隔离收集/完整核心执行 | core/test_core_distribution、core_distribution.py |
+| 已知保存 MAC 场、快照统计/独立来源、失败前缀、完整性/布局拒绝与无计算模块 CLI | core/test_postprocess |
+| TeX 定位/回退/异常恢复、继承 TeX 开关的实际渲染及单面板历史图 | core/test_plotting；core/test_postprocess 同时实际生成两类报告 |
+| 旧绘图/分析/快照名的同实现 adapter | tasks/test_postprocess_compatibility |
 | MAC 算子与边界 | core/test_model_seam、core/test_kernels；实验顶盖载荷另见 tasks/test_cavity |
 | Stokes 求解、压力定标与分解复用 | test_stokes、test_numerics 的空间收敛 |
 | 二阶、SAV 能量与冻结阶段方程 | test_numerics、test_schemes |

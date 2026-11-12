@@ -67,6 +67,44 @@ while executing the entire core suite (not just collection). No dependency insta
 experimental calculation, gitignore edit, untracking or saved-record rewrite.
 Document the retained coverage, test paths and remaining tool/task coupling.
 
+## Core repository extraction: portable readonly tools (third stage)
+
+Move shared MAC stored-field reading, figure/LaTeX utilities, recorded-diagnostics
+analysis and snapshot reporting into `postprocess`, separate from solver stepping,
+run persistence and research configuration. Keep `experiments.plotting` and
+`experiments.analysis` compatibility imports and the existing
+`tools/plot_speed_snapshots.py` command/report interface. Leave research-specific
+plotting policy and computation/benchmark/probe/search tools with their tasks;
+do not introduce a universal reader/runner or relocate their frozen-source paths.
+
+Readers verify saved integrity and finalization, preserve MAC field meanings and
+requested/actual snapshot rules, and reject unsupported field layouts rather than
+silently interpreting Fourier/Channel/FEM coefficients as no-slip MAC fields.
+Snapshot reporting requires complete saved data; diagnostics may describe an
+explicit failed accepted prefix, without presenting it as a successful run.
+The standalone `python -m postprocess.snapshots` CLI and historical tool path
+share one `main/report` implementation. Shared rendering handles one recorded
+history panel and defaults to mathtext without TeX even if the caller previously
+enabled usetex; style/PATH restoration must survive errors.
+Reports keep explicit input references/checksums and separate output directories.
+Neither reading nor analysis constructs a dynamical model, generates a mesh,
+solves a linear system or advances time. Do not rewrite input files/provenance.
+
+New reports record explicit analysis-source inventories including `postprocess`,
+independent of unrelated task files. Transitional broad source capture must include
+the extracted implementation; old source encodings without it, saved identities
+and frozen workers remain read-only. New dependencies must not be falsely labelled
+as the old numerical source. Keep computational core source scope separate from
+analysis source scope.
+
+Validate known saved MAC fields and public reports, compatibility adapters,
+integrity/incomplete/layout rejection, failed-prefix diagnostics, and an actual
+snapshot CLI in a temporary copy with no experiments or task tools. Extend core
+distribution validation to include the new public readonly module while retaining
+its ban on tools imports. Run focused/full tests and mypy; document validation
+limits and remaining task tools. No numerical formula, gitignore, untracking,
+remote production computation, push or merge in this stage.
+
 ## Confirmed extensions and historical scope
 
 2026-11-07 requested inverse-cascade reproduction: independent `inverse_cascade`

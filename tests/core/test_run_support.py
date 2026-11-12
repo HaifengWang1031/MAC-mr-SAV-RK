@@ -27,6 +27,10 @@ def test_explicit_source_tracks_core_and_task_but_not_unrelated_research(tmp_pat
     (tmp_path/'experiments/task.py').write_text('# changed task\n')
     assert provenance(root=tmp_path, task_paths=['experiments/task.py'])['code_sha256'] != source['code_sha256']
     core = provenance(root=tmp_path)
+    (tmp_path/'postprocess').mkdir()
+    (tmp_path/'postprocess/mac.py').write_text('# readonly analysis, not computation\n')
+    assert provenance(root=tmp_path) == core
+    assert provenance(root=tmp_path, task_paths=['postprocess']) != core
     (tmp_path/'run_support/__init__.py').write_text('# changed support\n')
     assert provenance(root=tmp_path)['code_sha256'] != core['code_sha256']
 

@@ -1,5 +1,12 @@
 ## 当前能力索引（2026-11-04 文档核对）
 
+2026-11-12 用户继续批准第三阶段通用只读工具分离：公共 MAC 保存场读取、图/排版、诊断和快照报告
+归属 postprocess，experiments.plotting/analysis 和旧快照命令保留 adapter；研究绘图策略、
+benchmark/probe/search 仍属任务计算侧，不统一搬迁。新报告显式记录分析实现来源，
+旧广泛来源清单追加 postprocess 防漏依赖；旧记录/冻结源码不改。核心分发加入该公共
+module，仍不包含或导入 tools/experiments；独立副本实际运行 python -m postprocess.snapshots，
+禁止研究与数值计算模块导入，验证输入不变。本阶段不改数值公式、gitignore 或跟踪范围。
+
 2026-11-11 用户继续批准第二阶段核心验证/任务测试分离：tests/core 不依赖
 experiments、tools 或 tests/tasks；共享 ODE 与解析/独立离散参照归属 tests/references。
 混合文件按机制拆分，任务测试全部保留在 tests/tasks；默认 pytest 仍覆盖全部现存测试。

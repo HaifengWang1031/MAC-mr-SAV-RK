@@ -155,7 +155,7 @@ def analyze_batch(batch_path: Path, *, root: Path = PROJECT) -> Path:
                               for norm in ('L2', 'H1'))+'\n'+r'\end{document}'+'\n')
         (folder/'convergence.tex').write_text(document)
         import subprocess
-        from experiments.plotting import latex_binary
+        from postprocess.plotting import latex_binary
         # PDF rendering is an optional presentation step: a missing LaTeX toolchain is
         # recorded, not treated as a numerical-analysis failure.
         pdflatex = latex_binary('pdflatex')

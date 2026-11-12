@@ -27,7 +27,7 @@ import numpy as np
 from scipy.integrate import trapezoid
 from scipy.stats import t as student_t
 
-from experiments.plotting import latex_style
+from postprocess.plotting import latex_style
 from experiments.records import PROJECT, provenance, write_json
 from . import stats
 from .records import load

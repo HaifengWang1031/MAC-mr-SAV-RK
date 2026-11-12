@@ -1,7 +1,8 @@
 """Long-time statistics of the A/B torque experiment; never starts computation.
 
 Consumes explicit run directories (or one batch record), verifies each with
-`experiments.workflow.load_record` and writes a report with the three figure groups the plan
+`run_support.records.load_record`, shares the public postprocess MAC field reader,
+and writes a report with the three figure groups the plan
 asks for: energy/angular-momentum time curves, field snapshots, and the step-size/grid
 comparison of the statistics. Reversal detection is deliberately conservative: a sign change
 counts only when the angular momentum leaves a threshold band with the new sign and stays
@@ -20,7 +21,8 @@ import h5py
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from experiments.plotting import field_figure, history_figure, read_run_fields
+from postprocess.mac import read_run_fields
+from postprocess.plotting import field_figure, history_figure
 from experiments.records import PROJECT, digest, load_record, provenance, write_json
 
 
