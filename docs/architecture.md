@@ -17,6 +17,7 @@
 | 网格、布局、压力标签、读取重建 | 各实验 `records.py` / `representation.py` / `reconstruct.py` | 读取实际保存网格；区分阶段乘子与瞬时半离散压力 |
 | 绘图与结果分析 | 各实验 `analyze.py` / `animate.py`，MAC 通用 [analysis.py](../experiments/analysis.py) | 只接受显式记录，输出到 `reports/`，不启动计算 |
 | 实验参数、物理观测或计算调度 | 各实验 `config.py` / `problems.py` / `run.py`，见[实验导航](../experiments/README.md) | 共用已有推进与记录机制；实验特有物理内容留在实验内 |
+| 核心验证、数学参照与任务测试 | [tests/core](../tests/core/)、[references](../tests/references/)、[tasks](../tests/tasks/)，见[测试导航](../tests/README.md) | 按机制分层；核心不导入实验/工具或另一个测试文件，任务工作流不伪装成核心验证 |
 
 这些文件名是常见归属，不要求每个实验机械地复制整套文件。周期与 Channel 配置目前
 仍在各自 `run.py`；封闭 FEM、圆柱和 Hele–Shaw 有独立 `config.py`。楔腔还保存逐帧
@@ -57,7 +58,7 @@ checkpoint原子发布当前面场/SAV、PI上下文、采样下标及已fsync�
 状态SHA256，截断未提交的日志尾部；字段NPZ逐项带SHA256，未提交旧字段可被原子重写。
 每物理10或900墙钟秒checkpoint；磁盘低于20GiB在checkpoint后停算，启动要求220GiB空闲。
 失败不强制接受、不自动重跑或篡改终点；只对完整到T100000的成员标complete。
-本次按用户要求不运行新增回归/重启等价性验证，新增测试留在tests/test_torque_production.py，
+本次按用户要求不运行新增回归/重启等价性验证，新增测试现位于tests/tasks/test_torque_production.py，
 只作静态类型检查；这项验证缺口必须随分析报告保留，不能声称新生产持久化已经通过端到端测试。
 
 随后用户将终点缩短为**T10000（包含从零启动段，不额外加过渡时间）**，覆盖原T100000目标。
@@ -332,20 +333,49 @@ FEM 保存实际网格、DOF 映射和完整 P2/P1 系数；压力规范及所�
 校验和、分析代码来源、参数与状态。项目内输入使用可迁移的项目相对路径。失败前缀可
 作诊断，精度/收敛表要求完整且兼容的记录。参考细化差是敏感性证据，不是严格误差上界。
 
+## 核心验证与任务测试的依赖边界
+
+`tests/core/` 直接验证公开算子、Model/阶段、固定/自适应推进和公共运行记录。
+`tests/references/` 是测试私有的数学参照 module：`ode.py` 拥有已知旋转 ODE 和可控
+Trial 缺陷，多个格式/控制器测试共享它，不再从 `test_sdirk3` 或 `test_joint_adaptivity`
+导入。`mac.py`、`fourier.py`、`channel.py` 只保留测试所需的显式数学构造，不导入任务配置、
+campaign、runner 或任何被收集的测试文件。格式直接从 solver 的 registry 导入。
+这些参照不是新增运行时 API，solver、run_support、实验及工具不反向导入 tests。
+
+连续制造解的外力由解析导数给出；Channel 固定网格时间参照使用独立 NumPy stencil，
+不以模型的 K/N 生成时间 MMS；FEM 已有指数半离散轨迹只声明时间验证，不冒充独立 PDE
+空间参照。任务中的制造解/初值实现及其来源归属不变；测试侧显式写出数学问题，而不是
+为避免实验依赖把全部任务构造包装成另一套生产工厂。不会自动同步两个侧的配置默认值。
+
+`tests/tasks/` 保留任务配置、专属读写/分析、扫描、动画、物理观测、工具探针和历史材料测试。
+同名文件可在两侧分别存在，但单个旧测试函数只归属一侧。例如 MHD 的解析通量/扩散在
+core，研究运行/只读比较在 tasks；开放边界的已知功常数在 core，保存标签在 tasks；
+FEM 求积/Model 在 core，实际 workflow 的 MMS 模态投影和默认求积资格在 tasks。
+可选 PETSc、Gmsh 等**求解器**机制仍归 core，不能靠移到任务侧隐藏跳过项。
+
+默认 `pytest -q` 继续运行全部现存测试；`pytest -q tests/core` 明确选择核心。
+[tests/core_distribution.py](../tests/core_distribution.py) 提供隔离分发 seam：
+`python -m tests.core_distribution` 仅复制 solver/run_support、core/references、测试包初始化、
+本入口与环境文件，在新进程中实际运行核心套件。`-I` 隔离原检出/PYTHONPATH，禁止
+experiments、tools、tests.tasks 导入且禁用无关自动加载插件；不安装环境、不复制研究材料。
+`test_core_distribution` 只验证该边界下的收集，完整隔离执行须另外运行上述命令。
+此阶段没有取消跟踪任务、改变忽略规则或解除所有工具对实验的依赖。
+
 ## 修改后的验证与文档维护
 
 | 修改内容 | 优先运行的已有测试 |
 | --- | --- |
-| 受迫 MHD 高／负阶耗散与通量 | `tests/test_forced_mhd.py`；论文外源、运行／复用／只读统计见 `tests/test_inverse_cascade_workflow.py` |
-| 共同控制器配置 | `tests/test_controller_config.py` 及受影响家族的 workflow 测试 |
-| FEM 装配或动量表示 | `tests/test_fem_weak_load.py`；边界功另查 `test_backflow_outlet.py`、`test_wedge_cavity.py`、`test_hele_shaw_inlet.py` 的独立参照 |
-| 核心记录与来源范围 | `tests/test_run_support.py`（独立进程无实验目录）；`tests/test_record_compatibility.py`（旧导入、冻结 worker、显式 MHD 来源） |
-| 保存、复用、只读加载 | 各家族 workflow 测试；`tests/test_fem_workflow.py` 含独立进程读取与 rerun/损坏检查 |
-| 自适应接受、终点、失败观测 | `tests/test_adaptivity.py`、`test_min_step_policy.py`、`test_accepted_observers.py` |
+| 受迫 MHD 高／负阶耗散与通量 | `tests/core/test_forced_mhd.py`；论文外源、运行／复用／只读统计见 `tests/tasks/test_inverse_cascade_workflow.py` |
+| 共同控制器配置 | `tests/tasks/test_controller_config.py` 及受影响家族的 workflow 测试 |
+| FEM 装配或动量表示 | `tests/core/test_fem_weak_load.py`；core 下 `test_backflow_outlet.py`、`test_wedge_cavity.py`、`test_hele_shaw_inlet.py` 保留独立功参照 |
+| 核心记录与来源范围 | `tests/core/test_run_support.py`、`tests/core/test_record_compatibility.py`；旧导入/冻结 worker/显式 MHD 来源见 `tests/tasks/test_record_compatibility.py` |
+| 保存、复用、只读加载 | tasks 下各家族 workflow；`tests/tasks/test_fem_workflow.py` 含独立进程读取与 rerun/损坏检查 |
+| 自适应接受、终点、失败观测 | core 下 `test_adaptivity.py`、`test_min_step_policy.py`、`test_accepted_observers.py`、`test_tensor_stokes_adaptive.py` |
 | 线性后端或可选依赖 | 对应算子/求解器测试和完整阶段测试；单独报告跳过项的覆盖限制 |
 
 每次数值修改后运行相关测试，持续运行 `uv run --locked mypy`；发布/合并代码前运行
-`uv run --locked pytest -q`。仅文档变动检查链接、描述与源码的一致性，不把上一次完整测试
+`uv run --locked pytest -q` 及 `uv run --locked python -m tests.core_distribution`。
+仅文档变动检查链接、描述与源码的一致性，不把上一次完整测试
 写成本次重跑。验证结果与限制写入 [validation.md](validation.md)，不在本文件复制容易
 过期的测试数量或性能排名。新增测试验证公开行为和独立参照，不复制内部函数的实现。
 

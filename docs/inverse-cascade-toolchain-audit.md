@@ -11,7 +11,7 @@
 
 ## 失效证据与回归
 
-`tests/test_inverse_cascade_audit.py` 最初三项红灯分别为：
+`tests/tasks/test_inverse_cascade_audit.py` 最初三项红灯分别为：
 
 1. 高尺度 ID 标记 kf16，实际有效配置却继承 kf8/Re-=23000。
 2. AR(1), phi=.8, Δt=.1，解析 τ=.45，旧算法估计约 .259；旧 Geyer 换算错误。

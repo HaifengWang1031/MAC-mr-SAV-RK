@@ -47,7 +47,7 @@ source = provenance(task_paths=[
 ## 验证
 
 ```sh
-uv run --locked pytest -q tests/test_run_support.py tests/test_record_compatibility.py
+uv run --locked pytest -q tests/core/test_run_support.py tests/core/test_record_compatibility.py tests/tasks/test_record_compatibility.py
 uv run --locked mypy
 ```
 

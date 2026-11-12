@@ -1,5 +1,11 @@
 ## 当前能力索引（2026-11-04 文档核对）
 
+2026-11-11 用户继续批准第二阶段核心验证/任务测试分离：tests/core 不依赖
+experiments、tools 或 tests/tasks；共享 ODE 与解析/独立离散参照归属 tests/references。
+混合文件按机制拆分，任务测试全部保留在 tests/tasks；默认 pytest 仍覆盖全部现存测试。
+用 python -m tests.core_distribution 在无任务目录、禁止相关导入的临时副本实际运行核心套件。
+不改 solver、实验/工具 Python 实现、记录来源策略、旧数据或 gitignore；工具分离仍待后续。
+
 2026-11-11 用户批准在独立优化分支先做运行记录与来源抽取：公共保存/读取归属
 run_support，新增仅核心与显式任务清单的版本化来源；periodic_mhd 先行采用。
 旧 experiments.records 为兼容导出，未迁移入口仍广泛扫描并纳入新公共实现；

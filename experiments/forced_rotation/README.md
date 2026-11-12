@@ -14,7 +14,7 @@
 | 格式 | SDIRK2、SDIRK2-mrSAV，`γ=1` | — |
 | 步长 | 候选 τ=0.01/0.005/0.0025 | — |
 
-净力矩的闭式值（`2π` 方域、整数 `k`）：`M_A = 2f0/k = 0.04`、`M_B = 0`。离散侧由 `tests/test_forced_rotation.py` 对照该闭式值。
+净力矩的闭式值（`2π` 方域、整数 `k`）：`M_A = 2f0/k = 0.04`、`M_B = 0`。离散侧由 `tests/tasks/test_forced_rotation.py` 对照该闭式值。
 
 ## 记录量
 

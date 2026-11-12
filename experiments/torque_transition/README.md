@@ -179,9 +179,9 @@ X0停算响应超时，从t40.013最后持久checkpoint恢复；其余五个在t
 
 上述预检和参数搜索的历史记录保留其当时未批准状态。**2026-11-11用户已明确批准并启动正式任务**；
 这不等于稳态统计、长期空间精度或新持久化机制已验证。原128点谱方案已由用户改为MAC256。
-新增`tests/test_torque_production.py`保留待跑的有界历史/双PI恢复、最近节点等距/日志尾部恢复回归。
+新增`tests/tasks/test_torque_production.py`保留待跑的有界历史/双PI恢复、最近节点等距/日志尾部恢复回归。
 
-`tests/test_torque_tuning.py`覆盖独立门槛、同场run/load/只读参考分析、损坏/错窗拒绝及禁止生产/无界参考计划。
+`tests/tasks/test_torque_tuning.py`覆盖独立门槛、同场run/load/只读参考分析、损坏/错窗拒绝及禁止生产/无界参考计划。
 
-测试：`tests/test_torque_preflight*.py`分别覆盖去混叠点数映射/解析力矩、短run/save/采样
+测试：`tests/tasks/test_torque_preflight*.py`分别覆盖去混叠点数映射/解析力矩、短run/save/采样
 与长目标保留、独立保存场的解析多项式积分。阶段与公共控制器机制仍由已有测试覆盖。

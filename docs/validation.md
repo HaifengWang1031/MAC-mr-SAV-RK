@@ -2,6 +2,40 @@
 
 # 正式验收记录
 
+## 2026-11-11 核心验证/任务测试分离：第二阶段
+
+继续在独立 `refactor/run-records-core` worktree，以 `1ecd217` 为本阶段基线。
+测试按职责分为 `tests/core/`、`tests/tasks/`、测试专用 `tests/references/`；混合的
+SDIRK3、MHD、FEM、开放边界、入口功、楔腔及最小步长文件按机制拆开。任务配置、
+运行/只读分析、动画、物理观测及实际 workflow 的 MMS 检查保留在任务侧，没有删除。
+当前路径见 [测试导航](../tests/README.md)；下方历史记录的旧 `tests/test_*.py` 路径
+按其日期保留，不代表本次重跑或当前目录结构。
+
+对照基线 AST 核查：原有 **371 个测试函数全部且只保留一次**，参数化与断言不变；
+仅 MHD 通量测试将任务初值 builder 改为显式解析低模场。core 从 solver registry
+导入格式，共享 ODE/helper 不再从测试文件借用；连续 PDE 导数、独立 Channel stencil
+和半离散时间轨迹的验证范围保持区分。另增隔离收集回归及直接构造 MAC 数学字段的
+Tensor/Direct 自适应对照，后者验证 `[拒绝, 接受, 接受]`、步长/末态一致和完整约束。
+原任务 tensor 配置/对照测试及其原数值阈值仍保留。
+
+实际运行 `python -m tests.core_distribution`：仅复制 solver、run_support、core、
+references、测试初始化/隔离入口及环境文件；不复制 experiments、tools、tests/tasks，
+新进程使用 `-I` 并禁止三者导入，禁用无关 pytest 插件自动加载。**376 passed /
+17 skipped**（最终复验 23.52 秒），不是仅验证导入/收集。默认 `pytest -q` 保持全部测试发现，
+完整套件 **711 passed / 36 skipped**（最终复验 122.60 秒）。mypy 将新增参照与隔离入口纳入默认
+范围后为 **241 源文件通过**；git diff --check 通过。复用原检出的锁定 Python 3.12 环境，
+未在 worktree 安装新的虚拟环境；核心/任务拆分后的测试实例总数为 393/354。
+
+核心 17 项跳过：PETSc 7、PARDISO 9、Gmsh 1；完整套件另有 19 项任务侧跳过，
+涉及可选后端/网格/绘图工具和本地历史数据。跳过不代表可选路径在本平台已获验证。
+隔离副本验证的是源码/导入/文件依赖独立性，仍复用已安装的完整依赖；没有宣称最小依赖
+安装、真实远端部署、长时间物理资格或新的 PDE 阶数证明。数值后端、实验/工具 Python
+实现、旧来源策略、已有记录和冻结源码未改；`.gitignore` 与跟踪范围未改。
+工具对任务的依赖仍留待下一阶段，不能现在直接忽略整个实验目录。
+
+两路新上下文只读审查（Standards / Spec）均未发现问题。审查覆盖本阶段相对
+`1ecd217` 的已暂存改动；审查者没有重跑测试，上述执行证据由主会话取得。
+
 ## 2026-11-11 核心运行记录与显式来源：第一阶段
 
 在独立 `refactor/run-records-core` 分支/worktree，从 `744a695` 抽取 `run_support`，

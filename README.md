@@ -96,20 +96,30 @@ experiments/
     records.py            periodic_ns/channel_ns/fem_ns/cylinder_ns/hele_shaw_airfoil 专属读取
 runs/                     配置、manifest、HDF5、日志与批次记录
 reports/                  分析来源、图、表和日志
-tests/                    数值和工作流回归检查
+tests/
+  core/                   不依赖实验/工具的数值与公共记录回归
+  references/             测试专用 ODE、MAC、Fourier、Channel 数学参照
+  tasks/                  实验配置、运行/分析、扫描、动画与工具回归
+  core_distribution.py    无实验/工具目录的隔离核心验证入口
 tools/                    步长计时与快照绘图
 archive/                  旧程序来源索引
 ```
 
 核心记录与来源的独立入口见 [run_support](run_support/README.md)。当前只有周期 MHD
-入口完成显式任务来源迁移；其他实验暂保留旧策略，本轮尚未取消跟踪实验或拆分测试。
+入口完成显式任务来源迁移；其他实验暂保留旧策略。测试已按核心/任务分离，
+但本轮仍未取消跟踪实验/任务测试，也未改忽略规则；工具与任务的分离留待下一阶段。
 
 ## 验证与阅读
 
 ```sh
-uv run mypy
-uv run pytest
+uv run --locked mypy
+uv run --locked pytest -q                    # 当前检出的全部测试，含任务测试
+uv run --locked pytest -q tests/core         # 核心回归
+uv run --locked python -m tests.core_distribution  # 无实验/工具目录的完整核心回归
 ```
+
+[测试说明](tests/README.md)列出归属和参照范围。隔离入口复用当前解释器和已安装依赖，
+不安装新环境，也不启动研究计算；可选后端的跳过仍须单列报告。
 
 - [数学实现](docs/numerics.md)：MAC 边界处理、压力规范、阶段公式及固定次数标量校正。
 - [当前架构与修改导航](docs/architecture.md)：模块归属、依赖方向、扩展点、记录兼容与测试入口；修改模块分工时同步维护。

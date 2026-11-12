@@ -111,7 +111,7 @@ inside the input run is rejected. It labels failed prefixes explicitly.
 ## Validation and limits
 
 ```sh
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 uv run pytest tests/test_fem_workflow.py -q
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 uv run pytest tests/tasks/test_fem_workflow.py -q
 uv run mypy experiments/fem_ns
 ```
 

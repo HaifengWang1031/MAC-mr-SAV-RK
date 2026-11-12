@@ -384,7 +384,7 @@ chain schema 2：HDF5 先写 `.pending.h5` 再 rename，checkpoint JSON 的摘�
 锁、孤儿文件或不一致提交须人工检查，绝不静默覆盖；不承诺断电事务恢复。
 `chain.json` 记录段索引、步数、校验和与累积样本数；`load_chain` 拒绝缺段、重叠时间、重复采样、
 校验和变化与未完成段；配置/来源身份不一致时**拒绝续算**。分段与连续运行的终态、
-标量 r、诊断和抽样逐项相同（`tests/test_inverse_cascade_diagnostics.py` 断言到 1e-14）。
+标量 r、诊断和抽样逐项相同（`tests/tasks/test_inverse_cascade_diagnostics.py` 断言到 1e-14）。
 跨机器只允许复制和汇总，不冒充同一环境的精确续算。
 
 `plan.py` 输出 `matrix.json`/`matrix.md`（加 `--write-configs` 还写出 `plan/configs/<id>.json`）：

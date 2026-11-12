@@ -41,7 +41,31 @@ Update source-capture and numerical-identity inventories wherever extracting the
 shared writer creates a new dependency. Do not change numerical formulas, remove
 experiments/tests, edit gitignore or migrate all workflows in this stage.
 Validate standalone save/load, source identity behavior, legacy loading and a
-source-selected worker. Core-test/task-test separation is a later stage.
+source-selected worker. Core-test/task-test separation follows in the second stage.
+
+## Core repository extraction: independent validation (2026-11-11, second stage)
+
+Separate `tests/core` (operators, solves, stages/integration, adaptivity and common
+records) from `tests/tasks` (research configuration, campaigns, run/load/analyze,
+plots, tool probes and historical-data workflows). Split mixed files by mechanism,
+not by filename or import count; retain existing tests, parameterizations and
+numerical thresholds. Optional solver backends still belong in core validation;
+a skipped optional backend is not claimed as verified.
+
+Test-owned shared references live in `tests/references`, not in collected test
+modules. Keep known ODE solutions, analytical PDE fields and independent fixed-grid
+stencils distinct; none imports experiments, tools or task tests. Core tests
+construct the solver Model directly and import schemes from its registry. Keep
+research-built MMS/configuration behavior tested on the task side unchanged.
+Do not move solver semantics or task production reference ownership in this stage.
+
+Keep default pytest discovery over all existing tests. Provide an explicit core
+command and `python -m tests.core_distribution`: copy only solver, run_support,
+core tests/references and required environment files into a temporary source root,
+reuse the current interpreter, isolate its import path and forbid research imports
+while executing the entire core suite (not just collection). No dependency install,
+experimental calculation, gitignore edit, untracking or saved-record rewrite.
+Document the retained coverage, test paths and remaining tool/task coupling.
 
 ## Confirmed extensions and historical scope
 

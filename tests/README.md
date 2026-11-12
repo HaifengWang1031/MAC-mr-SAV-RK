@@ -1,15 +1,58 @@
 # 代表性测试
 
-默认运行 `uv run --locked pytest -q`。测试输出和临时实验由 pytest 的 tmp_path 管理，不写入正式 runs/reports。生产实验不能充当单元测试的固定通过条件。
+默认运行 `uv run --locked pytest -q`，仍覆盖当前检出的全部核心与任务测试，不静默隐藏实验回归。
+测试输出和临时实验由 pytest 的 tmp_path 管理，不写入正式 runs/reports。生产实验不能充当
+单元测试的固定通过条件。
+
+## 分层与执行
+
+| 目录/入口 | 归属 |
+| --- | --- |
+| `core/` | 公开算子、线性求解、空间/时间阶、阶段/SAV/约束、自适应与公共记录；不依赖实验/工具 |
+| `references/` | 测试私有 ODE、解析 MAC/Fourier、连续/离散 Channel 数学参照；不从测试文件借 helper |
+| `tasks/` | 研究配置、campaign、专属 run/load/analyze、物理观测、绘图、工具与历史数据探针 |
+| `core_distribution.py` | 只复制核心文件，在无实验/工具/任务测试的临时副本验证完整核心套件 |
+
+```sh
+uv run --locked pytest -q tests/core
+uv run --locked pytest -q tests/tasks
+uv run --locked python -m tests.core_distribution
+uv run --locked mypy
+```
+
+隔离入口复用当前解释器、不安装环境；子进程使用 `-I`、禁止 research 包导入、禁用外部
+pytest 插件自动加载。`--collect-only` 只验证收集，默认命令实际执行全部核心测试。
+`core/test_core_distribution.py` 自动验证隔离收集；发布前仍须单独跑完整隔离命令。
+可选后端仍按原规则 skip，并报告覆盖限制，不因任务分离取得新资格。
+
+同名测试文件可以在 core/tasks 各有一份，**旧测试函数没有复制或丢弃**：例如
+`test_sdirk3` 的 ODE/MAC/谱阶段归 core，保存布局/campaign 归 tasks；`test_fourier_mhd`
+的解析通量/扩散归 core，研究运行/只读图归 tasks；边界功的解析常数归 core，专属记录标签归 tasks。
+`test_cavity` 检验实验的顶盖载荷构造，归 tasks，而不是为了名字好看放入 core。
+`test_fem_references` 的两项检验实际 workflow 默认值及预投影策略，归 tasks；独立 FEM
+算子/求积/空间阶/六格式时间参照均留在 core。
+
+测试参照只描述明确的数学问题，不是第二套研究配置/生产工厂；实验中的参照和工具实现
+保留原归属，不反向依赖 tests。连续 PDE 导数、独立固定网格 stencil、半离散轨迹的
+验证范围分别说明，不将时间验证冒充 PDE 空间/阶数证明。此阶段未改忽略规则、未取消
+跟踪任务或清理工具依赖。
+
+## 代表机制索引
+
+下表保留机制名称；完整归属按上述目录查看，同名文件跨两层时分别承担数值与任务断言。
 
 | 机制 | 保留的测试 |
 |---|---|
 | 实验目录不存在时的记录/来源、清单完整性与可迁移身份 | test_run_support |
-| 旧来源编码/导入、冻结 worker 及显式周期 MHD 来源 | test_record_compatibility |
-| MAC 算子与边界 | test_model_seam、test_cavity、test_kernels |
+| 旧来源编码 | core/test_record_compatibility |
+| 旧导入、冻结 worker 及显式周期 MHD 来源 | tasks/test_record_compatibility |
+| 无研究目录的隔离收集/完整核心执行 | core/test_core_distribution、core_distribution.py |
+| MAC 算子与边界 | core/test_model_seam、core/test_kernels；实验顶盖载荷另见 tasks/test_cavity |
 | Stokes 求解、压力定标与分解复用 | test_stokes、test_numerics 的空间收敛 |
-| 二阶、SAV 能量与实根 | test_numerics、test_schemes |
-| 三阶 ODE 精度、MAC 定常态与四阶段工作流 | test_sdirk3 |
+| 二阶、SAV 能量与冻结阶段方程 | test_numerics、test_schemes |
+| 三阶 ODE 精度、MAC 定常态与四阶段数值 | core/test_sdirk3 |
+| 四阶段保存布局与参考/campaign 标签 | tasks/test_sdirk3 |
+| MAC Tensor/Direct 自适应拒步、步长、完整约束及末态 | core/test_tensor_stokes_adaptive；任务配置选择另见 tasks 同名文件 |
 | 一阶 ODE、独立耦合线性系统、能量平衡与标量衰减 | test_imex_euler |
 | 一阶六后端压力/完整约束、固定 lifting 与失败检查 | test_imex_models |
 | 单阶段工作流、失败前缀、元数据与只读验证分析 | test_imex_workflow |

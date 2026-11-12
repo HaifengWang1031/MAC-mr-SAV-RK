@@ -46,7 +46,8 @@ uv run python -m experiments.wedge_cavity.report /absolute/path/to/run
 不是直接积分的粒子轨迹。这里展示启动过程，不能据动画断言已达到稳态或解析了所有角点涡旋。
 阶段压力不在动画中作为物理端点压力展示。
 
-本轮独立物理配对、壁面迹、公开保存/读取和无流动重算的动画检查见 `tests/test_wedge_cavity.py`；
+独立物理配对与壁面迹检查见 `tests/core/test_wedge_cavity.py`，
+公开保存/读取和无流动重算的动画检查见 `tests/tasks/test_wedge_cavity.py`；
 性能与验证边界见 `docs/validation.md` 及 `runs/wedge_optimization/` 对应记录。
 
 ## 长时间与Re/网格对照

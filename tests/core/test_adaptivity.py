@@ -1,0 +1,238 @@
+"""Embedded IMEX-SDIRK3(2) estimator and I/PI controller checks."""
+import numpy as np
+import pytest
+
+from solver.adaptivity import IController, PIController, integrate_adaptive
+from solver.schemes.sdirk3 import SDIRK3
+from solver.schemes.sdirk3_mrsav import SDIRK3MRSAV
+from tests.references.ode import ODEModel, State
+
+
+@pytest.mark.parametrize('scheme', [SDIRK3(), SDIRK3MRSAV()])
+def test_embedded_difference_has_cubic_local_scaling(scheme):
+    model = ODEModel()
+    initial = State(0., model.exact(0.))
+    errors = []
+    for h in (.2, .1, .05):
+        trial = scheme.step(model, initial, h)
+        assert trial.embedded_velocity is not None
+        errors.append(np.linalg.norm(trial.state.velocity-trial.embedded_velocity))
+    assert np.log2(errors[0]/errors[1]) > 2.6
+    assert np.log2(errors[1]/errors[2]) > 2.7
+
+
+@pytest.mark.parametrize('scheme', [SDIRK3(), SDIRK3MRSAV()])
+def test_controller_rejects_and_commits_only_high_order_state(scheme):
+    model = ODEModel()
+    initial = State(0., model.exact(0.))
+    control = IController(atol=1e-7, rtol=1e-5, max_step=.4)
+    result = integrate_adaptive(model, scheme, initial, .5, .4,
+                                controller=control, snapshots=[0., .25, .5])
+    assert result.status == 'complete', result.error
+    assert any(not attempt['accepted'] for attempt in result.attempts)
+    assert len(result.times)-1 == sum(bool(item['accepted']) for item in result.attempts)
+    assert all(item['error'] <= 1 for item in result.attempts if item['accepted'])
+    assert result.final.t == pytest.approx(.5)
+    assert np.linalg.norm(result.final.velocity-model.exact(.5)) < 1e-5
+    assert len(result.snapshot_times) == 3
+    assert result.snapshot_times[0] == 0.
+    assert result.snapshot_times[-1] == pytest.approx(.5)
+    assert all(len(stages) == 4 for stages in result.stages)
+
+
+def test_rejected_trial_does_not_advance_state_on_failure():
+    model = ODEModel()
+    initial = State(0., model.exact(0.))
+    control = IController(atol=1e-15, rtol=0., min_step=.1, max_rejections=1)
+    result = integrate_adaptive(model, SDIRK3(), initial, .5, .4, controller=control)
+    assert result.status == 'failed'
+    assert result.final is initial
+    assert result.times == [0.]
+    assert all(not item['accepted'] for item in result.attempts)
+
+
+@pytest.mark.parametrize('controller_class', [IController, PIController])
+@pytest.mark.parametrize('scheme_name', ['sdirk2', 'sdirk2_mrsav', 'sdirk3', 'sdirk3_mrsav'])
+def test_terminal_alignment_step_can_be_below_min_step(controller_class, scheme_name):
+    from solver.mac.grid import MACGrid
+    from solver.mac_ns import MACNavierStokes
+    from solver.schemes.sdirk2 import SDIRK2
+    from solver.schemes.sdirk2_mrsav import SDIRK2MRSAV
+
+    schemes = {'sdirk2': SDIRK2(), 'sdirk2_mrsav': SDIRK2MRSAV(),
+               'sdirk3': SDIRK3(), 'sdirk3_mrsav': SDIRK3MRSAV()}
+    model = MACNavierStokes(MACGrid(3, 3), .1)
+    initial = model.state(1., np.zeros(model.grid.size))
+    end = initial.t + .0202
+    observed = []
+    controller = controller_class(atol=1., rtol=0., min_step=.001, max_step=.01,
+                                  estimator_order=2 if scheme_name.startswith('sdirk2') else 3)
+    result = integrate_adaptive(model, schemes[scheme_name], initial, .0202, .01,
+                                controller=controller, snapshots=[end],
+                                on_accept=lambda state: observed.append(state.t))
+    assert result.status == 'complete', result.error
+    assert len(result.attempts) == 3
+    last = result.attempts[-1]
+    assert last['accepted'] and last['error'] <= 1.
+    assert 0 < last['step'] < controller.min_step
+    assert last['step'] == end-result.times[-2]
+    assert result.final.t == result.times[-1] == result.snapshot_times[-1] == observed[-1] == end
+    np.testing.assert_array_equal(model.vector(result.final), np.zeros(model.grid.size))
+
+
+def test_roundoff_sized_terminal_remainder_is_integrated():
+    model = ODEModel()
+    initial = State(0., model.exact(0.))
+    end = np.nextafter(.02, np.inf)
+    result = integrate_adaptive(
+        model, SDIRK3(), initial, end, .01,
+        controller=IController(atol=1., rtol=0., min_step=.001, max_step=.01),
+        snapshots=[end])
+    assert result.status == 'complete', result.error
+    assert result.final.t == result.times[-1] == result.snapshot_times[-1] == end
+    last = result.attempts[-1]
+    assert last['accepted']
+    assert last['step'] == end-result.times[-2]
+    assert 0 < last['step'] < np.finfo(float).eps
+
+
+def test_terminal_alignment_step_still_checks_error():
+    model = ODEModel()
+    initial = State(0., model.exact(0.))
+    result = integrate_adaptive(
+        model, SDIRK3(), initial, .02, .1,
+        controller=IController(atol=1e-15, rtol=0., min_step=.1))
+    assert result.status == 'failed'
+    assert result.final is initial
+    assert len(result.attempts) == 1
+    assert result.attempts[0]['step'] == .02
+    assert not result.attempts[0]['accepted']
+    assert result.attempts[0]['reason'] == 'error_exceeded'
+
+
+def test_strict_snapshot_partitions_before_a_short_alignment_remainder():
+    from solver.schemes.sdirk2 import SDIRK2
+    model = ODEModel()
+    initial = State(0., model.exact(0.))
+    result = integrate_adaptive(
+        model, SDIRK2(), initial, .03, .01,
+        controller=IController(atol=1., rtol=0., min_step=.001,
+                               max_step=.01, estimator_order=2),
+        snapshots=[0., .010001, .03], strict_snapshots=True)
+    assert result.status == 'complete', result.error
+    np.testing.assert_allclose(result.snapshot_times, [0., .010001, .03], atol=1e-14)
+    first_interval = [item for item in result.attempts if item['t'] < .010001]
+    assert sum(item['boundary_partition'] for item in first_interval) == 4
+    partition_steps = [item['step'] for item in first_interval
+                       if item['boundary_partition']]
+    np.testing.assert_allclose(partition_steps, [.010001/4]*4)
+    assert min(item['step'] for item in result.attempts) >= .001
+
+
+
+def test_strict_snapshot_splits_near_boundary_instead_of_tiny_step():
+    from solver.schemes.sdirk2 import SDIRK2
+    model = ODEModel()
+    initial = State(0., model.exact(0.))
+    result = integrate_adaptive(
+        model, SDIRK2(), initial, .03, .01,
+        controller=IController(atol=1., rtol=0., min_step=1e-5,
+                               max_step=.01, estimator_order=2),
+        snapshots=[0., .0102, .03], strict_snapshots=True)
+    assert result.status == 'complete', result.error
+    np.testing.assert_allclose(result.snapshot_times, [0., .0102, .03], atol=1e-14)
+    first = [item for item in result.attempts if item['accepted'] and item['t'] < .0102]
+    assert len(first) == 2
+    assert all(item['boundary_partition'] for item in first)
+    np.testing.assert_allclose([item['step'] for item in first], [.0102/2]*2)
+
+
+def test_sdirk2_embedded_pair_uses_order_two_controller():
+    from solver.schemes.sdirk2 import SDIRK2
+    from solver.schemes.sdirk2_mrsav import SDIRK2MRSAV
+    model = ODEModel()
+    initial = State(0., model.exact(0.))
+    for scheme in (SDIRK2(), SDIRK2MRSAV()):
+        errors = []
+        for step in (.2, .1, .05):
+            trial = scheme.step(model, initial, step)
+            assert trial.embedded_velocity is not None
+            errors.append(np.linalg.norm(trial.state.velocity-trial.embedded_velocity))
+        assert np.log2(errors[0]/errors[1]) > 1.7
+        assert np.log2(errors[1]/errors[2]) > 1.8
+        result = integrate_adaptive(model, scheme, initial, .1, .1,
+                                    controller=IController(estimator_order=2))
+        assert result.status == 'complete', result.error
+
+
+@pytest.mark.parametrize('controller_class', [IController, PIController])
+def test_small_mac_adaptive_trial_preserves_divergence(controller_class):
+    from solver.mac.grid import MACGrid
+    from solver.mac_ns import MACNavierStokes
+    from tests.references.mac import initial_velocity
+
+    grid = MACGrid(8, 6)
+    model = MACNavierStokes(grid, .1)
+    initial = model.state(0., initial_velocity(grid, .01))
+    for scheme in (SDIRK3(), SDIRK3MRSAV()):
+        result = integrate_adaptive(model, scheme, initial, .03, .02,
+                                    controller=controller_class(rtol=1e-3, max_step=.02))
+        assert result.status == 'complete', result.error
+        assert result.final.t == pytest.approx(.03)
+        assert max(item['divergence_inf'] for item in result.diagnostics) < 1e-8
+
+
+def test_pi_formula_first_step_and_zero_error():
+    controller = PIController()
+    error, old_error = .5, .25
+    expected = .9*error**(-.7/3)*old_error**(.4/3)
+    assert controller.accepted_factor(error, old_error) == pytest.approx(expected)
+    assert controller.accepted_factor(error, None) == pytest.approx(
+        IController().accepted_factor(error, None))
+    assert np.isfinite(controller.accepted_factor(0., 0.))
+    assert controller.accepted_factor(0., 0.) <= controller.max_factor
+    with pytest.raises(ValueError, match='PI-controller'):
+        PIController(proportional=.3, integral=.4)
+    second_order = PIController(estimator_order=2)
+    assert second_order.accepted_factor(error, old_error) == pytest.approx(
+        .9*error**(-.7/2)*old_error**(.4/2))
+
+
+@pytest.mark.parametrize('scheme', [SDIRK3(), SDIRK3MRSAV()])
+def test_pi_rejection_uses_last_accepted_error(scheme):
+    model = ODEModel()
+    initial = State(0., model.exact(0.))
+    controller = PIController(atol=1e-8, rtol=1e-6, max_step=.4)
+    result = integrate_adaptive(model, scheme, initial, 1., .4, controller=controller)
+    assert result.status == 'complete', result.error
+    assert result.final.t == pytest.approx(1.)
+    assert any(not item['accepted'] for item in result.attempts)
+    previous = None
+    for item in result.attempts:
+        if previous is None:
+            assert np.isnan(item['previous_accepted_error'])
+        else:
+            assert item['previous_accepted_error'] == previous
+        if item['accepted']:
+            assert item['factor'] == pytest.approx(
+                controller.accepted_factor(item['error'], previous))
+            previous = item['error']
+        else:
+            assert item['factor'] < 1.
+    assert np.linalg.norm(result.final.velocity-model.exact(1.)) < 1e-5
+
+
+def test_accepted_state_observer_sees_only_committed_natural_nodes():
+    model = ODEModel()
+    initial = State(0., model.exact(0.))
+    observed = []
+    result = integrate_adaptive(
+        model, SDIRK3(), initial, .5, .4,
+        controller=IController(atol=1e-7, rtol=1e-5, max_step=.4),
+        on_accept=lambda state: observed.append(state.t))
+    assert result.status == 'complete', result.error
+    assert any(not attempt['accepted'] for attempt in result.attempts)
+    np.testing.assert_allclose(observed, result.times[1:], atol=0, rtol=0)
+    assert len(observed) == sum(bool(a['accepted']) for a in result.attempts)
+    assert result.snapshot_times == []
+    assert result.observer_cpu_seconds >= 0.
