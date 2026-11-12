@@ -73,7 +73,8 @@ class FourierMHD:
         return self.space.inner(left, right)
 
     def max_abs(self, field: ComplexArray) -> float:
-        return float(np.max(np.abs(field)))
+        """The eliminated pressure is an empty field with zero norm."""
+        return float(np.max(np.abs(field), initial=0.))
 
     def physical_divergence_inf(self, velocity: ComplexArray) -> float:
         return float(np.max(np.abs(self.space.to_physical(self.apply_D(velocity)))))

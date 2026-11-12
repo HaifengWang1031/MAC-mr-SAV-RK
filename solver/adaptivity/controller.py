@@ -348,21 +348,7 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
             distance = abs(request-trial.state.t)
             if distance < best[index][0]:
                 best[index] = (distance, trial.state)
-        if on_accept is not None:
-            observer_wall_start = perf_counter()
-            observer_cpu_start = process_time()
-            try:
-                on_accept(trial.state)
-            except Exception as exc:
-                result.status = 'failed'
-                result.error = f'Accepted-state observer failed: {type(exc).__name__}: {exc}'
-                break
-            finally:
-                result.observer_cpu_seconds += process_time()-observer_cpu_start
-                result.observer_wall_seconds += perf_counter()-observer_wall_start
-        if progress is not None:
-            progress(result.accepted_steps, trial.state.t,
-                     perf_counter()-start-result.observer_wall_seconds)
+        # Commit restart context for this accepted state before its observers run.
         if boundary_partition:
             boundary_steps_remaining -= 1
             if boundary_steps_remaining:
@@ -379,6 +365,21 @@ def integrate_adaptive(model: Model, scheme: Scheme, initial: Any, T: float, ini
             step, previous_error, previous_u, previous_r,
             saved_history.accepted_steps+result.accepted_steps,
             saved_history.attempted_steps+result.attempted_steps)
+        if on_accept is not None:
+            observer_wall_start = perf_counter()
+            observer_cpu_start = process_time()
+            try:
+                on_accept(trial.state)
+            except Exception as exc:
+                result.status = 'failed'
+                result.error = f'Accepted-state observer failed: {type(exc).__name__}: {exc}'
+                break
+            finally:
+                result.observer_cpu_seconds += process_time()-observer_cpu_start
+                result.observer_wall_seconds += perf_counter()-observer_wall_start
+        if progress is not None:
+            progress(result.accepted_steps, trial.state.t,
+                     perf_counter()-start-result.observer_wall_seconds)
         if on_advance is not None:
             observer_wall_start, observer_cpu_start = perf_counter(), process_time()
             try:

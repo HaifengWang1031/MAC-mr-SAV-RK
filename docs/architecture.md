@@ -66,7 +66,9 @@ SDIRK3固定细步/半步，每条参考最多20000步，试算保留速度/标�
 共享`integrate_adaptive`新增可选retain_history=False、on_attempt/on_advance observer及
 AdaptiveContinuation；默认保留原全历史，阶段/误差公式和检查不改。显式流式模式只保留末次记录，
 用accepted_steps/attempted_steps计数，continuation保留双分量PI历史、下一建议步长与累计计数。
-自然节点恢复不支持strict_snapshots分割边界；生产不采用这种分割。
+2026-11-12主分支审查修复将接受态的建议步长/continuation提交移到on_accept之前；
+on_accept及on_advance异常返回的状态与上下文属于同一接受节点。on_attempt仍在提交前通知，
+其中断的未提交试算不进入上一个接受节点的快照。自然节点恢复不支持strict_snapshots分割边界；生产不采用这种分割。
 `production.Recorder`最多持有两个接受态，标量每1/场每10只按前后接受节点选最近者、等距取早，
 不插值或截断步长。逐试步attempts.csv、接受阶段摘要stages.csv、scalars.csv和fields.jsonl
 独立追加；只读消费者必须以manifest为准，不能扫描所有NPZ假定它们都已提交。
@@ -74,8 +76,10 @@ checkpoint原子发布当前面场/SAV、PI上下文、采样下标及已fsync�
 状态SHA256，截断未提交的日志尾部；字段NPZ逐项带SHA256，未提交旧字段可被原子重写。
 每物理10或900墙钟秒checkpoint；磁盘低于20GiB在checkpoint后停算，启动要求220GiB空闲。
 失败不强制接受、不自动重跑或篡改终点；只对完整到T100000的成员标complete。
-本次按用户要求不运行新增回归/重启等价性验证，新增测试现位于tests/tasks/test_torque_production.py，
-只作静态类型检查；这项验证缺口必须随分析报告保留，不能声称新生产持久化已经通过端到端测试。
+首次启动时按用户要求未运行新增回归/重启等价性验证，只作静态类型检查；这项历史缺口
+必须保留，不能声称该次生产持久化已通过端到端测试。后续主分支审查修复将纯求解器的
+bounded-history/联合PI续算回归移到tests/core/test_adaptive_continuation.py，新增失败回调覆盖；
+Recorder/retarget回归仍在本地tests/tasks/test_torque_production.py，两者不相互授予资格。
 
 随后用户将终点缩短为**T10000（包含从零启动段，不额外加过渡时间）**，覆盖原T100000目标。
 当前production.py的FINAL_T及标量/场输出上界均为10000。显式retarget入口只接受已停止的较长
@@ -133,7 +137,8 @@ FEM 的 Brinkman/Hele–Shaw 是物理模型扩展，Darcy 是独立标量参照
 [FourierMHD](../solver/fourier/mhd.py) 复用同一 Fourier 空间与共同推进/校正，在同一乘积
 内积下推进速度和磁场。谱系数形状为 `(2, 2, ny, nx//2+1)`，两块各用物理扩散系数。
 Leray 消去阶段压力，感应方程用反对称通量。阶段残差针对完整投影方程，散度覆盖两个场
-全部格点。实验入口首期开放两种 SDIRK3 的固定步。
+全部格点。消去的压力以空数组表示，其公开范数为零，六种registry格式均可通过零解
+接口回归；这不扩大非零物理算例的阶数/稳定性资格。实验入口首期仍开放两种SDIRK3固定步。
 [ForcedFourierMHD](../solver/fourier/forced_mhd.py) 是独立受迫扩展：两场共用正乘子
 `nu_plus*|k|^4+nu_minus*|k|^-4`，零模的逆幂取零。共同格式仍以 `model.nu=nu_plus`
 乘 `apply_K`；后者包含两条耗散通道。加性外源不乘 SAV 耦合因子，不复制阶段公式。
@@ -428,7 +433,7 @@ experiments、tools、tests.tasks 导入且禁用无关自动加载插件；不�
 | 核心记录与来源范围 | `tests/core/test_run_support.py`、`tests/core/test_record_compatibility.py`；旧导入/冻结 worker/显式 MHD 来源见 `tests/tasks/test_record_compatibility.py` |
 | 保存、复用、只读加载 | tasks 下各家族 workflow；`tests/tasks/test_fem_workflow.py` 含独立进程读取与 rerun/损坏检查 |
 | 公共只读报告/CLI 与 TeX 样式 | `tests/core/test_postprocess.py`、`tests/core/test_plotting.py`；旧导入/冻结捕获另见 `tests/tasks/test_postprocess_compatibility.py`、`tests/tasks/test_record_compatibility.py` |
-| 自适应接受、终点、失败观测 | core 下 `test_adaptivity.py`、`test_min_step_policy.py`、`test_accepted_observers.py`、`test_tensor_stokes_adaptive.py` |
+| 自适应接受、终点、失败观测与自然节点续算 | core 下 `test_adaptivity.py`、`test_min_step_policy.py`、`test_accepted_observers.py`、`test_adaptive_continuation.py`、`test_tensor_stokes_adaptive.py` |
 | 线性后端或可选依赖 | 对应算子/求解器测试和完整阶段测试；单独报告跳过项的覆盖限制 |
 
 每次数值修改后运行相关测试，持续运行 `uv run --locked mypy`；发布/合并代码前运行

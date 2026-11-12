@@ -2,8 +2,28 @@ import numpy as np
 import pytest
 
 from solver.fourier import FourierMHD, FourierSpace
+from solver.fourier.forced_mhd import ForcedFourierMHD
 from solver.integrate import integrate
-from solver.schemes.registry import make_scheme
+from solver.schemes.registry import SCHEMES, make_scheme, scheme_info
+
+
+@pytest.mark.parametrize('name', SCHEMES)
+@pytest.mark.parametrize('forced', [False, True], ids=['resistive', 'hyperdiffusive'])
+def test_all_registered_schemes_preserve_the_pressure_free_mhd_rest_state(name, forced):
+    space = FourierSpace(8, 8)
+    zero = np.zeros((2, 2, *space.spectral_shape), dtype=complex)
+    model = (ForcedFourierMHD(space, .1, .2, force=lambda t: zero) if forced else
+             FourierMHD(space, .1, .2))
+    initial = model.state(0., zero)
+    result = integrate(model, make_scheme(name), initial, [.01, .02])
+    assert result.status == 'complete', result.error
+    assert result.final.t == .03 and result.final.r == 0.
+    np.testing.assert_array_equal(model.vector(result.final), zero)
+    assert len(result.final_stages) == scheme_info(name).n_stages
+    for stage in result.final_stages:
+        assert stage.pressure.size == 0 and model.max_abs(stage.pressure) == 0.
+        assert stage.residual == 0. and stage.divergence_inf == 0.
+    np.testing.assert_array_equal(model.vector(initial), zero)
 
 
 def test_projected_mhd_flux_and_joint_energy_pairing():

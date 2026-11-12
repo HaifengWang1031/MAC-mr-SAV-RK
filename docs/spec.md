@@ -26,6 +26,31 @@ See the [current capability table](../README.md#当前算法与支持范围),
 their original scope; later extensions supersede initial exclusions. Their test
 or production evidence applies only to the stated configurations and dates.
 
+## Main-merge review corrections (2026-11-12)
+
+The user authorized fixing the three findings before considering any merge:
+
+- Commit the accepted node's next-step proposal, PI history and cumulative
+  counters before `on_accept`, as already required for `on_advance`. A failed
+  post-accept observer must return a continuation matching `final`; restarting
+  with the same controls must preserve uninterrupted natural nodes and counters.
+- Define the eliminated MHD pressure's empty-field infinity norm as zero. Exercise
+  both FourierMHD and ForcedFourierMHD through every registered fixed-step scheme.
+  The exact rest-state regression verifies interface compatibility, not nonzero
+  Euler/SDIRK2 accuracy, nonlinear stability or additional physical qualification.
+- Move, do not duplicate, the pure bounded-history/joint-PI continuation test from
+  the ignored torque task module into core, without changing its body or limits.
+  Keep Recorder/retarget tests local and retain default whole-tree pytest discovery.
+  Back up and independently restore the local test before editing it; retain its
+  migration diff separately because ignored files are not protected by Git.
+
+These are focused solver/interface/test repairs on the optimization branch, not
+an authorization to merge, push, run production, relax research-chain identities,
+resume failed research chains or repair archived continuation metadata. Preserve
+old runs/frozen source; changed solver source must enter new provenance honestly.
+The earlier localization-only promise of unchanged Python bytes applies to that
+completed extraction snapshot, not this separately authorized repair.
+
 ## Core repository extraction: run records and provenance (2026-11-11)
 
 First stage only: extract shared persistence/integrity to `run_support.records`,

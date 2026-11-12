@@ -122,9 +122,14 @@ See [architecture](../../docs/architecture.md) for shared record interfaces;
 diagnostics and stage summaries. Use `result.accepted_steps` / `attempted_steps`,
 not list lengths, for invocation counters. Explicit snapshot requests still retain
 their requested states; production streaming therefore passes no snapshot list.
-`on_attempt(record)` receives every trial; `on_advance(result)` runs after an
-accepted step and the next step proposal are committed. Observer errors stop with
-a failed prefix; they never authorize accepting a numerically rejected trial.
+`on_attempt(record)` receives every trial before acceptance is committed.
+`on_accept(state)` and then `on_advance(result)` observe an accepted node only
+after its next-step proposal and continuation have been committed. Observer errors
+stop with a failed prefix; they never authorize accepting a numerically rejected trial.
+An `on_accept` or `on_advance` failure therefore returns matching state, PI history,
+next step and cumulative counters. Resume at that same node with unchanged controls.
+A pre-commit `on_attempt` failure leaves the last accepted snapshot unchanged;
+its uncommitted trial can appear in invocation attempts but not that snapshot's counters.
 
 `result.continuation` is an `AdaptiveContinuation` with proposed `step`, previous
 joint/velocity/scalar accepted errors and cumulative accepted/attempted counters.
@@ -134,8 +139,12 @@ restartable through this interface (`strict_snapshots=True` is rejected on resum
 Experiments own identity checks, atomic storage, sampler cursors and log offsets;
 the solver does not itself publish checkpoints. Default history retention and
 numerical formulas remain unchanged. The first production use was explicitly
-requested without further tests; new streaming/restart equivalence tests exist
-but were not run before launch, so no new numerical qualification is implied.
+requested without further tests; those launch-time limitations remain historical.
+Core `test_adaptive_continuation` now checks bounded-history/joint-PI restart and
+post-accept observer failures against uninterrupted natural-node trajectories.
+This is solver verification, not authorization to resume failed research chains,
+rewrite old checkpoints or replace frozen production source. It grants no new
+production-persistence, PDE accuracy or long-time statistical qualification.
 
 The main-minus-embedded difference estimates the lower-order local error. It is
 not a proved local or global error bound for the main output. Variable-step SAV

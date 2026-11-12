@@ -4,6 +4,12 @@
 恢复门槛已通过；已按此清单完成 index-only 本地化及公共配置/文档修订，最终验证见
 [validation](validation.md)。不推送或合并，不操作远端生产作业。
 
+**后续独立授权（2026-11-12）：** 用户要求先修复主分支审查三项问题。其中纯求解器的
+bounded-history/联合PI测试从本地tests/tasks/test_torque_production.py移入公共core，
+保持函数体/阈值并只保留一份；该本地文件编辑前另经外盘tar备份和独立恢复。故下文
+412文件全字节未变、171跟踪文件及全部Python未改均指83a043d本地化快照，不是永久
+不许修改声明；后续修复另记验证与备份，原完整备份保持封存。
+
 ## 1. 基线与推荐结论
 
 - 优化 worktree：`/Users/wanghaifeng/Desktop/MAC-mr-SAV-RK-records-core`，分支

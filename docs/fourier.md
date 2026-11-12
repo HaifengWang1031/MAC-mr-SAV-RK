@@ -69,4 +69,8 @@ assert result.status == 'complete', result.error
 阶段算子对速度和磁场分别除以 `1 + tau*nu*k2/4` 和 `1 + tau*eta*k2/4`。
 两个响应均检查完整投影残差和两场物理散度；共同 SAV 标量以两场 $L^2$ 内积之和
 计算校正，两次校正复用同一对响应。阶段压力已消元，MHD 记录单独保存磁场与磁散度。
+上述1/4对角系数和两次SAV校正描述两种SDIRK3格式，不是所有六格式共同的阶段系数。
+共同Model以空数组表示已消去的压力，空压力范数定义为零；MHD及受迫MHD均以registry
+六格式的零解验证公开接口兼容。该零解测试不建立Euler/SDIRK2在非零MHD算例上的精度、
+稳定性或物理研究资格，原非零扩散/受迫剪切时间验证仍限SDIRK3。
 固定步 Orszag–Tang 入口、物理诊断及验证范围见实验说明（本地材料：`../experiments/periodic_mhd/README.md`）。

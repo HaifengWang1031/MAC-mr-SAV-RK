@@ -39,7 +39,10 @@ pytest 插件自动加载。`--collect-only` 只验证收集，默认命令实�
 测试参照只描述明确的数学问题，不是第二套研究配置/生产工厂；实验中的参照和工具实现
 保留原归属，不反向依赖 tests。连续 PDE 导数、独立固定网格 stencil、半离散轨迹的
 验证范围分别说明，不将时间验证冒充 PDE 空间/阶数证明。研究本地化仅取消 tasks 和
-研究工具的 Git 跟踪，文件/阈值/参数化保留在原路径；testpaths 仍为 tests。通用只读工具
+研究工具的 Git 跟踪，当次文件/阈值/参数化保留在原路径；testpaths 仍为 tests。
+随后用户授权修复主分支审查问题：将本地test_torque_production中的纯求解器PI续算测试
+移入core/test_adaptive_continuation，函数体和阈值不变、只保留一份；Recorder/retarget仍在tasks。
+该本地文件修改前另做外盘归档和独立恢复，迁移差异随本地验证材料备份。通用只读工具
 已抽取到 postprocess，其他会计算的本地任务工具仍保留原依赖。
 
 ## 代表机制索引
@@ -70,6 +73,7 @@ pytest 插件自动加载。`--collect-only` 只验证收集，默认命令实�
 | 编译后单步计时、冷热分解计数、四模型保存与只读分析 | test_step_efficiency |
 | 周期 FFT/Parseval/伴随/严格频带与 Leray/Stokes 零模 | test_fourier_space、test_fourier_stokes |
 | 周期解析对流、能量配对、四格式 MMS、I/PI 与标量控制 | test_fourier_model、test_fourier_integration |
+| MHD/受迫MHD的空压力与registry六格式零解接口 | core/test_fourier_mhd；非零扩散/受迫剪切的精度范围仍限原SDIRK3测试 |
 | 周期布局、保存复用、失败前缀、只读分析与计时子记录 | test_periodic_workflow |
 | Channel 保存场动画、Poiseuille 参照、周期粒子输运与只读导出 | test_channel_animation |
 | 顶盖方腔动画、移动壁插值、保存场与只读导出 | test_cavity_animation |
@@ -79,6 +83,7 @@ pytest 插件自动加载。`--collect-only` 只验证收集，默认命令实�
 | 时间序列与失败前缀 | test_integrate |
 | 保存、复用、失败记录与显式分析 | test_workflow、test_forced_convergence |
 | 自适应批次、四分边界、容差选择与固定阶梯 | test_adaptivity、test_kolmogorov_adaptive |
+| 有界历史、联合PI自然节点续算及接受后回调失败时的匹配上下文 | core/test_adaptive_continuation |
 | 显式强制下限、有限超容差接受、硬失败保留和旧配置身份 | test_min_step_policy |
 | 出口回流独立能量积分、SAV配对、正向Poiseuille及保存标签 | test_backflow_outlet |
 | FEM一致质量分量共享、解析弱式与真实散度 | test_fem_model、test_fem_quadrature |
