@@ -59,8 +59,9 @@ experiment 键。输入的 manifest、有效参数、结果和历史来源不重
 
 ```sh
 uv run --locked pytest -q tests/core/test_postprocess.py tests/core/test_plotting.py
-uv run --locked pytest -q tests/tasks/test_postprocess_compatibility.py tests/tasks/test_record_compatibility.py
 uv run --locked python -m tests.core_distribution
+# 只有完整本地研究文件存在时，另验旧 experiments 导入：
+uv run --locked pytest -q tests/tasks/test_postprocess_compatibility.py tests/tasks/test_record_compatibility.py
 ```
 
 已知保存数组验证格心模与内部旋度；报告核对统计值、显式来源及输入不变；独立副本实际

@@ -6,8 +6,21 @@ __pycache__/
 .runs-cache/
 runs/
 reports/
-.scratch/*
-!.scratch/implementation.md
+/.scratch/
 .venv/
 .venv-fem-mg/
 .DS_Store
+
+# Local research files stay on disk; only public tools/docs remain tracked.
+/experiments/
+/tests/tasks/
+/tools/benchmark_fem_adaptive.py
+/tools/benchmark_steps.py
+/tools/probe_hele_shaw_inlet.py
+/tools/rerun_low_high_stability_probe.py
+/tools/search_low_high_stability_steps.py
+/docs/experiment-inventory.md
+/docs/fluid-model-extension-survey.md
+/docs/forced-2d-mhd-literature.md
+/docs/forced-2d-mhd.bib
+/docs/mhd-long-time-discussion.md

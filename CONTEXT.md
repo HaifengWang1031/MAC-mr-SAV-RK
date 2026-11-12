@@ -1,5 +1,15 @@
 ## 当前能力索引（2026-11-04 文档核对）
 
+2026-11-12 用户确认第四阶段本地化清单，外盘为 ~/GameStation（/Volumes/GameStation）。
+两工作区的本地文件/Git 已独立备份和恢复校验，再按基线清单仅取消研究文件的 Git 跟踪，
+保持本机原路径与字节；不改数值实现、旧记录、冻结源码或远端作业。公共 solver、
+run_support、postprocess、核心测试/参照和必要文档仍随检出提供，研究包/任务测试/五个
+计算工具与五份研究资料仅本地保留。默认 pytest 仍收集所有实际存在的测试；默认 mypy
+仅检查公共目标，完整本地检查显式包含 experiments/tools。legacy 来源仍看磁盘实际依赖，
+不按跟踪状态删文件；pyproject 配置变动如实改变新来源，不回填旧身份或放宽 retarget。
+备份范围、原生 macOS 安全属性差异、恢复验证及非服务器备份限制见 docs/core-localization-plan.md。
+下文研究路径均为可选本地材料；日期化科学资格/撤回记录及当前 ADR 约束继续有效。
+
 2026-11-12 用户继续批准第三阶段通用只读工具分离：公共 MAC 保存场读取、图/排版、诊断和快照报告
 归属 postprocess，experiments.plotting/analysis 和旧快照命令保留 adapter；研究绘图策略、
 benchmark/probe/search 仍属任务计算侧，不统一搬迁。新报告显式记录分析实现来源，

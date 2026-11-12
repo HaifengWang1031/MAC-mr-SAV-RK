@@ -6,18 +6,34 @@
 已验证结果、跳过项和未覆盖场景见[验证记录](validation.md)。历史说明中的首期限制
 应结合后续扩展阅读，不能用旧范围推断当前能力。
 
+## 核心检出与完整本地工作区
+
+当前 Git 文件树仅保留 solver/run_support/postprocess、核心测试/参照、公共 CLI adapter
+与必要文档。experiments、tests/tasks、五个计算工具和五份研究资料按获批清单保持本机
+原路径、仅退出 Git 跟踪；本文件下文的专属研究归属仍有效，但均为可选本地 module，
+不保证干净检出存在。研究路径/报告以“本地材料”标注，不作为公共 interface 的依赖。
+
+默认 pytest 继续收集 tests 下全部实际文件，本地任务测试存在时仍执行；默认 mypy
+显式选择公共库、两个公共 tools Python 文件及测试参照/隔离入口，不递归本地计算工具。
+完整本地 mypy 显式包含 experiments/tools。无研究的实际索引副本与完整本地回归分别验收，
+不能用核心通过代替任务通过。见[备份与保留范围](core-localization-plan.md)。
+
+只改变跟踪状态不改变源码的来源范围；legacy 扫描仍看磁盘，显式任务清单不漏掉被忽略
+文件。pyproject 配置变化真实进入新来源哈希，旧记录/冻结源码/链/retarget 不回填或放宽。
+忽略不等于备份或文件保护，分支切换/reset/clean 可能覆盖本地文件；保持独立 worktree。
+
 ## 修改从哪里开始
 
 | 修改对象 | 归属与阅读入口 | 修改时保留的约定 |
 | --- | --- | --- |
 | 时间格式、阶段和标量校正 | [schemes](../solver/schemes/registry.py)、[Model 协议](../solver/model.py)、[数值说明](numerics.md) | 六种格式共用空间离散模型接缝，不在格式中复制 FEM/MAC 专属公式 |
 | 动量表示或 FEM 对流/SAV 功 | [共同动量 adapter](../solver/momentum.py)、[FEM 弱载荷 adapter](../solver/fem/momentum.py)、下文 FEM 章节 | 物理装配和表示转换分别维护；完整残差与约束检查保留 |
-| I/PI 配置与序列化 | [controllers.py](../experiments/controllers.py) | 实验默认值与启用策略留在各实验配置中 |
+| I/PI 配置与序列化 | [公共控制器](../solver/adaptivity/__init__.py)；`experiments/controllers.py` 为本地配置 adapter | 实验默认值与启用策略留在本地实验配置中 |
 | 运行身份、保存、复用、完成状态 | [run_support/records.py](../run_support/records.py)、[source.py](../run_support/source.py)、下文记录章节 | 显式来源范围；旧可选键、失败前缀、专属表示校验保留 |
 | 网格、布局、压力标签、读取重建 | 各实验 `records.py` / `representation.py` / `reconstruct.py` | 读取实际保存网格；区分阶段乘子与瞬时半离散压力 |
 | 绘图与结果分析 | [postprocess](../postprocess/README.md) 拥有公共 MAC 读取/报告/图/样式；专属 `analyze.py` / `animate.py` 留在实验 | 只接受显式记录，输出到 `reports/`，不启动计算；不做万能 reader |
-| 实验参数、物理观测或计算调度 | 各实验 `config.py` / `problems.py` / `run.py`，见[实验导航](../experiments/README.md) | 共用已有推进与记录机制；实验特有物理内容留在实验内 |
-| 核心验证、数学参照与任务测试 | [tests/core](../tests/core/)、[references](../tests/references/)、[tasks](../tests/tasks/)，见[测试导航](../tests/README.md) | 按机制分层；核心不导入实验/工具或另一个测试文件，任务工作流不伪装成核心验证 |
+| 实验参数、物理观测或计算调度 | 各实验 `config.py` / `problems.py` / `run.py`，见实验导航（本地材料：`../experiments/README.md`） | 共用已有推进与记录机制；实验特有物理内容留在实验内 |
+| 核心验证、数学参照与任务测试 | [tests/core](../tests/core/)、[references](../tests/references/)、本地 `tasks/`，见[测试导航](../tests/README.md) | 按机制分层；核心不导入实验/工具或另一个测试文件，任务工作流不伪装成核心验证 |
 
 这些文件名是常见归属，不要求每个实验机械地复制整套文件。周期与 Channel 配置目前
 仍在各自 `run.py`；封闭 FEM、圆柱和 Hele–Shaw 有独立 `config.py`。楔腔还保存逐帧
@@ -25,7 +41,7 @@
 
 ## 力矩转变：预检、参数搜索与生产
 
-[torque_transition](../experiments/torque_transition/README.md) 的 `preflight.py` 仅拥有
+torque_transition（本地材料：`../experiments/torque_transition/README.md`） 的 `preflight.py` 仅拥有
 X0–X12 无滑移问题的短时物理配置、观测和进程/线程基准；共享空间模型、SDIRK3-mr-ccSAV、
 控制器工厂及旧保存契约不改。旧谱预检128指非线性Gauss点数，对应84个去混叠速度模态。
 新显式 `discretization=mac` 路径由 `mac_model.py` 拥有面外力、面积平均观测及顶点涡量；
@@ -122,16 +138,16 @@ Leray 消去阶段压力，感应方程用反对称通量。阶段残差针对�
 `nu_plus*|k|^4+nu_minus*|k|^-4`，零模的逆幂取零。共同格式仍以 `model.nu=nu_plus`
 乘 `apply_K`；后者包含两条耗散通道。加性外源不乘 SAV 耦合因子，不复制阶段公式。
 同文件拥有零均值磁通重建及原 PDE 非线性通量／壳层谱诊断，面积平均和 rFFT 权重一致。
-[逆级联实验](../experiments/inverse_cascade/README.md) 的 config/problem 拥有论文单位、
+逆级联实验（本地材料：`../experiments/inverse_cascade/README.md`） 的 config/problem 拥有论文单位、
 定常双场外源和可复现扰动初值；run 通过接受态 observer 抽样谱，不在分析时重新计算流动。
 同目录另有四个只读或执行辅助模块，职责不得混用：
 
 | 模块 | 归属 | 契约 |
 | --- | --- | --- |
-| [stats.py](../experiments/inverse_cascade/stats.py) | 相关系数与有限窗筛查 | 只接受均匀采样的标量序列；常量、样本不足返回明确状态，不造有限误差 |
-| [segments.py](../experiments/inverse_cascade/segments.py) | 分段执行与 checkpoint | 每段调用同一 `integrate`；只在段边界原子发布；未达计划终点不标完成 |
-| [chain.py](../experiments/inverse_cascade/chain.py) | chain 的只读组装 | 拒绝缺段、重叠时间、重复采样、校验和变化与未完成段；不构造模型 |
-| [inventory.py](../experiments/inverse_cascade/inventory.py) / [plan.py](../experiments/inverse_cascade/plan.py) | 探索性库存与部分候选预算 | inventory 只读扫描；plan 默认 dry run，显式本地 execute 须配置/代码/证据绑定的人工审批；无远程提交 |
+| `experiments/inverse_cascade/stats.py`（本地） | 相关系数与有限窗筛查 | 只接受均匀采样的标量序列；常量、样本不足返回明确状态，不造有限误差 |
+| `experiments/inverse_cascade/segments.py`（本地） | 分段执行与 checkpoint | 每段调用同一 `integrate`；只在段边界原子发布；未达计划终点不标完成 |
+| `experiments/inverse_cascade/chain.py`（本地） | chain 的只读组装 | 拒绝缺段、重叠时间、重复采样、校验和变化与未完成段；不构造模型 |
+| `experiments/inverse_cascade/inventory.py` / `plan.py`（本地） | 探索性库存与部分候选预算 | inventory 只读扫描；plan 默认 dry run，显式本地 execute 须配置/代码/证据绑定的人工审批；无远程提交 |
 
 分段 chain 是独立记录家族（`runs/inverse_cascade_chains/<id>/`）：
 `chain.json` 拥有段索引、累积步数、样本数与分段校验和，`manifest.json` 仍走
@@ -195,7 +211,7 @@ roots/selected是stages/r的兼容别名，不能解释为原多项式的实根�
 
 ## 控制器配置只在共同入口实现
 
-[experiments/controllers.py](../experiments/controllers.py) 拥有：
+experiments/controllers.py（本地材料：`../experiments/controllers.py`） 拥有：
 
 - `make_controller`：I/PI 构建、嵌入估计器阶数匹配、`max_step=null` 到内部无穷的转换。
   `max_steps`、`max_rejections` 必须是整数，布尔值和浮点数不作为整数接受。
@@ -229,7 +245,7 @@ roots/selected是stages/r的兼容别名，不能解释为原多项式的实根�
 ## 运行记录的共同流程与专属读取
 
 [run_support/records.py](../run_support/records.py) 拥有共同机制，不导入实验或计算入口。
-[experiments/records.py](../experiments/records.py) 仅保留旧名兼容导出，不维护第二份记录实现：
+experiments/records.py（本地材料：`../experiments/records.py`） 仅保留旧名兼容导出，不维护第二份记录实现：
 
 | 函数 | 职责 |
 | --- | --- |
@@ -250,14 +266,14 @@ roots/selected是stages/r的兼容别名，不能解释为原多项式的实根�
 | --- | --- | --- |
 | 通用 MAC | [load_record](../run_support/records.py) | [postprocess/mac.py](../postprocess/mac.py) 的保存场解释；旧 experiments.plotting 仅导出该入口 |
 | 排版/外部工具 | [postprocess/plotting.py](../postprocess/plotting.py) 的 `latex_binary`、`usetex_available`、`latex_style` | 唯一工具定位入口：先查 `PATH`，再查 `/Library/TeX/texbin`、`/usr/local/texlive/*/bin/*` 等标准位置（MacTeX 常不在非登录 shell 的 `PATH`）。`latex_style` 有工具链时启用 `text.usetex`、否则回退 mathtext；需要 PDF 表的分析（no_slip 参考收敛等）经此判断是否编译，缺工具记 `pdf_status` 而不是数值失败 |
-| 周期 Fourier | [periodic_ns/records.py](../experiments/periodic_ns/records.py) 的 `load_periodic` | Fourier 表示、布局与压力标签 |
-| 周期 Fourier MHD | [periodic_mhd/records.py](../experiments/periodic_mhd/records.py) 的 `load_mhd` | 独立记录家族，补充 `final/magnetic`、`snapshots/magnetic`，省略阶段压力，检查两次校正计数。Zhou 算例另外保存和校验 `snapshots/flux` 与 `snapshots/current`，由 [analyze_zhou](../experiments/periodic_mhd/analyze_zhou.py) 读取两条显式运行记录 |
-| 受迫 MHD 逆级联 | [inverse_cascade/records.py](../experiments/inverse_cascade/records.py) 的 `load` | 独立记录家族，复用公共 HDF5 与来源机制；补充磁场及 `spectra/{times,K,Pi_E,Pi_Q,E_u,E_B}`，检查谱抽样与接受步对齐、双场形状及两次标量校正。低通收支列 `E_low/Q_low/power_*_low/diss_*_low` 为**可选**：新记录写入并校验形状，旧记录缺列不得报错、不回填。只读分析显式指定运行、完成扫描或 chain，burn-in/块长为分析参数，不自动扫描或求解 |
-| Channel | [channel_ns/records.py](../experiments/channel_ns/records.py) 的 `load_channel` | 周期面布局、壁面与阶段压力 |
-| 封闭 FEM | [fem_ns/records.py](../experiments/fem_ns/records.py) 的 `load_fem` | 独立配置、网格/DOF、系数与阶段/根检查 |
-| 圆柱 FEM | [cylinder_ns/records.py](../experiments/cylinder_ns/records.py) 的 `load_cylinder` | 专属表示与物理观测；同文件还拥有 native benchmark 读取 |
-| Hele–Shaw | [hele_shaw_airfoil/records.py](../experiments/hele_shaw_airfoil/records.py) 的 `load` | 实际网格、MWR 压力/力与 Darcy 参照 |
-| 楔腔 | [wedge_cavity/report.py](../experiments/wedge_cavity/report.py) 的 `load` | 专属快照和逐帧阶段压力布局、旧配置约定 |
+| 周期 Fourier | `experiments/periodic_ns/records.py:load_periodic`（本地） | Fourier 表示、布局与压力标签 |
+| 周期 Fourier MHD | `experiments/periodic_mhd/records.py:load_mhd`（本地） | 独立记录家族，补充 `final/magnetic`、`snapshots/magnetic`，省略阶段压力，检查两次校正计数。Zhou 算例另外保存和校验 `snapshots/flux` 与 `snapshots/current`，由本地 `analyze_zhou` 读取两条显式运行记录 |
+| 受迫 MHD 逆级联 | `experiments/inverse_cascade/records.py:load`（本地） | 独立记录家族，复用公共 HDF5 与来源机制；补充磁场及 `spectra/{times,K,Pi_E,Pi_Q,E_u,E_B}`，检查谱抽样与接受步对齐、双场形状及两次标量校正。低通收支列 `E_low/Q_low/power_*_low/diss_*_low` 为**可选**：新记录写入并校验形状，旧记录缺列不得报错、不回填。只读分析显式指定运行、完成扫描或 chain，burn-in/块长为分析参数，不自动扫描或求解 |
+| Channel | `experiments/channel_ns/records.py:load_channel`（本地） | 周期面布局、壁面与阶段压力 |
+| 封闭 FEM | `experiments/fem_ns/records.py:load_fem`（本地） | 独立配置、网格/DOF、系数与阶段/根检查 |
+| 圆柱 FEM | `experiments/cylinder_ns/records.py:load_cylinder`（本地） | 专属表示与物理观测；同文件还拥有 native benchmark 读取 |
+| Hele–Shaw | `experiments/hele_shaw_airfoil/records.py:load`（本地） | 实际网格、MWR 压力/力与 Darcy 参照 |
+| 楔腔 | `experiments/wedge_cavity/report.py:load`（本地） | 专属快照和逐帧阶段压力布局、旧配置约定 |
 
 新只读代码直接导入专属 reader 与共同记录工具，不从计算入口取得读取函数。读取可按
 保存网格重建基函数、插值和表示检查，不构造动力模型、重生成网格或启动积分。PETSc、
@@ -295,7 +311,7 @@ run_support/postprocess。逆级联数值身份包含共同记录实现，但不
   保留 `load_*` 旧名导出。新当前源码调用方使用新的归属，旧调用路径不承载另一份实现。
 - 冻结源码可能没有 `experiments.records` 或 `experiments.controllers`。在指定旧源码中
   运行的 worker/脚本保留该源码支持的导入路径。已存在的兼容入口包括圆柱对比 `WORKER`、
-  三个 Kolmogorov `--source-root` 入口，以及 [FEM benchmark worker](../tools/benchmark_fem_adaptive.py)。
+  三个 Kolmogorov `--source-root` 入口，以及 FEM benchmark worker（本地材料：`../tools/benchmark_fem_adaptive.py`）。
   修改这类入口时检查其实际解释器、工作目录和选定源码，不能只验证当前源码导入。
 - 新配置不自动给旧可选参数补默认键；读取旧记录使用记录自带的来源计算身份。修改代码
   会改变新运行的来源哈希，不把新代码标记成旧来源，也不重写旧配置或结果。
@@ -399,8 +415,8 @@ experiments、tools、tests.tasks 导入且禁用无关自动加载插件；不�
 `test_core_distribution` 只验证该边界下的收集，完整隔离执行须另外运行上述命令。
 `test_postprocess` 还在另一个无实验/工具/测试包副本实际执行快照 CLI，除 MACGrid 外
 禁止所有数值模块导入，并逐字节检查输入不变。测试仍复用已安装的完整依赖，不是最小
-依赖安装证明；真实 TeX 执行和专属家族后处理另有范围。本阶段没有取消跟踪任务、改变
-忽略规则或解除所有计算工具对实验的依赖。
+依赖安装证明；真实 TeX 执行和专属家族后处理另有范围。随后本地化按获批清单仅取消研究跟踪，
+不解除本地计算工具对实验的真实依赖，也不改变默认测试发现范围。
 
 ## 修改后的验证与文档维护
 

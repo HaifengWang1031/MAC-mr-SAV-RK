@@ -1,6 +1,8 @@
 # 代表性测试
 
-默认运行 `uv run --locked pytest -q`，仍覆盖当前检出的全部核心与任务测试，不静默隐藏实验回归。
+默认运行 `uv run --locked pytest -q`，覆盖当前磁盘上的全部测试，不静默隐藏实验回归。
+核心检出仅提供 core/references；完整本地工作区另有已忽略的 tasks，存在时仍被默认收集。
+下表 tasks 相关的工作流/工具机制是本地研究索引，不承诺干净检出具备这些文件。
 测试输出和临时实验由 pytest 的 tmp_path 管理，不写入正式 runs/reports。生产实验不能充当
 单元测试的固定通过条件。
 
@@ -15,9 +17,11 @@
 
 ```sh
 uv run --locked pytest -q tests/core
-uv run --locked pytest -q tests/tasks
 uv run --locked python -m tests.core_distribution
-uv run --locked mypy
+uv run --locked mypy  # 仅公共库、公共 CLI 文件及测试参照/隔离入口
+# 只有完整本地研究文件存在时：
+uv run --locked pytest -q tests/tasks
+uv run --locked mypy solver run_support postprocess experiments tools tests/references tests/core_distribution.py
 ```
 
 隔离入口复用当前解释器、不安装环境；子进程使用 `-I`、禁止 research 包导入、禁用外部
@@ -34,8 +38,9 @@ pytest 插件自动加载。`--collect-only` 只验证收集，默认命令实�
 
 测试参照只描述明确的数学问题，不是第二套研究配置/生产工厂；实验中的参照和工具实现
 保留原归属，不反向依赖 tests。连续 PDE 导数、独立固定网格 stencil、半离散轨迹的
-验证范围分别说明，不将时间验证冒充 PDE 空间/阶数证明。此阶段未改忽略规则、未取消
-跟踪任务。通用只读工具已抽取到 postprocess，其他会计算的任务工具仍保留原依赖。
+验证范围分别说明，不将时间验证冒充 PDE 空间/阶数证明。研究本地化仅取消 tasks 和
+研究工具的 Git 跟踪，文件/阈值/参数化保留在原路径；testpaths 仍为 tests。通用只读工具
+已抽取到 postprocess，其他会计算的本地任务工具仍保留原依赖。
 
 ## 代表机制索引
 

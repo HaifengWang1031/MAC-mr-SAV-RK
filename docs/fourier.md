@@ -60,7 +60,7 @@ assert result.status == 'complete', result.error
 
 `integrate_adaptive` 的用法与既有模型相同；二阶格式设置 `estimator_order=2`，三阶格式为 3，误差范数直接使用上述物理 L2 内积。最后接受节点仍严格等于 `initial.t+T`，终点短步继续执行误差与阶段检查。`ScalarErrorControl` 沿用既有局部缺陷定义，实验入口仅为 SDIRK3-mrSAV 提供联合控制选项；它不代表全局 `|r|` 误差上界。
 
-独立算例、存储、分析及验证入口见 [periodic_ns README](../experiments/periodic_ns/README.md)。长期湍流、高雷诺数、3D、混合边界及 MPI 尚未验证。周期 MAC 同条件对照尚未实现，不能用既有无滑移 MAC 计时推断周期算法加速比。
+独立算例、存储、分析及验证入口见 periodic_ns README（本地材料：`../experiments/periodic_ns/README.md`）。长期湍流、高雷诺数、3D、混合边界及 MPI 尚未验证。周期 MAC 同条件对照尚未实现，不能用既有无滑移 MAC 计时推断周期算法加速比。
 
 ## 双周期不可压电阻 MHD
 
@@ -69,4 +69,4 @@ assert result.status == 'complete', result.error
 阶段算子对速度和磁场分别除以 `1 + tau*nu*k2/4` 和 `1 + tau*eta*k2/4`。
 两个响应均检查完整投影残差和两场物理散度；共同 SAV 标量以两场 $L^2$ 内积之和
 计算校正，两次校正复用同一对响应。阶段压力已消元，MHD 记录单独保存磁场与磁散度。
-固定步 Orszag–Tang 入口、物理诊断及验证范围见[实验说明](../experiments/periodic_mhd/README.md)。
+固定步 Orszag–Tang 入口、物理诊断及验证范围见实验说明（本地材料：`../experiments/periodic_mhd/README.md`）。

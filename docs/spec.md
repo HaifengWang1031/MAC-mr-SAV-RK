@@ -105,6 +105,34 @@ its ban on tools imports. Run focused/full tests and mypy; document validation
 limits and remaining task tools. No numerical formula, gitignore, untracking,
 remote production computation, push or merge in this stage.
 
+## Core repository extraction: approved local research retention (2026-11-12, fourth stage)
+
+Keep the complete solver, public records/postprocess, core tests/references and
+public CLI adapter tracked. Preserve the approved 412 baseline research paths on
+disk at their original locations while removing only their Git index entries;
+retain 170 baseline public paths plus the new localization guide. Do not rewrite
+history, move research implementations or change numerical formulas/defaults.
+
+Before untracking, back up both actual worktrees (including ignored local data)
+and all Git refs to the user-selected external ~/GameStation volume. Verify
+archive/file hashes, independent Git recovery and actual recovered-data readers
+without computation. Keep historical failed/running labels; remote production
+is not part of this local backup. Preserve original OS security attributes in
+metadata, but document macOS provenance/TCC regeneration at restored locations.
+
+Default mypy explicitly targets public modules and the two public tools files;
+full local checking explicitly includes experiments/tools. Default pytest still
+collects all existing tests, including local tasks. Verify both the exact retained
+index export with no research present and the complete local workspace. Public
+documentation uses public interfaces; optional historical research paths are
+labelled local, with scientific restrictions preserved. Keep uv.lock unchanged.
+
+Source inventories remain filesystem-based, not Git-filtered. Changes to the
+tracked pyproject are honestly reflected in new provenance; never rewrite old
+records/frozen source or bypass chain/retarget checks. After validation/review,
+commit only the optimization branch; no push/merge, server operation or cleanup
+of local research/restoration evidence. See [retention and recovery](core-localization-plan.md).
+
 ## Confirmed extensions and historical scope
 
 2026-11-07 requested inverse-cascade reproduction: independent `inverse_cascade`
@@ -130,13 +158,13 @@ invalidated historical plan artifacts. 2026-11-08 adds the
 serial-correlation/storage screen: existing scan points fail it, so they support
 finite-window trends only. No critical-parameter/exponent, stationarity,
 convergence or divergence qualification is implied.
-See [experiment scope](../experiments/inverse_cascade/README.md).
+See experiment scope (optional local `experiments/inverse_cascade/README.md`).
 
 2026-11-06 periodic incompressible resistive MHD: reuse the Fourier space,
 projected momentum and antisymmetric induction flux, with joint velocity/magnetic
 pairing and the shared fixed two-correction SDIRK3-mr-ccSAV stage. The Orszag–Tang
 entry point supports ordinary and SAV SDIRK3 with fixed steps. Pressure is eliminated
-and both full divergences are checked. See [the study](../experiments/periodic_mhd/README.md)
+and both full divergences are checked. See the study (optional local `experiments/periodic_mhd/README.md`)
 for fixed-grid time refinement, independent grid/step checks of the paper curves,
 and the separate initial-amplitude sensitivity case.
 
@@ -216,7 +244,7 @@ recycled-factor preconditioning. Old fixed records remain readable; adaptive
 attempts and failed accepted prefixes are validated. Numerical qualification must
 use developed lift cycles, separate mesh/geometry/time sensitivity and the cited
 sampled reference; performance uses repeated interleaving and identical-schedule
-replay, not weaker error gates. [Cylinder guide](../experiments/cylinder_ns/README.md)
+replay, not weaker error gates. Cylinder guide (optional local `experiments/cylinder_ns/README.md`)
 and [validation](validation.md) separate achieved evidence from remaining limits.
 
 2026-10-27 confirmed FEM extension: independent scikit-fem continuous Taylor–Hood

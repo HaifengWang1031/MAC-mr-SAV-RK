@@ -41,7 +41,9 @@ source = provenance(task_paths=[
 再附加 run_support/postprocess 的真实实现；仍支持缺少这些新目录的真实旧源码树。
 公共后处理的新报告显式选择 postprocess，不把它加入默认计算核心来源；见
 [postprocess](../postprocess/README.md)。旧 manifest 与冻结源码不回写。
-因此**尚未迁移的入口仍受本地无关 Python 文件影响**，不应在此阶段取消跟踪实验目录。
+因此**尚未迁移的入口仍受本地无关 Python 文件影响**。研究文件现仅本地保留在原路径，
+Git 忽略不会从来源扫描中移除它们；不把本地化伪装成所有任务已迁移显式来源。
+pyproject 配置变化会真实改变新来源哈希，不回写旧运行或放宽 chain/retarget。
 
 新来源策略不会重算或改写旧 manifest；旧结果按其记录的来源与校验和读取。新共享实现
 改变了真实源码，新运行的身份应如实变化，不应与旧运行伪装同源。HDF5 schema、历史根槽、
@@ -50,8 +52,10 @@ source = provenance(task_paths=[
 ## 验证
 
 ```sh
-uv run --locked pytest -q tests/core/test_run_support.py tests/core/test_record_compatibility.py tests/tasks/test_record_compatibility.py
+uv run --locked pytest -q tests/core/test_run_support.py tests/core/test_record_compatibility.py
 uv run --locked mypy
+# 只有完整本地研究文件存在时：
+uv run --locked pytest -q tests/tasks/test_record_compatibility.py
 ```
 
 核心测试在只有 solver/run_support/环境文件的临时副本中，独立进程阻止 experiments/tools

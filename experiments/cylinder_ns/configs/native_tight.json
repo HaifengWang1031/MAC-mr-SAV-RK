@@ -1,6 +1,0 @@
-{
-  "controller": {"kind": "PI", "atol": 1e-9, "rtol": 0.00002, "max_step": 0.0005,
-                 "min_step": 1e-7, "min_factor": 0.5, "max_factor": 1.5},
-  "scalar_atol": 0.000001,
-  "initial_step": 0.0002
-}

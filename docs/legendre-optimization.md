@@ -59,9 +59,9 @@ CG 超过迭代上限时显式失败。
 
 已完成的报告：
 
-- [原实现与优化 direct](../reports/legendre_optimization/20261005T052848-aeb8c268/comparison.md)
-- [优化 direct 与 tensor](../reports/legendre_optimization/20261005T053105-e9d345fc/comparison.md)
-- [优化后 Legendre 与 MAC 的共同误差门槛比较](../reports/legendre_mac_benchmark/20261005T053507-3daa7b53/comparison.md)
+- 原实现与优化 direct（本地材料：`../reports/legendre_optimization/20261005T052848-aeb8c268/comparison.md`）
+- 优化 direct 与 tensor（本地材料：`../reports/legendre_optimization/20261005T053105-e9d345fc/comparison.md`）
+- 优化后 Legendre 与 MAC 的共同误差门槛比较（本地材料：`../reports/legendre_mac_benchmark/20261005T053507-3daa7b53/comparison.md`）
 
 默认保留 direct。后端选择应计入初始化、实际步长变化、压力迭代数及总成本；
 少模态、固定步长时 LU 复用通常有优势。变步长下零耦合 LU 分解次数不代表

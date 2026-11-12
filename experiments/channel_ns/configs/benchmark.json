@@ -1,7 +1,0 @@
-{
-  "grids": [[32, 24], [64, 48], [128, 96]],
-  "schemes": ["sdirk2", "sdirk2_mrsav", "sdirk3", "sdirk3_mrsav"],
-  "repeats": 3,
-  "T": 0.04,
-  "steps": 10
-}

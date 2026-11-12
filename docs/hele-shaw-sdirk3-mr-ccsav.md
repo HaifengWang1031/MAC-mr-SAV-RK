@@ -464,10 +464,10 @@ velocity_limit=20和scalar_limit=.05是本次显式运行资格门槛：超限�
 
 ## 11. 代码对应
 
-- 物理模型与入口修正：[solver/fem/hele_shaw.py](/Users/wanghaifeng/Desktop/MAC-mr-SAV-RK/solver/fem/hele_shaw.py)。
-- 同一transport的动量/标量边界配对及压力恢复：[solver/fem/open_flow.py](/Users/wanghaifeng/Desktop/MAC-mr-SAV-RK/solver/fem/open_flow.py)。
-- 增量系数、已知项及嵌入组合：[solver/schemes/sdirk3.py](/Users/wanghaifeng/Desktop/MAC-mr-SAV-RK/solver/schemes/sdirk3.py)。
-- 双右端求解、五次方程及完整阶段检查：[solver/schemes/sdirk3_mrsav.py](/Users/wanghaifeng/Desktop/MAC-mr-SAV-RK/solver/schemes/sdirk3_mrsav.py)。
-- 本次运行配置：[experiments/hele_shaw_airfoil/inlet_recovery.py](/Users/wanghaifeng/Desktop/MAC-mr-SAV-RK/experiments/hele_shaw_airfoil/inlet_recovery.py)。
+- 物理模型与入口修正：[solver/fem/hele_shaw.py](../solver/fem/hele_shaw.py)。
+- 同一transport的动量/标量边界配对及压力恢复：[solver/fem/open_flow.py](../solver/fem/open_flow.py)。
+- 增量系数、已知项及嵌入组合：[solver/schemes/sdirk3.py](../solver/schemes/sdirk3.py)。
+- 双右端求解、五次方程及完整阶段检查：[solver/schemes/sdirk3_mrsav.py](../solver/schemes/sdirk3_mrsav.py)。
+- 本次运行配置：`experiments/hele_shaw_airfoil/inlet_recovery.py`（可选本地材料）。
 
 核对的冻结任务：runs/hele_shaw_wake/20261102T071827-ef7aba44。

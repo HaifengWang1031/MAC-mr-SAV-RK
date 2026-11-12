@@ -41,7 +41,11 @@ counted global-LU fallback remain mandatory. GAMG remains experimental; Hypre
 performance is unqualified and distributed FEM is not implemented. See [shared solver settings and
 measured scope](fem-multigrid.md).
 
-## Usage
+## Optional local workflow
+
+The commands in this subsection require the locally retained `experiments/fem_ns/`
+files and are **not available in a fresh core-only checkout**. The public numerical
+API example below does not require research files.
 
 ```sh
 uv sync --locked
@@ -54,12 +58,14 @@ uv run --locked python -m experiments.fem_ns.analyze \
 
 All six names are supported: `imex_euler`, `imex_euler_mrsav`, `sdirk2`,
 `sdirk2_mrsav`, `sdirk3`, `sdirk3_mrsav`. Use fixed `dt` or an explicit positive
-`steps` sequence, not both. The bundled continuous polynomial Navier–Stokes MMS
-is a tiny workflow example, not a convergence campaign. Embedded SDIRK2/3 formats
+`steps` sequence, not both. The locally retained continuous polynomial Navier–Stokes
+MMS is a tiny workflow example, not a convergence campaign. Embedded SDIRK2/3 formats
 also support the existing I/PI driver (`mode=adaptive`, `initial_step`, `controller`,
 optional SAV `scalar_atol`), without changing fixed record identities. See the
-[experiment guide](../experiments/fem_ns/README.md) for configuration,
+experiment guide（本地材料：`../experiments/fem_ns/README.md`） for configuration,
 `run`, `load_fem`, `reconstruct`, `analyze`, reuse and `--rerun`.
+
+## Public numerical API
 
 The public numerical entry points are `solver.fem.Space` and `FEMModel`:
 
@@ -162,7 +168,7 @@ small stage residuals and observed SAV rates are not general mrSAV order proofs.
 
 The rectangular MMS remains homogeneous and has no curved/imported/periodic mesh,
 other element pair, pressure stabilization or checkpoint continuation. The separate
-[DFG2D-2 cylinder workflow](../experiments/cylinder_ns/README.md) adds verified saved
+DFG2D-2 cylinder workflow（本地材料：`../experiments/cylinder_ns/README.md`） adds verified saved
 polygonal meshes, fixed nonzero inlet lifting and a natural outlet with **no pressure
 gauge**. Its skew-volume convection includes boundary energy flux; its separately
 reconstructed instantaneous pressure is not a stage multiplier. See

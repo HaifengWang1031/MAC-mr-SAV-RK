@@ -107,5 +107,5 @@ Short MMS and perturbed-channel checks do not validate long-time high-Re turbule
 Moving walls, prescribed flow-rate feedback, stretched grids, MPI backends and
 checkpoint continuation are not implemented in the current model.
 
-See [experiment entry points](../experiments/channel_ns/README.md) and
+See experiment entry points（本地材料：`../experiments/channel_ns/README.md`） and
 [recorded verification](validation.md).

@@ -4,9 +4,11 @@
 Channel and FEM. It advances the main endpoint state from any of the four
 embedded SDIRK schemes. All six schemes support fixed/prescribed stepping, but
 `IMEXEuler` and `IMEXEulerMRSAV` return no embedded velocity; neither an Euler
-embedded estimator nor step doubling is implemented. Experiment configurations
-use [make_controller](../../experiments/controllers.py) to reject unsupported
-schemes and match the estimator order in the [registry](../schemes/registry.py).
+embedded estimator nor step doubling is implemented. Public callers construct
+IController/PIController directly and match the estimator order in the
+[registry](../schemes/registry.py). Optional local experiment configurations use
+`experiments/controllers.py:make_controller` for their own policy/serialization;
+that adapter is not required or shipped with a core-only checkout.
 
 ## Embedded velocities and velocity error
 
@@ -111,8 +113,8 @@ snapshot times are absolute. `integrate_adaptive` itself returns an in-memory re
 experiment runners write manifests, HDF5 and accepted/rejected attempts through the
 shared record layer. Saved workflows exist for MAC adaptive studies, periodic,
 Channel, FEM, cylinder and Hele–Shaw; Legendre uses the same API in dedicated studies.
-See the [experiment index](../../experiments/README.md) and
-[architecture](../../docs/architecture.md) for the actual entry points and readers.
+See [architecture](../../docs/architecture.md) for shared record interfaces;
+`experiments/README.md` is an optional local index of specialized entry points/readers.
 
 ### Optional bounded history and natural-node continuation
 

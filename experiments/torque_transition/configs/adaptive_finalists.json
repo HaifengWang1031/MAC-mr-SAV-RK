@@ -1,8 +1,0 @@
-[
-  {"name":"baseline","atol":1e-8,"rtol":1e-5,"scalar_atol":1e-5,"kind":"PI","min_factor":0.5,"max_factor":1.2,"max_step":0.05,"proportional":0.7,"integral":0.4},
-  {"name":"PI-selected","atol":1e-8,"rtol":1e-3,"scalar_atol":1e-3,"kind":"PI","min_factor":0.2,"max_factor":2.0,"max_step":0.05,"proportional":0.8,"integral":0.3},
-  {"name":"PI-stricter-u","atol":1e-8,"rtol":3e-4,"scalar_atol":1e-3,"kind":"PI","min_factor":0.2,"max_factor":2.0,"max_step":0.05,"proportional":0.8,"integral":0.3},
-  {"name":"PI-looser-both","atol":1e-8,"rtol":3e-3,"scalar_atol":3e-3,"kind":"PI","min_factor":0.2,"max_factor":2.0,"max_step":0.05,"proportional":0.8,"integral":0.3},
-  {"name":"PI-cap-001","atol":1e-8,"rtol":1e-3,"scalar_atol":1e-3,"kind":"PI","min_factor":0.2,"max_factor":2.0,"max_step":0.01,"proportional":0.8,"integral":0.3},
-  {"name":"PI-looser-r","atol":1e-8,"rtol":1e-3,"scalar_atol":3e-3,"kind":"PI","min_factor":0.2,"max_factor":2.0,"max_step":0.05,"proportional":0.8,"integral":0.3}
-]

@@ -34,4 +34,4 @@ testpaths = ["tests"]
 python_version = "3.12"
 ignore_missing_imports = true
 check_untyped_defs = true
-files = ["solver", "run_support", "postprocess", "experiments", "tools", "tests/references", "tests/core_distribution.py"]
+files = ["solver", "run_support", "postprocess", "tools/__init__.py", "tools/plot_speed_snapshots.py", "tests/references", "tests/core_distribution.py"]

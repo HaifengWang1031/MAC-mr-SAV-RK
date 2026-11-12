@@ -1,4 +1,0 @@
-{
-  "case": "discrete_mms", "scheme": "imex_euler_mrsav", "backend": "fft", "gamma": 1.0,
-  "nx": 12, "ny": 10, "T": 0.1, "dt": 0.002, "snapshots": [0.0, 0.1]
-}

@@ -134,7 +134,13 @@ Focused tests cover independent SPD mass solutions, exact manufactured mixed
 solutions, immutable batched RHS, full affine-trace/reaction SAV stages, all six
 weak-load formats, exact defect refinement, and all four public run/load workflows.
 
-## Replaying and reading the comparison
+## Replaying and reading the comparison (optional local research)
+
+This section describes locally retained `experiments/fem_scalability`, saved
+campaign data and the historical `.venv-fem-mg` environment, not bundled core-checkout
+commands or an environment restored by the localization backup. A fresh core-only
+checkout does not provide this runner/report workflow. Public numerical APIs and
+qualification limits above remain independent of these optional research files.
 
 `experiments/fem_scalability` keeps computation and analysis separate. Preparation
 requires an explicit pre-edit `baseline_source` in the run directory; the controller

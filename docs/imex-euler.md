@@ -93,7 +93,7 @@ result = integrate(model, IMEXEulerMRSAV(gamma=1.), initial, [.01, .02, .01])
 ```
 
 公开 MAC、Channel、Fourier 和 FEM 配置入口支持两个名称；Legendre 可通过模型 API 和专属研究入口使用。示例见
-[一阶验证与示例配置](../experiments/imex_euler/README.md)。Euler 的 `embedded_velocity=None`。
+一阶验证与示例配置（本地材料：`../experiments/imex_euler/README.md`）。Euler 的 `embedded_velocity=None`。
 当前支持固定/给定步长；共同控制器构建入口拒绝 Euler 的嵌入自适应请求。
 step doubling 尚未实现，需要独立估计器，不能借用 SDIRK 的嵌入阶数。
 

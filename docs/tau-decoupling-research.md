@@ -131,7 +131,7 @@ equations are unchanged. The existing full momentum-residual and full-divergence
 checks remain acceptance criteria; `DirectStokes` remains the default fallback.
 
 The reproducible benchmark entry point is
-[`benchmark_stokes_backends.py`](../experiments/kolmogorov_adaptive/benchmark_stokes_backends.py).
+`experiments/kolmogorov_adaptive/benchmark_stokes_backends.py` (optional local tool).
 On the same 128² Kolmogorov case, ten steps, three repeats, and one numerical
 thread, the median CPU times including backend setup were:
 
@@ -148,7 +148,7 @@ disappeared into timing noise. The Schur solves use 4.475--5.0 iterations per
 right-hand side on average. Across all cases, the largest final-velocity
 difference from `DirectStokes` is `5.99e-13` relative and the largest recorded
 divergence is `7.68e-13`. The complete machine-readable result is
-[`timings.json`](../reports/timings/20260927T110237-380d2a7a-tau-decoupled-10-step/timings.json).
+`reports/timings/20260927T110237-380d2a7a-tau-decoupled-10-step/timings.json` (local evidence).
 
 These numbers validate this grid and coefficient range, not arbitrary geometry,
 variable viscosity, or nonuniform meshes. The transform backend currently
@@ -166,7 +166,7 @@ velocity difference was `7.66e-13`, and the largest tensor-backend divergence
 was `1.29e-12`. The short timing window had no rejected trials, so a separate
 tight-tolerance regression forces one rejection followed by two accepted steps
 and compares both backends. Full records are in
-[`timings.json`](../reports/timings/20260927T111819-9752d294-adaptive-stokes-backends/timings.json).
+`reports/timings/20260927T111819-9752d294-adaptive-stokes-backends/timings.json` (local evidence).
 
 ## Reusable computational options
 

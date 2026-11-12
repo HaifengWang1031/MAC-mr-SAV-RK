@@ -1,6 +1,92 @@
-> **2026-09-24 现存证据核查：** 以下历史数字不是本次重跑结果。当前仓库没有 `runs/rotation_ns/`，A/B 旋转筛选及 512² 对照的原始记录无法在本地复核。当前记录清单见 [实验盘点](experiment-inventory.md)。文中“平均涡量（净角动量）”混淆了两个不同的量；无滑移闭域的连续净涡量积分为零，离散非零平均涡量不能直接解释为净角动量。仅凭短窗误差增长不能确定 Lyapunov 指数，也不能断言某一时刻后轨迹比较无意义。两个网格的短时接近不足以确立网格收敛；统计样本是否充分需用相关时间、分段统计和事件数量复核，不能由所谓 Lyapunov 时间数量判断。
+> **2026-09-24 现存证据核查：** 以下历史数字不是本次重跑结果。当前仓库没有 `runs/rotation_ns/`，A/B 旋转筛选及 512² 对照的原始记录无法在本地复核。当前记录清单见 实验盘点（本地材料：`experiment-inventory.md`）。文中“平均涡量（净角动量）”混淆了两个不同的量；无滑移闭域的连续净涡量积分为零，离散非零平均涡量不能直接解释为净角动量。仅凭短窗误差增长不能确定 Lyapunov 指数，也不能断言某一时刻后轨迹比较无意义。两个网格的短时接近不足以确立网格收敛；统计样本是否充分需用相关时间、分段统计和事件数量复核，不能由所谓 Lyapunov 时间数量判断。
 
 # 正式验收记录
+
+## 2026-11-12 第四阶段：精确本地化与双形态验收
+
+仅在优化 worktree / refactor/run-records-core 实施。基线 b0c684e 的 582 个文件按获批
+清单精确取消 **412** 个 index 条目，磁盘文件均在原路径、SHA256 未变；保留 170 个
+基线公共文件，加本地化说明共 **171 个**。忽略规则恰好匹配基线 412 个本地路径，
+不忽略公共工具/核心测试；所有基线 Python 文件和 uv.lock 字节完全未改。
+
+pyproject 默认 mypy 仅选公共库、两个公共 tools Python 文件、测试参照和隔离入口，
+全量本地 mypy 另显式包含 experiments/tools；默认 pytest 的 testpaths 仍为 tests，
+本地 tasks 存在时照常发现、参数化与执行。旧记录、冻结源码和旧身份检查未回写。
+新 pyproject 如实进入新来源摘要；Git 忽略不改变 legacy 的磁盘来源扫描。
+
+| 验证形态（复用原虚拟环境，无安装） | pytest | mypy |
+| --- | --- | --- |
+| 完整本地工作区，默认发现含 tasks | **728 passed / 36 skipped**，124.73 s | 显式完整目标 **246 文件通过** |
+| 精确 171 文件暂存索引导出，无 experiments/tasks/计算工具 | 默认 **392 passed / 17 skipped**，25.26 s | 默认 **78 文件通过** |
+| 从精确导出再执行 tests.core_distribution | **392 passed / 17 skipped**，25.17 s | 复用上行公共配置 |
+
+精确导出逐文件核对 Git blob/可执行位；保留 Markdown 的本地文件链接全部可解析，
+研究/报告路径改标可选本地材料。导航扫描还发现既有 parallel.md 历史死链，按本文已有
+撤回说明改标历史材料，没有重建已删后端。pytest/CLI 的 -I 探针拒绝研究导入，并核对实际
+项目 module 来自导出目录（pytest 期间 122 个）；隔离入口另有自身复制/导入屏障。
+
+README 的公共 MAC 零解两步例子实际执行到 t=.02、完整散度为 0；这只是 API smoke，
+不作为物理精度资格。公共 FEM 构造、投影及质量约束求解示例也从无研究导出实际执行，
+不据此声称真实 FEM 记录恢复或新的收敛资格。公共模块 CLI 与旧 tools adapter 均从无研究导出实际读取恢复的
+历史 MAC 保存记录，分别生成 speed/vorticity/history 图、CSV、analysis.json；报告来源
+记录 postprocess，输入结果哈希与全部输入字节不变。只读进程除 MACGrid 外禁止数值
+模型/推进模块导入，没有因分析重算数据。已知数组/统计正确性由核心回归独立参照覆盖。
+
+核心 17 个 skip 为 PETSc 7、PARDISO 9、Gmsh 1；完整本地额外 19 个为 PETSc 4、
+PARDISO 1、Gmsh 3、动画/渲染工具 8、notebook 1、缺失历史低高频基准 2（含模块级
+收集 skip）。总数与第三阶段一致，未增加跳过或缩窄收集；尤其两项历史基准缺失不是
+恢复成功的证明，不授予相关任务资格。真实 TeX、可选后端、物理长期统计、全研究任务
+依赖闭包、最小环境安装/新机复现和远端生产恢复均不由此次通过推出。
+
+独立 Spec 初审通过；Standards 初审指出 FEM 的研究 runner 示例尚未明确标本地（P2）。
+已修订 fem.md，并同类标明 fem-multigrid.md 的历史研究/环境要求，不改变公共 API 或
+数值资格；**Standards 复查 PASS、Spec 独立初审 PASS**，无剩余审查问题。
+审查者读取 diff/文件/证据，未自行重跑测试或重算归档摘要；上表为主会话的最终重复验收。
+本地 scratch 保存 index-only 逐路径证明、两形态日志、导出位置及 CLI 输入/输出校验；
+外盘预本地化备份保持封存。
+
+## 2026-11-12 第四阶段：外盘备份与独立恢复门槛
+
+用户批准 170 个基线公共文件保留、412 个研究文件仅本地保留，外盘 ~/GameStation
+核实为 USB ExFAT `/Volumes/GameStation`，与本机 APFS 为不同设备。正式备份位于
+`/Volumes/GameStation/MAC-mr-SAV-RK-backups/20261112T044006Z-pre-localize/`，完整标记为
+`COMPLETE-local-backup.json`，SHA256SUMS 索引哈希为
+`bb284df91a1692d974714a651680a97f04248bb3e0e66282fbe325d4cb610fd0`。
+
+两工作区合计 **10,508 个文件 / 12,888,020,622 字节**，包含 Git 外的运行/报告/研究输入；
+分别 tar 归档，源字节、外盘归档、独立 APFS 恢复均核对 SHA256；模式和精确 mtime
+恢复核验，all-refs bundle 在独立无 alternates 克隆中 verify/fsck 通过。备份前后 lsof
+未发现本地 runs/reports 打开文件，未发现本地计算 writer；11 条旧 running 标记不改。
+macOS 会重发 provenance/TCC 扩展属性：原值保存在清单，不复刻系统安全授权；首次
+严格比较发现此差异后修订恢复规则，所有非安全扩展属性仍须一致（本批无其他属性）。
+这不是完整 ACL/系统身份克隆。第一次无数据备份的元数据探测失败记录也保留，未误标成功。
+
+恢复目录 `/private/tmp/mac-localization-restore-20261112T044006Z/` 的项目源码独立导入，
+6 项真实只读检查通过：旧 MAC 记录、周期 MHD、逆级联谱记录、两条 schema-2 chain
+（4/40 段、1000/200000 步，包含 checkpoint/hash-link/全场连续性检查）、MAC256 预检
+NPZ（到 t10）。禁止构造动力模型/调用推进器；读取后全部归档输入字节再次核对未变。
+没有本地真实 FEM 保存家族可供这次恢复验收，不能把它写成 FEM 数据恢复资格。
+
+本地已覆盖历史远端 seed 的四个现存副本，原绝对路径不回填。Linux 动态库路径只作
+历史环境记录；远端生产目录只有本地 plan/launch 副本，未备份服务器 checkpoint/结果，
+未连接或操作服务器。现有虚拟环境复用，不宣称新机器/最小安装或可选后端已恢复。
+完整范围/排除项/原始属性/逐文件校验及实际 reader 结果留在外盘 metadata 和 RESTORE.md。
+
+后续本地化验证与审查结果另记；下方“方案演练”描述的是实施前的历史状态。
+
+## 2026-11-12 核心本地化方案演练（尚未实施）
+
+[保留与备份方案](core-localization-plan.md)以 `b0c684e` 的 582 个跟踪文件为基线，
+建议保留 170、本地化 412 个，逐项清单存于本机 scratch。导出保留文件并核对 Git blob，
+在无实验/任务的副本禁止研究导入，默认 pytest **392 passed / 17 skipped**（25.09 秒）；
+建议公共 mypy 目标显式覆盖后 **78 文件通过**，实际完整工作区 mypy **246 文件通过**。
+副本原样默认 mypy 因 experiments 缺失按预期报错，须在获批实施时改配置，而非当前已修复。
+旧快照 wrapper 的隔离 --help 成功；真实模块 CLI 报告由核心测试执行。草拟忽略规则仅在
+临时 Git sandbox 校验，恰好忽略 412 个本地路径且不忽略全部 170 个公共路径。
+
+本轮只有方案/文档与本地演练明细；未备份约 12 GB 运行数据或 110 MB 报告，未验证恢复或
+活动写入一致性，不宣称最小依赖安装/最终发布。未重跑任务套件、未修改生产 Python、
+pyproject/忽略规则/index、旧运行、原 worktree 或远端；未提交、取消跟踪、推送或合并。
 
 ## 2026-11-12 公共只读工具与任务计算分离：第三阶段
 
@@ -285,7 +371,7 @@ PARDISO四线程20.494秒，因此这组场景选择SuperLU；auto在不少于20
 最大系数残差2.58e-13、无鲁棒回退。原粗/细完整记录再次加载通过，未修改原始结果。
 完整预置为`experiments/cylinder_ns/configs/re1000_backflow_fine_optimized.json`，
 未自动启动新T=12生产计算。失败原型、来源元数据异常的精确副本和全部旧报告保留。
-详见[最终报告](../reports/fem_optimization/20261030T115147-1be59f9f/final/RESULTS.md)
+详见最终报告（本地材料：`../reports/fem_optimization/20261030T115147-1be59f9f/final/RESULTS.md`）
 与[实现/选择/限制](fem-optimization.md)。
 
 ## 2026-10-30 FEM排序、质量共享与可选并行接口
@@ -1067,7 +1153,7 @@ ODE 使用 400/800/1600 步；较粗的 100/200 步尚未进入本算例的一�
 
 最终保存验证：`runs/imex_euler_validation/20261004T140449-1fa7c628`；
 重算场误差后的报告为
-[analysis.json](../reports/imex_euler_validation/20261004T140449-1fa7c628/analysis.json)。
+analysis.json（本地材料：`../reports/imex_euler_validation/20261004T140449-1fa7c628/analysis.json`）。
 配置 T=.4、amplitude=.1，80/160/320 步；普通格式每后端一组，SAV gamma=1/1000，
 共 **18 组、54 个完整成员**。manifest 记录六项线程环境为1，源码哈希与最终代码核对一致。
 分析只读 NPZ 最终场、参照、时间及物理内积权重/质量矩阵，不构造模型或启动求解。
@@ -1113,7 +1199,7 @@ FFT检查包括全部MAC模式（含Nyquist）、交错差分相位、零模式�
 对照全局直接速度／压力解及四套格式结果，并检查自适应PI轨迹。
 
 最终源码的短时研究保存于 `runs/channel_ns_validation/20261004T094521-94681a55`；
-报告为 [analysis.json](../reports/channel_ns_validation/20261004T094521-94681a55/analysis.json)。
+报告为 analysis.json（本地材料：`../reports/channel_ns_validation/20261004T094521-94681a55/analysis.json`）。
 24个固定网格时间成员（12x10、T=.4、40/80/160步、四格式、gamma=1/1000）、
 3组定常空间场和8个startup/perturbed短时成员全部完成。分析重新检查来源、校验和
 及保存场后复算误差。二阶速度观测阶 **1.9344、1.9675**，三阶 **2.9906、2.9962**；
@@ -1124,7 +1210,7 @@ MMS空间细化测试。固定网格MMS的载荷来自NumPy差分／通量参考
 
 同一MAC问题的最终独立单线程计时保存于
 `runs/channel_ns_benchmark/20261004T094544-5bc2d1c2`；报告为
-[analysis.json](../reports/channel_ns_benchmark/20261004T094544-5bc2d1c2/analysis.json)。
+analysis.json（本地材料：`../reports/channel_ns_benchmark/20261004T094544-5bc2d1c2/analysis.json`）。
 共72个成员（3网格x4格式x2后端x3次交错重复），全部同源、完整且通过场核验。
 计算使用相同受扰Poiseuille参数、T=.04和10步；六项线程环境均为1。此轮在全套
 测试和验证研究结束后执行。最大后端速度L2差 **6.31e-14**，最后阶段压力最大差
@@ -1143,7 +1229,7 @@ SDIRK3-mrSAV为 **0.712777s**、**0.136425s**。warmup单列，分解／求解�
 
 六个配置示例亦完成。32x24 startup到T=.5，计算剖面与连续启动流级数对照图经
 视觉检查，PDF嵌入TimesNewRomanPSMT，数学由XeLaTeX/amsmath渲染；图位于
-[fields.pdf](../reports/channel_ns/20261004T094358-810579d3-487f436f/fields.pdf)。
+fields.pdf（本地材料：`../reports/channel_ns/20261004T094358-810579d3-487f436f/fields.pdf`）。
 32x24受扰流gamma=1000、PI联合控制示例12步接受、严格到达T=.5；64x48 FFT
 受扰流固定10步完成。均只报告与其目的相符的诊断或参考误差。
 
@@ -1157,7 +1243,7 @@ SDIRK3-mrSAV为 **0.712777s**、**0.136425s**。warmup单列，分解／求解�
 
 自动检查覆盖矩形奇偶 FFT 往返、物理 Parseval、G/D 伴随、严格截止、Leray 幂等及梯度核、解析 shifted Stokes 全方程、均值兼容性、批量载荷/非负 SAV beta、独立解析对流、最高保留频率去混叠、反对称能量配对、实数状态/压力、四格式非线性 MMS、gamma=1000、给定步长、纯梯度阶段压力、I/PI 接受拒绝和独立物理 L2 范数、均值演化、亚 min_step 终点、联合标量控制、无限模态定常空间收敛、公开运行/保存/加载/复用/只读分析及失败前缀。损坏校验和或非周期布局被拒绝。
 
-收敛和计时研究保存于 `runs/periodic_ns_validation/20261004T074942-8a577b4b`，场与来源复核后的报告为 [analysis.json](../reports/periodic_ns_validation/20261004T074942-8a577b4b/analysis.json)。24²、T=.4、10/20/40步，四格式分别在 gamma=1/1000 检查；二阶速度观测阶2.005–2.011，三阶3.0015–3.0031。辅助变量误差单独保存，不据此声称标量高阶；该制造解 r 很小，不能代表一般轨迹的标量漂移。
+收敛和计时研究保存于 `runs/periodic_ns_validation/20261004T074942-8a577b4b`，场与来源复核后的报告为 analysis.json（本地材料：`../reports/periodic_ns_validation/20261004T074942-8a577b4b/analysis.json`）。24²、T=.4、10/20/40步，四格式分别在 gamma=1/1000 检查；二阶速度观测阶2.005–2.011，三阶3.0015–3.0031。辅助变量误差单独保存，不据此声称标量高阶；该制造解 r 很小，不能代表一般轨迹的标量漂移。
 
 无限模态解析流函数 `exp(.7cos x+.4cos y)` 的定常 Stokes 检查排除了时间误差：12/18/24/32² 的物理速度 L2 误差依次为 `2.4927022e-2/1.5013586e-4/4.3537557e-7/2.5817182e-11`。有限模态的时间 MMS 不能替代这项空间检查，也不构成长期湍流空间精度证明。
 
@@ -1212,14 +1298,14 @@ Stokes 定常制造解；NS 制造解取 ν=0.1、A=0.1、T=0.02、τ=0.0005。�
 
 ## 已保存报告
 
-- [spatial_report](../reports/diagnostics/20260920T080305-40deeafb/tables/summary.csv)
-- [decay_report](../reports/diagnostics/20260920T080308-6e0abaf8/tables/summary.csv)
-- [时间收敛 1](../reports/diagnostics/20260920T080306-e6dec9b4/tables/time_convergence.csv)
-- [时间收敛 2](../reports/diagnostics/20260920T080307-65be408f/tables/time_convergence.csv)
+- spatial_report（本地材料：`../reports/diagnostics/20260920T080305-40deeafb/tables/summary.csv`）
+- decay_report（本地材料：`../reports/diagnostics/20260920T080308-6e0abaf8/tables/summary.csv`）
+- 时间收敛 1（本地材料：`../reports/diagnostics/20260920T080306-e6dec9b4/tables/time_convergence.csv`）
+- 时间收敛 2（本地材料：`../reports/diagnostics/20260920T080307-65be408f/tables/time_convergence.csv`）
 
 ## 并行（分布式迭代）后端：验证与限制
 
-2026-09-21 增补。上文数字仍属 2026-09-20 的串行验收；本节记录并行后端的证据与边界，报告与配置见 [parallel.md](parallel.md)。
+2026-09-21 增补。上文数字仍属 2026-09-20 的串行验收；本节记录并行后端的证据与边界，报告与配置曾见 `parallel.md`（历史材料，后续已随分布式后端移出工作树；见本文后续删除说明）。
 
 自动检查：`mypy` 43 个源文件通过；`pytest -q` 27 项通过，`tests/test_parallel.py` 在无 petsc4py 时跳过 1 项；在 `mpiexec -n 2` 与 `-n 4` 下并行 7 项全部通过（含共享格式在 1/2/4 进程驱动分布式模型并与串行参考对照的整步检查）。
 
@@ -2649,7 +2735,7 @@ PNG/PDF/SVG及两档正式表位于reports/low_high_stability_probe/20261105-128
 
 ## 2026-11-06 周期 Fourier MHD 与 Orszag–Tang
 
-[固定步配置与图点说明](../experiments/periodic_mhd/README.md)。运行批次
+固定步配置与图点说明（本地材料：`../experiments/periodic_mhd/README.md`）。运行批次
 `runs/periodic_mhd_studies/d1636f1db167/batch.json` 共 18 个成员、17 个不同运行，
 全部到达 $T=2$。结果在 `reports/periodic_mhd/d1636f1db167/`，分析从明确的运行路径读入
 有效配置、校验和及完成状态。额外 SAV 半步记录为 `20261106T084212-bcf944ed-cf965d47`。
@@ -2778,7 +2864,7 @@ $[0,80]$ 磁能最大相对差为 2.68%。在对齐后的 $t=36.98$，论文图 
 新增独立 `experiments/inverse_cascade`，实现 Seshasayanan 等（2014）的双场定常强迫
 （由原文涡量源与磁通源转换）、两场相同的 `nu_plus|k|^4 + nu_minus|k|^-4` 耗散，
 以及低通能量和磁通平方通量谱。其余阶段算法、`model.nu` 语义和旧衰减 MHD 记录不变。
-原文式 (1)–(5)、表 I 的读法见[实验说明](../experiments/inverse_cascade/README.md)。
+原文式 (1)–(5)、表 I 的读法见实验说明（本地材料：`../experiments/inverse_cascade/README.md`）。
 
 **已通过的机制检查**（`tests/test_forced_mhd.py`、`tests/test_inverse_cascade_workflow.py`）：
 
