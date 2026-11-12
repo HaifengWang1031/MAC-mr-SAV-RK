@@ -2,6 +2,36 @@
 
 # 正式验收记录
 
+## 2026-11-12 主线提升与操作后验收
+
+用户明确授权将优化支线提升为main，旧main保留为支线，并要求操作后验收。先将旧主线
+0d5333d保存为archive/main-before-core-20261112（无upstream），再在独立的新工作区
+`/Users/wanghaifeng/Desktop/MAC-mr-SAV-RK-main`将main以ff-only提升至优化提交3d4eb52。
+refactor/run-records-core保留在该提交；原研究工作区仍为744a695，未切换或覆盖。
+完成验收后仅在新main另提交CONTEXT与本文操作记录，运行源码/配置/uv.lock不变。
+
+| 操作后实际执行（复用原虚拟环境，无安装） | pytest | mypy |
+| --- | --- | --- |
+| 新main工作区：172跟踪文件，无experiments/tasks/计算工具 | 默认 **409 passed / 17 skipped**，27.18 s | 默认 **78文件通过** |
+| 从新main实际执行tests.core_distribution | **409 passed / 17 skipped**，26.36 s | 同上公共配置 |
+| 保留的完整本地优化工作区，默认发现全部现存tasks | **744 passed / 36 skipped**，128.96 s | 显式完整目标 **246文件通过** |
+
+新main测试进程使用-I、禁止研究依赖导入，123个项目模块均核对来自新main工作区，
+不是借用原目录源码通过。默认testpaths仍为tests。核心17个skip为PETSc7/PARDISO9/Gmsh1；
+本地额外19个仍包括可选后端、动画/渲染/notebook及两项缺失历史基准，没有新增跳过或
+缩窄测试。全部使用已有环境，不建立新venv或安装依赖。
+
+操作前对原工作区547个跟踪文件、优化工作区584个公共/本地源文件记录SHA256、mode及
+精确mtime，操作后逐项相同；两者HEAD/分支和干净状态保持原样。只在新第三工作区执行
+Git检出/快进，未删除或重写两个既有目录中的研究材料。旧main保留支线仍精确指向0d5333d，
+新main的运行源码与已验收优化提交逐字节一致。预操作all-ref bundle已核验；最终分支引用、
+all-ref bundle及本轮日志另存外盘main-promotion补充交付，完整研究/运行备份仍依赖原封存归档。
+
+此次是本地分支提升，未fetch/push、未更改GitHub默认分支；origin/main只是未更新的本地
+缓存引用，不据此判断远端当前状态。未改旧运行/manifest、冻结源码、续算/retarget身份，
+未启动服务器或生产任务；本节不新增数学精度、物理长期统计、可选后端、新环境安装或
+生产崩溃恢复资格。旧main支线及现存备份不删除，后续远端发布须另获明确授权。
+
 ## 2026-11-12 合并前审查：三个问题的聚焦修复
 
 用户授权在refactor/run-records-core先修复三个问题，不合并/推送或操作生产。相对83a043d：

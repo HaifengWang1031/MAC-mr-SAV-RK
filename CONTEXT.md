@@ -1,5 +1,14 @@
 ## 当前能力索引（2026-11-04 文档核对）
 
+2026-11-12 用户随后明确授权将优化支线升为本地主线，并保留旧主线为支线，完成后验收。
+已在新工作区/Users/wanghaifeng/Desktop/MAC-mr-SAV-RK-main将main以ff-only提升至
+3d4eb52；旧main的0d5333d保存为archive/main-before-core-20261112，优化支线保留在
+refactor/run-records-core。原研究工作区仍为codex/fixed-sav-corrections@744a695，两个
+既有工作区的文件字节/权限/mtime未改。新main核心409/17、隔离核心409/17，完整本地
+744/36，mypy公共78/本地246通过；本次仅另提交本段与validation的操作/验收记录。
+此授权取代此前阶段的“不合并”边界，但不授权推送、改远端默认分支或操作生产；未fetch，
+origin/main仅为未更新的本地缓存引用。现有科学/可选后端/生产恢复资格限制继续有效。
+
 2026-11-12 用户授权先修复主分支审查的三个问题，不合并或推送：接受态的下一步长/PI续算
 上下文先于on_accept提交；MHD合法空压力范数为零，并以两模型/六格式零解检查接口；纯
 bounded-history/联合PI续算测试从本地tasks移入core，函数体/阈值不变，新增接受后回调失败回归。
