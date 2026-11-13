@@ -26,6 +26,42 @@ See the [current capability table](../README.md#当前算法与支持范围),
 their original scope; later extensions supersede initial exclusions. Their test
 or production evidence applies only to the stated configurations and dates.
 
+## Engineering guardrails (2026-11-13)
+
+The user accepted the first three retrospective recommendations:
+
+1. Add a read-only-permission GitHub Actions job for pull requests, main pushes
+   and manual dispatch. Use Python 3.12 and locked dev dependencies; run the
+   existing default mypy, whole-tree pytest (with skip reporting) and actual
+   `tests.core_distribution`, without narrowing discovery or ignoring failures.
+   Workflow configuration is validated locally; hosted execution and branch
+   protection are not claimed or configured by this change.
+2. Keep a small, authoritative machine-readable index of required core regression
+   functions. Both isolated collection and execution must fail if an indexed
+   function is absent or moved to tasks. Parameterized node variants count toward
+   their function; do not freeze total test counts or claim unregistered coverage.
+   Test registration remains a review judgement, not automatic coverage inference.
+3. Add a stdlib-only, read-only worktree preflight CLI. It reports the actual cwd,
+   Git root/branch/HEAD/upstream, interpreter and observed core/full-local layout.
+   Explicit expected absolute root, branch, full commit and profile must match;
+   optional interpreter/upstream expectations must match. Interpreter paths must
+   distinguish virtualenvs even when their executables share a symlink target.
+   Dirty, detached, partial-layout or non-repository inputs fail closed. It never
+   changes directory/branch, stages, commits, installs hooks or executes subsequent
+   writes. Callers use -B, success chaining and explicit Git target paths. Reject
+   ambient repository/index overrides; this is not a hook or a post-check race guard.
+
+Test seams: workflow artifact configuration, isolated pytest collection/function
+availability, and the preflight CLI against real temporary Git repositories.
+Operational tests belong to tracked `tests/checks`, not research tasks or the
+solver-only isolated suite. Preserve solver bytes, numerical defaults, uv.lock,
+old records/frozen source and original research files. Reuse the installed local
+interpreter, without installing dependencies or creating a new local environment.
+Run main/default checks and an explicit complete-local source copy with retained
+research files; document skipped backends and the unexecuted hosted CI boundary.
+Commit locally on main; pushing and remote branch-protection changes need separate
+permission. No backup-framework, history-cleanup or numerical-extension scope.
+
 ## Main-merge review corrections (2026-11-12)
 
 The user authorized fixing the three findings before considering any merge:

@@ -1,0 +1,9 @@
+{
+  "natural-node joint-PI continuation": [
+    "tests/core/test_adaptive_continuation.py::test_bounded_history_and_joint_pi_continuation_keep_the_natural_trajectory",
+    "tests/core/test_adaptive_continuation.py::test_failed_accepted_observer_returns_matching_joint_pi_continuation"
+  ],
+  "pressure-free MHD scheme compatibility": [
+    "tests/core/test_fourier_mhd.py::test_all_registered_schemes_preserve_the_pressure_free_mhd_rest_state"
+  ]
+}

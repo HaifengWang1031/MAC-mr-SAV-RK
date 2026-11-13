@@ -2,6 +2,52 @@
 
 # 正式验收记录
 
+## 2026-11-13 CI、关键机制归属与只读工作区预检
+
+用户批准先实施复盘建议1/2/3；仅在新main工作区实现，基线2cc9007。CI接入默认mypy、
+完整发现pytest及真实core_distribution；Actions固定提交、contents只读，Python3.12与dev
+依赖锁定。必需核心函数只登记于tests/core_requirements.json，隔离收集和执行均校验，
+不以总计数代替机制、不推断未登记覆盖。运维回归归tests/checks，不进入solver-only副本。
+
+工作区CLI只读报告并核对显式root/分支/完整HEAD/profile及可选解释器/upstream，拒绝
+不匹配、dirty、detached、部分研究布局、非仓库与环境仓库覆盖；不切目录/分支、不执行
+后续写入。真实临时Git仓库回归核对源码及.git文件SHA256/mode/精确mtime前后相同，并
+验证两个venv即使基础Python相同也不混同、失败时&&后写入不执行。布局不是完整研究
+依赖资格，预检不是hook、授权或检查后状态不会变化的保证。
+
+复用原Python3.12.14/已有venv，未安装依赖或建立新环境。聚焦28项通过；RED阶段先验证
+缺CI工件、缺必需函数/隔离漏项、缺CLI及错误身份确实失败。本轮实际验收（另保留提交前复验）：
+
+| 形态 | pytest | mypy |
+| --- | --- | --- |
+| 新main，默认tests全发现 | **436 passed / 17 skipped**，32.79 s | 默认 **80文件通过** |
+| 181公共文件临时导出，无研究目录/工具 | **436 passed / 17 skipped**，34.88 s | 默认 **80文件通过** |
+| 新main实际tests.core_distribution | **415 passed / 17 skipped**，26.89 s | 复用公共目标 |
+| 新公共源码+保留412本地文件的临时完整本地副本 | **771 passed / 36 skipped**，132.41 s | 显式完整目标 **248文件通过** |
+
+相对上一轮409/744，新增6个核心清单回归及21个运维回归，未复制或删改旧数值测试，
+默认testpaths仍为tests。核心17个skip仍为PETSc7/PARDISO9/Gmsh1，本地额外19个仍包括
+可选后端/动画/notebook及两项缺失历史基准，无新增skip，不授予相关资格。数值验收不是
+性能基准，几条独立profile验收有并行执行。全部公共源码与本地412文件逐项复制、记录SHA；
+-I启动的pytest进程校验公共129个项目模块来自对应目录，完整本地332模块中324为活动源码、
+8个为既有paired benchmark故意加载的临时捕获baseline，单独核对命名身份及全部捕获字节。
+
+首次完整本地pytest已771/36通过，但一次性验收包装器将这8个捕获模块误判为源码回退，
+包装器退出1；原脚本/日志/收据均保留。核对既有test_paired_benchmark及loader后，仅对该
+精确临时fixture路径/命名空间/source.json身份及与导出solver/spectral全文件相同的内容另行
+分类；没有放宽活动模块来源，也未改任何产品/研究loader。重跑完整本地pytest及mypy后
+得到上表成功结果。其他out-of-export活动导入仍明确拒绝。
+
+原工作区547、优化工作区584个公共/本地文件前后SHA256/mode/mtime逐项一致，分支/HEAD
+保持原样；main的solver与uv.lock相对基线逐字节不变。pyproject新增公共mypy目标是真实
+配置变化，新运行来源相应变化；不回填旧manifest/冻结源码或放宽链身份。
+
+本地证据在.scratch/engineering-guardrails/20261113T002633Z，含来源保护、导出清单、测试/
+类型日志、模块审计及首轮包装器失败记录。新流程预检要求干净状态，不是对已有待提交内容的
+通用pre-commit包装器；本轮提交另核对精确索引范围。CI工件契约本地通过，Actions/uv标签已核对；
+**未运行GitHub托管CI、未验证Linux新装环境、未推送、未改分支保护**。科学、可选后端、
+历史数据、服务器/生产恢复等资格不因本轮开发侧检查扩大。
+
 ## 2026-11-12 主线提升与操作后验收
 
 用户明确授权将优化支线提升为main，旧main保留为支线，并要求操作后验收。先将旧主线

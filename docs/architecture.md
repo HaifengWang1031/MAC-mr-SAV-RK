@@ -8,13 +8,13 @@
 
 ## 核心检出与完整本地工作区
 
-当前 Git 文件树仅保留 solver/run_support/postprocess、核心测试/参照、公共 CLI adapter
-与必要文档。experiments、tests/tasks、五个计算工具和五份研究资料按获批清单保持本机
+当前Git文件树保留solver/run_support/postprocess、核心测试/参照、公共CLI及必要文档，
+另有仓库级CI、tests/checks及只读开发侧预检。experiments、tests/tasks、五个计算工具和五份研究资料按获批清单保持本机
 原路径、仅退出 Git 跟踪；本文件下文的专属研究归属仍有效，但均为可选本地 module，
 不保证干净检出存在。研究路径/报告以“本地材料”标注，不作为公共 interface 的依赖。
 
 默认 pytest 继续收集 tests 下全部实际文件，本地任务测试存在时仍执行；默认 mypy
-显式选择公共库、两个公共 tools Python 文件及测试参照/隔离入口，不递归本地计算工具。
+显式选择公共库、公共tools文件、测试参照/隔离入口与必需机制校验，不递归本地计算工具。
 完整本地 mypy 显式包含 experiments/tools。无研究的实际索引副本与完整本地回归分别验收，
 不能用核心通过代替任务通过。见[备份与保留范围](core-localization-plan.md)。
 
@@ -34,6 +34,7 @@
 | 绘图与结果分析 | [postprocess](../postprocess/README.md) 拥有公共 MAC 读取/报告/图/样式；专属 `analyze.py` / `animate.py` 留在实验 | 只接受显式记录，输出到 `reports/`，不启动计算；不做万能 reader |
 | 实验参数、物理观测或计算调度 | 各实验 `config.py` / `problems.py` / `run.py`，见实验导航（本地材料：`../experiments/README.md`） | 共用已有推进与记录机制；实验特有物理内容留在实验内 |
 | 核心验证、数学参照与任务测试 | [tests/core](../tests/core/)、[references](../tests/references/)、本地 `tasks/`，见[测试导航](../tests/README.md) | 按机制分层；核心不导入实验/工具或另一个测试文件，任务工作流不伪装成核心验证 |
+| CI与操作前身份检查 | [.github/workflows/core.yml](../.github/workflows/core.yml)、[tools/worktree_check.py](../tools/worktree_check.py)、tests/checks | 开发侧stdlib/Git读取，不导入数值/研究，不执行后续写入，不混入运行记录或后处理 |
 
 这些文件名是常见归属，不要求每个实验机械地复制整套文件。周期与 Channel 配置目前
 仍在各自 `run.py`；封闭 FEM、圆柱和 Hele–Shaw 有独立 `config.py`。楔腔还保存逐帧
@@ -413,15 +414,39 @@ FEM 求积/Model 在 core，实际 workflow 的 MMS 模态投影和默认求积�
 可选 PETSc、Gmsh 等**求解器**机制仍归 core，不能靠移到任务侧隐藏跳过项。
 
 默认 `pytest -q` 继续运行全部现存测试；`pytest -q tests/core` 明确选择核心。
-[tests/core_distribution.py](../tests/core_distribution.py) 提供隔离分发 seam：
-`python -m tests.core_distribution` 仅复制 solver/run_support/postprocess、core/references、测试包初始化、
-本入口与环境文件，在新进程中实际运行核心套件。`-I` 隔离原检出/PYTHONPATH，禁止
+[tests/core_distribution.py](../tests/core_distribution.py)提供隔离分发seam：
+`python -m tests.core_distribution`仅复制solver/run_support/postprocess、core/references、测试包初始化、
+本入口、core_requirements校验/JSON及环境文件，在新进程中实际运行核心套件。`-I` 隔离原检出/PYTHONPATH，禁止
 experiments、tools、tests.tasks 导入且禁用无关自动加载插件；不安装环境、不复制研究材料。
-`test_core_distribution` 只验证该边界下的收集，完整隔离执行须另外运行上述命令。
+`test_core_distribution`只验证该边界下的收集，完整隔离执行须另外运行上述命令。
+[core_requirements.json](../tests/core_requirements.json)是少量关键核心机制必需函数的唯一节点
+来源；core_requirements.py仅校验声明/收集结果。隔离pytest插件在收集结束时强制校验，
+收集模式与执行模式均拒绝缺失或移入tasks的登记函数。参数化按函数标识匹配，不固定总数，
+也不证明未登记机制或参数组合完整；登记内容的变更由审查判断，导航表不复制这些节点。
+
+`tests/checks`是随检出提供的仓库/运维测试：验证CI配置、实际隔离漏项拒绝及真实临时Git
+仓库的只读预检。它可调用tools/Git，但不复制到solver-only隔离副本。默认pytest仍收集它与
+现存tasks；mypy显式包括新公共预检及必需机制校验。CI复用默认mypy、全发现pytest与实际
+core_distribution，不因为已有collect-only测试就省掉真实隔离执行。
 `test_postprocess` 还在另一个无实验/工具/测试包副本实际执行快照 CLI，除 MACGrid 外
 禁止所有数值模块导入，并逐字节检查输入不变。测试仍复用已安装的完整依赖，不是最小
 依赖安装证明；真实 TeX 执行和专属家族后处理另有范围。随后本地化按获批清单仅取消研究跟踪，
 不解除本地计算工具对实验的真实依赖，也不改变默认测试发现范围。
+
+## CI与只读工作区预检
+
+[core.yml](../.github/workflows/core.yml)在PR、main推送和手动触发时用Python3.12与锁定dev
+依赖运行既有三项检查，pytest以-ra列出skip。Actions固定提交、contents只读，不保留checkout
+凭据，不设置容错继续或修改远端保护。配置采用合法YAML的JSON语法，便于stdlib做配置契约
+测试而不增加依赖。当前本地只验证配置与同等命令；托管安装/执行及必需检查设置另行验收。
+
+[worktree_check.py](../tools/worktree_check.py)拥有只读Worktree身份及CLI，不属于solver、
+run_support持久化或postprocess。必需显式root/分支/完整HEAD/profile，可选解释器/upstream；
+Git读取禁用可选索引刷新与fsmonitor hook，不接受环境覆盖实际仓库。不匹配、dirty、detached、
+非仓库或mixed布局均退出2。full-local仅确认研究源码/任务测试存在，不证明完整本地依赖。
+解释器按可执行路径而非基础Python的符号链接目标区分venv；upstream只读本地配置。
+调用者用-B和成功连接、后续Git命令仍绑定-C目标；本入口不切目录/分支、不安装hook、不执行
+后续写入，也不保证检查后状态不变。详见[工具使用](../tools/README.md#工作区身份预检)。
 
 ## 修改后的验证与文档维护
 
@@ -431,6 +456,7 @@ experiments、tools、tests.tasks 导入且禁用无关自动加载插件；不�
 | 共同控制器配置 | `tests/tasks/test_controller_config.py` 及受影响家族的 workflow 测试 |
 | FEM 装配或动量表示 | `tests/core/test_fem_weak_load.py`；core 下 `test_backflow_outlet.py`、`test_wedge_cavity.py`、`test_hele_shaw_inlet.py` 保留独立功参照 |
 | 核心记录与来源范围 | `tests/core/test_run_support.py`、`tests/core/test_record_compatibility.py`；旧导入/冻结 worker/显式 MHD 来源见 `tests/tasks/test_record_compatibility.py` |
+| CI、必需核心节点与只读操作预检 | tests/checks、core/test_core_requirements、core/test_core_distribution；发布仍实际运行core_distribution |
 | 保存、复用、只读加载 | tasks 下各家族 workflow；`tests/tasks/test_fem_workflow.py` 含独立进程读取与 rerun/损坏检查 |
 | 公共只读报告/CLI 与 TeX 样式 | `tests/core/test_postprocess.py`、`tests/core/test_plotting.py`；旧导入/冻结捕获另见 `tests/tasks/test_postprocess_compatibility.py`、`tests/tasks/test_record_compatibility.py` |
 | 自适应接受、终点、失败观测与自然节点续算 | core 下 `test_adaptivity.py`、`test_min_step_policy.py`、`test_accepted_observers.py`、`test_adaptive_continuation.py`、`test_tensor_stokes_adaptive.py` |

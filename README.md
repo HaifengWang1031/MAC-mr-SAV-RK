@@ -80,8 +80,9 @@ run_support/            公共记录、身份、校验和显式/历史来源策�
 postprocess/            保存 MAC 场、图/排版、诊断及快照报告/CLI
 tests/core/             算子、阶段、推进、约束、记录与公共后处理回归
 tests/references/       测试私有的已知 ODE/PDE/独立离散参照
+tests/checks/           CI、核心必需机制门槛与只读工作区CLI回归
 tests/core_distribution.py  无研究包的完整核心回归入口
-tools/                  公共旧 CLI adapter；其他本地计算脚本不随检出提供
+tools/                  公共旧CLI adapter及只读工作区预检；本地计算脚本不随检出提供
 docs/                   数学、架构、规范、资格/历史证据与恢复说明
 archive/README.md       原桌面程序的只读来源说明
 ```
@@ -107,11 +108,17 @@ uv run --locked python -m tests.core_distribution
 
 ```sh
 uv run --locked pytest -q tests/tasks
-uv run --locked mypy solver run_support postprocess experiments tools tests/references tests/core_distribution.py
+uv run --locked mypy solver run_support postprocess experiments tools tests/references tests/core_distribution.py tests/core_requirements.py
 ```
 
 [测试导航](tests/README.md)区分机制和任务；默认 `testpaths=["tests"]` 未缩窄。隔离入口
 复用已安装环境，不是最小依赖安装验证；可选后端 skip 仍单列，不授予新资格。
+[Core checks](.github/workflows/core.yml)将既有三项检查接入PR/main推送/手动CI；其配置通过本地
+检查不等于托管运行已成功。关键核心回归由[唯一节点清单](tests/core_requirements.json)登记，
+隔离收集和执行均拒绝漏项，不固定总测试数。
+
+从干净状态开始新的Git写流程前，可用[只读工作区预检](tools/README.md#工作区身份预检)核对显式目标/分支/完整HEAD、
+core或full-local布局及可选解释器/upstream；失败时退出非零，不切分支、不代替你执行写入。
 
 - [数学实现](docs/numerics.md)、[架构与修改导航](docs/architecture.md)。
 - [确认范围](docs/spec.md)、[领域约定](CONTEXT.md)、[术语](GLOSSARY.md)和 [ADR](docs/adr/)。

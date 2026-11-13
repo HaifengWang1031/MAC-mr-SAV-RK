@@ -1,0 +1,44 @@
+{
+  "name": "Core checks",
+  "on": {
+    "pull_request": {},
+    "push": {"branches": ["main"]},
+    "workflow_dispatch": {}
+  },
+  "permissions": {"contents": "read"},
+  "jobs": {
+    "core": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 20,
+      "env": {
+        "MPLBACKEND": "Agg",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+        "NUMBA_NUM_THREADS": "1"
+      },
+      "steps": [
+        {
+          "name": "Checkout",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {"persist-credentials": false}
+        },
+        {
+          "name": "Set up uv and Python 3.12",
+          "uses": "astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff",
+          "with": {
+            "version": "0.12.18",
+            "python-version": "3.12",
+            "enable-cache": true,
+            "cache-dependency-glob": "uv.lock"
+          }
+        },
+        {"name": "Locked dev environment", "run": "uv sync --locked --group dev"},
+        {"name": "Public types", "run": "uv run --locked mypy"},
+        {"name": "Default discovery and skip report", "run": "uv run --locked pytest -q -ra"},
+        {"name": "Actual isolated core execution", "run": "uv run --locked python -m tests.core_distribution"}
+      ]
+    }
+  }
+}

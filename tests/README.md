@@ -1,7 +1,7 @@
 # 代表性测试
 
 默认运行 `uv run --locked pytest -q`，覆盖当前磁盘上的全部测试，不静默隐藏实验回归。
-核心检出仅提供 core/references；完整本地工作区另有已忽略的 tasks，存在时仍被默认收集。
+核心检出提供core/references及仓库检查checks；完整本地工作区另有已忽略的tasks，存在时仍被默认收集。
 下表 tasks 相关的工作流/工具机制是本地研究索引，不承诺干净检出具备这些文件。
 测试输出和临时实验由 pytest 的 tmp_path 管理，不写入正式 runs/reports。生产实验不能充当
 单元测试的固定通过条件。
@@ -12,8 +12,10 @@
 | --- | --- |
 | `core/` | 公开算子、线性求解、空间/时间阶、阶段/SAV/约束、自适应、公共记录与只读后处理；不依赖实验/工具 |
 | `references/` | 测试私有 ODE、解析 MAC/Fourier、连续/离散 Channel 数学参照；不从测试文件借 helper |
+| `checks/` | CI配置、实际隔离门槛及只读工作区CLI；可调用工具/Git，不进入求解器隔离副本 |
 | `tasks/` | 研究配置、campaign、专属 run/load/analyze、物理观测、绘图、工具与历史数据探针 |
-| `core_distribution.py` | 只复制 solver/run_support/postprocess 与核心测试，在无实验/工具/任务测试的临时副本验证完整核心套件 |
+| `core_distribution.py` | 复制公共数值/记录/后处理及core/references和必需机制索引，在无实验/工具/任务测试副本实际验证 |
+| `core_requirements.json` | 少量关键机制必需函数的唯一节点清单，由core_requirements.py校验 |
 
 ```sh
 uv run --locked pytest -q tests/core
@@ -21,13 +23,23 @@ uv run --locked python -m tests.core_distribution
 uv run --locked mypy  # 仅公共库、公共 CLI 文件及测试参照/隔离入口
 # 只有完整本地研究文件存在时：
 uv run --locked pytest -q tests/tasks
-uv run --locked mypy solver run_support postprocess experiments tools tests/references tests/core_distribution.py
+uv run --locked mypy solver run_support postprocess experiments tools tests/references tests/core_distribution.py tests/core_requirements.py
 ```
 
 隔离入口复用当前解释器、不安装环境；子进程使用 `-I`、禁止 research 包导入、禁用外部
 pytest 插件自动加载。`--collect-only` 只验证收集，默认命令实际执行全部核心测试。
 `core/test_core_distribution.py` 自动验证隔离收集；发布前仍须单独跑完整隔离命令。
 可选后端仍按原规则 skip，并报告覆盖限制，不因任务分离取得新资格。
+
+关键机制的唯一机器可读节点来源为[core_requirements.json](core_requirements.json)。隔离收集与
+实际执行均检查该清单：缺失、移入tasks、重复或非法声明会失败；参数化实例按函数标识匹配，
+不锁死总用例数。不登记就无法由该门槛推断覆盖，新增/删改登记仍由审查判断。
+下表是导航，不另抄一份必需函数清单。check_core只负责隔离核心；默认pytest还运行checks。
+
+[Core checks](../.github/workflows/core.yml)在PR、main推送和手动触发时运行已有三项检查，
+先安装锁定dev环境；pytest使用-ra报告skip，隔离入口实际执行而非只收集。配置用合法YAML的
+JSON语法，以stdlib验证触发/命令/失败传播契约，不新增YAML依赖。此配置测试不是GitHub执行
+证明，也不启用分支保护；CI只覆盖干净核心检出，不能冒充完整本地研究验收。
 
 同名测试文件可以在 core/tasks 各有一份，**旧测试函数没有复制或丢弃**：例如
 `test_sdirk3` 的 ODE/MAC/谱阶段归 core，保存布局/campaign 归 tasks；`test_fourier_mhd`
@@ -55,6 +67,8 @@ pytest 插件自动加载。`--collect-only` 只验证收集，默认命令实�
 | 旧来源编码 | core/test_record_compatibility |
 | 旧导入、冻结 worker 及显式周期 MHD 来源 | tasks/test_record_compatibility |
 | 无研究目录的隔离收集/完整核心执行 | core/test_core_distribution、core_distribution.py |
+| 必需机制索引及实际隔离时缺失/迁移拒绝 | core/test_core_requirements、checks/test_core_gate |
+| CI触发/锁定命令与只读工作区身份、错误目录阻断 | checks/test_ci、checks/test_worktree |
 | 已知保存 MAC 场、快照统计/独立来源、失败前缀、完整性/布局拒绝与无计算模块 CLI | core/test_postprocess |
 | TeX 定位/回退/异常恢复、继承 TeX 开关的实际渲染及单面板历史图 | core/test_plotting；core/test_postprocess 同时实际生成两类报告 |
 | 旧绘图/分析/快照名的同实现 adapter | tasks/test_postprocess_compatibility |

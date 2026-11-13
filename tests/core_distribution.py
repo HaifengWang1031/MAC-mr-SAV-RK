@@ -30,7 +30,17 @@ class NoResearch(importlib.abc.MetaPathFinder):
 
 sys.meta_path.insert(0, NoResearch())
 import pytest
-raise SystemExit(pytest.main(['tests/core', '-q', '-p', 'no:cacheprovider', *sys.argv[2:]]))
+from tests.core_requirements import check_core_requirements
+
+class RequiredCoreRegressions:
+    def pytest_collection_finish(self, session: pytest.Session) -> None:
+        try:
+            check_core_requirements(item.nodeid for item in session.items)
+        except (OSError, ValueError) as exc:
+            raise pytest.UsageError(str(exc)) from exc
+
+raise SystemExit(pytest.main(['tests/core', '-q', '-p', 'no:cacheprovider', *sys.argv[2:]],
+                             plugins=[RequiredCoreRegressions()]))
 '''
 
 
@@ -42,7 +52,8 @@ def check_core(*, collect_only: bool = False) -> subprocess.CompletedProcess[str
         for name in ('solver', 'run_support', 'postprocess', 'tests/core', 'tests/references'):
             shutil.copytree(PROJECT/name, root/name, ignore=ignore)
         for name in ('pyproject.toml', 'uv.lock', '.python-version',
-                     'tests/__init__.py', 'tests/core_distribution.py'):
+                     'tests/__init__.py', 'tests/core_distribution.py',
+                     'tests/core_requirements.py', 'tests/core_requirements.json'):
             shutil.copy2(PROJECT/name, root/name)
         # -I removes checkout/PYTHONPATH leakage. Disable unrelated installed
         # pytest plugins; the core suite only needs pytest's built-in fixtures.
